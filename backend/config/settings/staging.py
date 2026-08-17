@@ -1,0 +1,9 @@
+from .base import *  # noqa: F401,F403
+
+DEBUG = False
+
+ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=[])
+
+SECURE_SSL_REDIRECT = True
+SESSION_COOKIE_SECURE = True
+CSRF_COOKIE_SECURE = True

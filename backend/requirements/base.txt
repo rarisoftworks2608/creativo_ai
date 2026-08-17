@@ -1,0 +1,27 @@
+# Core web framework
+Django==5.0.6                          # Main Django framework for backend/API server
+
+# REST API support
+djangorestframework==3.15.1            # Tools to build REST APIs (serializers, viewsets, etc.)
+djangorestframework-simplejwt==5.3.1   # JWT authentication (access/refresh tokens, blacklisting)
+drf-spectacular==0.27.2                # OpenAPI schema generation / API docs
+
+# Cross-Origin Resource Sharing
+django-cors-headers==4.3.1             # Allows the React frontend (different port/domain) to call the API
+
+# Environment / configuration
+django-environ==0.14.0                 # Load settings (SECRET_KEY, DATABASE_URL, etc.) from a .env file
+
+# Database
+psycopg2-binary==2.9.10                # PostgreSQL adapter
+
+# Background jobs
+celery==5.4.0                          # Async/background task processing
+redis==5.0.7                           # Celery broker / cache backend
+
+# Media storage
+django-storages==1.14.4                # Pluggable storage backend (S3 / Cloudflare R2)
+boto3==1.34.144                        # AWS S3 client used by django-storages
+
+# Media processing
+Pillow==10.4.0                         # Image handling (used by ImageField, logo/creative uploads)

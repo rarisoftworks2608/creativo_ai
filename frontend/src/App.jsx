@@ -1,16 +1,35 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
+import { Navigate, Route, Routes } from 'react-router-dom'
+import { AuthProvider, useAuth } from './context/AuthContext'
+import ProtectedRoute from './components/ProtectedRoute'
+import Layout from './components/Layout'
+import LoginPage from './pages/LoginPage'
+import CompaniesListPage from './pages/CompaniesListPage'
+import CompanyDetailPage from './pages/CompanyDetailPage'
 import './App.css'
 
-function App() {
-  const [count, setCount] = useState(0)
+function RootRedirect() {
+  const { isAuthenticated, loading } = useAuth()
+  if (loading) return <div className="page-loading">Loading…</div>
+  return <Navigate to={isAuthenticated ? '/companies' : '/login'} replace />
+}
 
+function App() {
   return (
-    <>
-      <h1>AI Enabled Management System</h1>
-    </>
+    <AuthProvider>
+      <Routes>
+        <Route path="/" element={<RootRedirect />} />
+        <Route path="/login" element={<LoginPage />} />
+
+        <Route element={<ProtectedRoute />}>
+          <Route element={<Layout />}>
+            <Route path="/companies" element={<CompaniesListPage />} />
+            <Route path="/companies/:id" element={<CompanyDetailPage />} />
+          </Route>
+        </Route>
+
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </AuthProvider>
   )
 }
 
