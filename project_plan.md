@@ -1,5 +1,16 @@
 AI Marketing Automation Platform — Product Development Plan
 
+
+to run this project
+
+# terminal 1
+cd backend; venv\Scripts\Activate.ps1; 
+python manage.py runserver
+# terminal 2
+cd frontend; npm run dev
+
+
+
 1. Product Overview
 
 Product

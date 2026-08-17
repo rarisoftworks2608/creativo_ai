@@ -15,6 +15,12 @@
   --success-bg: rgba(21, 128, 61, 0.1);
   --danger: #dc2626;
   --danger-bg: rgba(220, 38, 38, 0.1);
+  --warning: #b45309;
+  --warning-bg: rgba(180, 83, 9, 0.1);
+  --info: #1d4ed8;
+  --info-bg: rgba(29, 78, 216, 0.1);
+  --neutral: #57534e;
+  --neutral-bg: rgba(87, 83, 78, 0.1);
   --shadow:
     rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
 
@@ -55,6 +61,12 @@
     --success-bg: rgba(74, 222, 128, 0.15);
     --danger: #f87171;
     --danger-bg: rgba(248, 113, 113, 0.15);
+    --warning: #fbbf24;
+    --warning-bg: rgba(251, 191, 36, 0.15);
+    --info: #60a5fa;
+    --info-bg: rgba(96, 165, 250, 0.15);
+    --neutral: #a8a29e;
+    --neutral-bg: rgba(168, 162, 158, 0.15);
     --shadow:
       rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
   }

@@ -5,6 +5,7 @@ import Layout from './components/Layout'
 import LoginPage from './pages/LoginPage'
 import CompaniesListPage from './pages/CompaniesListPage'
 import CompanyDetailPage from './pages/CompanyDetailPage'
+import ContentCalendarPage from './pages/ContentCalendarPage'
 import './App.css'
 
 function RootRedirect() {
@@ -24,6 +25,7 @@ function App() {
           <Route element={<Layout />}>
             <Route path="/companies" element={<CompaniesListPage />} />
             <Route path="/companies/:id" element={<CompanyDetailPage />} />
+            <Route path="/companies/:id/calendar" element={<ContentCalendarPage />} />
           </Route>
         </Route>
 

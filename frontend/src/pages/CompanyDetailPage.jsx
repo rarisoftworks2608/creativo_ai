@@ -9,6 +9,7 @@ import {
   updateCompany,
   updateCompanyClient,
 } from '../api/companies'
+import { listCalendarItems } from '../api/contentCalendar'
 import { extractErrorMessage } from '../api/client'
 import Modal from '../components/Modal'
 import TagsInput from '../components/TagsInput'
@@ -42,6 +43,7 @@ export default function CompanyDetailPage() {
 
   const [company, setCompany] = useState(null)
   const [clients, setClients] = useState([])
+  const [calendarCount, setCalendarCount] = useState(0)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
 
@@ -64,9 +66,14 @@ export default function CompanyDetailPage() {
     setLoading(true)
     setLoadError('')
     try {
-      const [companyData, clientsData] = await Promise.all([getCompany(id), listCompanyClients(id)])
+      const [companyData, clientsData, calendarData] = await Promise.all([
+        getCompany(id),
+        listCompanyClients(id),
+        listCalendarItems(id),
+      ])
       setCompany(companyData)
       setClients(clientsData.results)
+      setCalendarCount(calendarData.count)
     } catch (err) {
       setLoadError(extractErrorMessage(err, 'Could not load this company.'))
     } finally {
@@ -326,6 +333,18 @@ export default function CompanyDetailPage() {
             </dl>
           )}
         </div>
+      </div>
+
+      <div className="card">
+        <div className="card-header">
+          <h2>Content calendar</h2>
+          <Link to={`/companies/${id}/calendar`} className="btn btn-primary">
+            Open calendar
+          </Link>
+        </div>
+        <p className="page-subtitle">
+          {calendarCount} item{calendarCount === 1 ? '' : 's'} scheduled for this company.
+        </p>
       </div>
 
       <div className="card">

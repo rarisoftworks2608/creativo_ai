@@ -13,6 +13,7 @@ urlpatterns = [
 
     path('api/v1/auth/', include('apps.authentication.urls')),
     path('api/v1/companies/', include('apps.companies.urls')),
+    path('api/v1/companies/<int:company_id>/content-calendar/', include('apps.content_calendar.urls')),
 
     # API schema / docs
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
