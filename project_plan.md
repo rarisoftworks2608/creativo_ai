@@ -1,7 +1,7 @@
 AI Marketing Automation Platform — Product Development Plan
 
 
-Hi  Digvijay
+to run this project
 
 # terminal 1
 cd backend; venv\Scripts\Activate.ps1; 
