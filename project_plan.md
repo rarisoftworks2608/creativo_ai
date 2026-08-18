@@ -3,6 +3,8 @@ AI Marketing Automation Platform — Product Development Plan
 Hello Shreyas and Digvijay
 to run this project
 
+Hi  Digvijay
+
 # terminal 1
 cd backend; venv\Scripts\Activate.ps1; 
 python manage.py runserver
