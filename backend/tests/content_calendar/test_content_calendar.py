@@ -159,6 +159,25 @@ class CalendarItemCrudTests(BaseContentCalendarTestCase):
         response = self.client.get(self.list_url(), {'platform': 'instagram'})
         self.assertEqual(response.data['count'], 1)
 
+    def test_filter_by_month(self):
+        # self.item is scheduled for 2026-09-01.
+        ContentCalendarItem.objects.create(
+            company=self.company, topic='October item', content_type='Reel',
+            platforms=['instagram'], scheduled_date='2026-10-15',
+        )
+        self.authenticate_as('admin@example.com', 'StrongPass123!')
+
+        response = self.client.get(self.list_url(), {'month': '2026-09'})
+        self.assertEqual(response.data['count'], 1)
+        self.assertEqual(response.data['results'][0]['topic'], 'Existing post')
+
+        response = self.client.get(self.list_url(), {'month': '2026-10'})
+        self.assertEqual(response.data['count'], 1)
+        self.assertEqual(response.data['results'][0]['topic'], 'October item')
+
+        response = self.client.get(self.list_url(), {'month': '2026-11'})
+        self.assertEqual(response.data['count'], 0)
+
 
 class DuplicateTests(BaseContentCalendarTestCase):
     def test_admin_can_duplicate_item(self):

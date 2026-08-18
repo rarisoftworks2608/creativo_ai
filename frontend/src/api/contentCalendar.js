@@ -1,11 +1,12 @@
 import apiClient from './client'
 
-export async function listCalendarItems(companyId, { status, platform, category, search } = {}) {
+export async function listCalendarItems(companyId, { status, platform, category, search, month } = {}) {
   const params = {}
   if (status) params.status = status
   if (platform) params.platform = platform
   if (category) params.category = category
   if (search) params.search = search
+  if (month) params.month = month
   const response = await apiClient.get(`/companies/${companyId}/content-calendar/`, { params })
   return response.data
 }

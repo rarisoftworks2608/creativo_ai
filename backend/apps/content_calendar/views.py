@@ -1,7 +1,11 @@
+import calendar
+import datetime
+
 from django.http import Http404, HttpResponse
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema
 from rest_framework import generics, status
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -40,11 +44,18 @@ def _serialize_row(entry):
     return result
 
 
+class CalendarPagination(PageNumberPagination):
+    """A month of content rarely exceeds this, so the calendar view gets it all in one page."""
+
+    page_size = 200
+
+
 class ContentCalendarItemListCreateView(CompanyScopedMixin, generics.ListCreateAPIView):
     """List a company's content calendar, or manually add an item (Epic 04: Calendar Management)."""
 
     serializer_class = ContentCalendarItemSerializer
     permission_classes = [IsAuthenticated]
+    pagination_class = CalendarPagination
 
     def check_permissions(self, request):
         super().check_permissions(request)
@@ -72,6 +83,18 @@ class ContentCalendarItemListCreateView(CompanyScopedMixin, generics.ListCreateA
         search = self.request.query_params.get('search')
         if search:
             queryset = queryset.filter(topic__icontains=search)
+
+        month_param = self.request.query_params.get('month')
+        if month_param:
+            try:
+                year, month = (int(part) for part in month_param.split('-', 1))
+                _, last_day = calendar.monthrange(year, month)
+                queryset = queryset.filter(
+                    scheduled_date__gte=datetime.date(year, month, 1),
+                    scheduled_date__lte=datetime.date(year, month, last_day),
+                )
+            except (ValueError, TypeError):
+                pass
 
         return queryset
 
