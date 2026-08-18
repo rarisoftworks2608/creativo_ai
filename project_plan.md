@@ -1,6 +1,6 @@
 AI Marketing Automation Platform — Product Development Plan
 
-
+Hello Shreyas and Digvijay
 to run this project
 
 # terminal 1
