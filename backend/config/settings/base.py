@@ -54,6 +54,7 @@ LOCAL_APPS = [
     'apps.companies',
     'apps.content_calendar',
     'apps.brand',
+    'apps.ai_strategy',
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -206,3 +207,11 @@ DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL', default='no-reply@example.com')
 # Base URL of the frontend app, used to build links inside emails
 # (e.g. password reset links).
 FRONTEND_URL = env('FRONTEND_URL', default='http://localhost:5173')
+
+
+# AI text provider (Epic 05: AI Content Strategy)
+# ANTHROPIC_API_KEY itself is read directly by the Anthropic SDK from the
+# environment (set it in .env) - it is deliberately not duplicated here.
+
+AI_TEXT_PROVIDER = env('AI_TEXT_PROVIDER', default='anthropic')
+AI_TEXT_MODEL = env('AI_TEXT_MODEL', default='claude-opus-5')

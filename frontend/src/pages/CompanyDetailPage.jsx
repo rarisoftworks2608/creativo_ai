@@ -11,6 +11,7 @@ import {
 } from '../api/companies'
 import { listCalendarItems } from '../api/contentCalendar'
 import { extractErrorMessage } from '../api/client'
+import { useAuth } from '../context/AuthContext'
 import Modal from '../components/Modal'
 import TagsInput from '../components/TagsInput'
 
@@ -40,6 +41,7 @@ const EMPTY_CLIENT_FORM = {
 
 export default function CompanyDetailPage() {
   const { id } = useParams()
+  const { isAdmin } = useAuth()
 
   const [company, setCompany] = useState(null)
   const [clients, setClients] = useState([])
@@ -344,6 +346,18 @@ export default function CompanyDetailPage() {
         </div>
         <p className="page-subtitle">Logo, brand colors, guidelines, marketing information and brand assets.</p>
       </div>
+
+      {isAdmin && (
+        <div className="card">
+          <div className="card-header">
+            <h2>AI content strategy</h2>
+            <Link to={`/companies/${id}/ai-strategy`} className="btn btn-primary">
+              Open AI strategy
+            </Link>
+          </div>
+          <p className="page-subtitle">Brand context, content ideas, and platform/audience/campaign strategy.</p>
+        </div>
+      )}
 
       <div className="card">
         <div className="card-header">

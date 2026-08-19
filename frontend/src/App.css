@@ -1346,6 +1346,96 @@ textarea {
   color: var(--text);
 }
 
+/* ---------- AI content strategy ---------- */
+
+.kind-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+  margin-bottom: 8px;
+}
+
+.kind-card {
+  margin-bottom: 0;
+}
+
+.kind-card h3 {
+  font-size: 15px;
+  margin: 0;
+  color: var(--text-h);
+}
+
+.kind-card-actions {
+  display: flex;
+  gap: 8px;
+  margin: 10px 0 12px;
+}
+
+.kind-card-actions input {
+  flex: 1;
+}
+
+.strategy-result {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.strategy-result-section h4 {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text);
+  margin: 0 0 6px;
+  font-weight: 600;
+}
+
+.strategy-result-section p {
+  font-size: 14px;
+  color: var(--text-h);
+  margin: 0;
+}
+
+.result-bullet-list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 14px;
+  color: var(--text-h);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.result-card-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.result-card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.result-card-row {
+  display: flex;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-h);
+}
+
+.result-card-label {
+  font-weight: 600;
+  color: var(--text);
+  flex-shrink: 0;
+  min-width: 90px;
+}
+
 @media (max-width: 860px) {
   .sidebar {
     position: fixed;
@@ -1463,5 +1553,14 @@ textarea {
   .color-palette-row,
   .object-list-row {
     grid-template-columns: 1fr;
+  }
+
+  .kind-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .kind-card-actions {
+    flex-direction: column;
+    align-items: stretch;
   }
 }
