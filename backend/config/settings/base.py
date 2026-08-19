@@ -53,6 +53,7 @@ LOCAL_APPS = [
     'apps.authentication',
     'apps.companies',
     'apps.content_calendar',
+    'apps.brand',
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS

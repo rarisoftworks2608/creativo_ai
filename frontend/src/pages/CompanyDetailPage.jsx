@@ -337,6 +337,16 @@ export default function CompanyDetailPage() {
 
       <div className="card">
         <div className="card-header">
+          <h2>Brand management</h2>
+          <Link to={`/companies/${id}/brand`} className="btn btn-primary">
+            Open brand
+          </Link>
+        </div>
+        <p className="page-subtitle">Logo, brand colors, guidelines, marketing information and brand assets.</p>
+      </div>
+
+      <div className="card">
+        <div className="card-header">
           <h2>Content calendar</h2>
           <Link to={`/companies/${id}/calendar`} className="btn btn-primary">
             Open calendar

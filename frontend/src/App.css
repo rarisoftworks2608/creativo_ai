@@ -1123,6 +1123,229 @@ textarea {
    rule of the same selector regardless of the media query, so these must
    stay last to reliably win the cascade. */
 
+/* ---------- Brand management ---------- */
+
+.brand-tabs {
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.field-view-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+
+/* Identity image slots */
+
+.image-slot-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+.image-slot {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px;
+}
+
+.image-slot-preview {
+  height: 100px;
+  border-radius: 8px;
+  background: var(--surface-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.image-slot-preview img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.image-slot-placeholder {
+  font-size: 12px;
+  color: var(--text);
+}
+
+.image-slot-label {
+  font-weight: 600;
+  color: var(--text-h);
+  font-size: 14px;
+}
+
+.image-slot-hint {
+  font-size: 12px;
+  color: var(--text);
+  margin-top: 2px;
+}
+
+.image-slot-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: auto;
+}
+
+/* Color palette input + read view */
+
+.color-palette,
+.object-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.color-palette-row,
+.object-list-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.color-palette-row {
+  grid-template-columns: 36px 1fr 1fr auto;
+}
+
+.color-swatch-input {
+  width: 36px;
+  height: 36px;
+  padding: 2px;
+  cursor: pointer;
+}
+
+.object-list-remove {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--danger);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+.object-list-remove:hover {
+  background: var(--danger-bg);
+}
+
+.input-invalid {
+  border-color: var(--danger) !important;
+}
+
+.color-swatch-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.color-swatch {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: var(--text-h);
+}
+
+.color-swatch-dot {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+/* Customer personas */
+
+.persona-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.persona-card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.persona-name {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text-h);
+}
+
+.persona-summary {
+  font-size: 13px;
+  color: var(--text);
+  margin-top: 2px;
+}
+
+/* Brand asset library */
+
+.asset-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 14px;
+}
+
+.asset-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px;
+}
+
+.asset-thumb {
+  height: 100px;
+  border-radius: 8px;
+  background: var(--surface-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.asset-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.asset-thumb-icon {
+  font-size: 32px;
+}
+
+.asset-meta {
+  min-width: 0;
+}
+
+.asset-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-h);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asset-category {
+  font-size: 12px;
+  color: var(--text);
+}
+
 @media (max-width: 860px) {
   .sidebar {
     position: fixed;
@@ -1231,5 +1454,14 @@ textarea {
 
   .day-detail-item {
     flex-wrap: wrap;
+  }
+
+  .image-slot-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .color-palette-row,
+  .object-list-row {
+    grid-template-columns: 1fr;
   }
 }
