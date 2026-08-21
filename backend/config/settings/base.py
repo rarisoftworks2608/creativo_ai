@@ -56,6 +56,7 @@ LOCAL_APPS = [
     'apps.brand',
     'apps.ai_strategy',
     'apps.creative_generation',
+    'apps.video_generation',
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -229,6 +230,12 @@ AI_IMAGE_MODEL = env('AI_IMAGE_MODEL', default='gemini-3.1-flash-image')
 # Left blank by default since real pricing should be confirmed against the
 # provider's current rate card rather than assumed - cost_usd stays null until set.
 AI_IMAGE_COST_PER_IMAGE_USD = env('AI_IMAGE_COST_PER_IMAGE_USD', default='')
+
+
+# AI voice-over provider (Epic 07: AI Video Generation)
+# gTTS is free and needs no API key - it works out of the box.
+
+AI_VOICE_PROVIDER = env('AI_VOICE_PROVIDER', default='gtts')
 
 
 # Celery / Redis (Epic 06: Generation Management - Queue)

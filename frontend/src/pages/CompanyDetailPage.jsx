@@ -371,6 +371,18 @@ export default function CompanyDetailPage() {
         </div>
       )}
 
+      {isAdmin && (
+        <div className="card">
+          <div className="card-header">
+            <h2>AI video generation</h2>
+            <Link to={`/companies/${id}/video-generation`} className="btn btn-primary">
+              Open video generation
+            </Link>
+          </div>
+          <p className="page-subtitle">Generate scripted, scene-by-scene videos with voice-over and subtitles.</p>
+        </div>
+      )}
+
       <div className="card">
         <div className="card-header">
           <h2>Content calendar</h2>

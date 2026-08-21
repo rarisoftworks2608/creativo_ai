@@ -32,3 +32,7 @@ openpyxl==3.1.5                        # Content calendar Excel template generat
 # AI / LLM
 anthropic==0.123.0                     # Claude API client (Epic 05: AI content strategy generation)
 google-genai==2.19.0                   # Gemini API client (Epic 06: AI creative image generation)
+gTTS==2.5.4                            # Free, keyless text-to-speech (Epic 07: AI video voice-over)
+
+# Note: Epic 07 (AI Video Generation) also requires the `ffmpeg` binary on
+# PATH for rendering - that's a separate program, not something pip installs.

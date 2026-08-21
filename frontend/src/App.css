@@ -1530,6 +1530,69 @@ textarea {
   margin: 0;
 }
 
+/* ---------- AI video generation ---------- */
+
+.video-result {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.video-preview {
+  width: 100%;
+  max-width: 360px;
+  max-height: 520px;
+  border-radius: 12px;
+  background: #000;
+  display: block;
+}
+
+.scene-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.scene-card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.scene-image {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  background: var(--surface-2);
+}
+
+.scene-body {
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.scene-label {
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--text-h);
+}
+
+.scene-narration {
+  font-size: 12px;
+  color: var(--text);
+  margin: 0;
+}
+
+.gen-status-rendering {
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+
 @media (max-width: 860px) {
   .sidebar {
     position: fixed;
@@ -1656,5 +1719,9 @@ textarea {
   .kind-card-actions {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .video-preview {
+    max-width: 100%;
   }
 }

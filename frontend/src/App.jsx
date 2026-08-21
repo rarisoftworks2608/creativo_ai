@@ -9,6 +9,7 @@ import ContentCalendarPage from './pages/ContentCalendarPage'
 import BrandManagementPage from './pages/BrandManagementPage'
 import AiStrategyPage from './pages/AiStrategyPage'
 import CreativeGenerationPage from './pages/CreativeGenerationPage'
+import VideoGenerationPage from './pages/VideoGenerationPage'
 import './App.css'
 
 function RootRedirect() {
@@ -32,6 +33,7 @@ function App() {
             <Route path="/companies/:id/brand" element={<BrandManagementPage />} />
             <Route path="/companies/:id/ai-strategy" element={<AiStrategyPage />} />
             <Route path="/companies/:id/creative-generation" element={<CreativeGenerationPage />} />
+            <Route path="/companies/:id/video-generation" element={<VideoGenerationPage />} />
           </Route>
         </Route>
 
