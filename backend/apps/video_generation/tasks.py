@@ -6,6 +6,8 @@ from apps.ai_strategy.models import BrandContext
 from apps.brand.models import BrandProfile
 from apps.content_calendar.models import ContentCalendarItem
 from apps.creative_generation.image_client import get_image_provider
+from apps.notifications.models import Notification
+from apps.notifications.services import notify_content_ready
 from common.ai_errors import AIProviderError
 
 from . import prompts, rendering, subtitles
@@ -178,3 +180,16 @@ def generate_video(self, video_request_id):
         ContentCalendarItem.objects.filter(pk=request.content_calendar_item_id).update(
             status=ContentCalendarItem.Status.GENERATED,
         )
+
+    is_regeneration = request.retry_count > 0
+    notify_content_ready(
+        company=company,
+        created_by=request.created_by,
+        notification_type=(
+            Notification.NotificationType.CONTENT_REGENERATED if is_regeneration
+            else Notification.NotificationType.CONTENT_GENERATED
+        ),
+        title=f'{request.get_video_type_display()} {"regenerated" if is_regeneration else "ready"}',
+        message=f'A {round(duration)}s video was rendered for {company.name}.',
+        url=f'/companies/{company.id}/video-generation',
+    )

@@ -3,6 +3,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from common.emails import send_client_welcome_email
 from common.permissions import IsAdmin
 
 from .models import ClientProfile, Company
@@ -123,6 +124,9 @@ class CompanyClientListCreateView(generics.ListCreateAPIView):
         serializer = self.get_serializer(data=request.data, context={'request': request, 'company': company})
         serializer.is_valid(raise_exception=True)
         profile = serializer.save()
+        plain_password = serializer._plain_password  # noqa: SLF001 - only known right after creation
+        if plain_password:
+            send_client_welcome_email(profile.user, plain_password)
         return Response(
             {
                 **ClientProfileSerializer(profile).data,

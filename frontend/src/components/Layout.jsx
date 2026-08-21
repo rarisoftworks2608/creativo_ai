@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import NotificationBell from './NotificationBell'
 
 export default function Layout() {
   const { user, logout } = useAuth()
@@ -57,6 +58,7 @@ export default function Layout() {
           </button>
 
           <div className="topbar-user">
+            <NotificationBell />
             <div className="user-badge">
               <span className="user-avatar">{user?.email?.[0]?.toUpperCase() ?? '?'}</span>
               <div className="user-text">

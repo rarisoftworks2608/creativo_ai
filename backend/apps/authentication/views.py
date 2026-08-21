@@ -9,6 +9,7 @@ from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 
+from common.emails import send_client_welcome_email
 from common.permissions import IsAdmin
 
 from .models import LoginHistory, User
@@ -182,6 +183,12 @@ class UserListCreateView(generics.ListCreateAPIView):
         if role:
             queryset = queryset.filter(role=role)
         return queryset
+
+    def perform_create(self, serializer):
+        serializer.save()
+        plain_password = serializer._plain_password  # noqa: SLF001 - only known right after creation
+        if plain_password:
+            send_client_welcome_email(serializer.instance, plain_password)
 
 
 class UserDetailView(generics.RetrieveUpdateAPIView):

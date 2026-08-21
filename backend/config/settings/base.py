@@ -10,6 +10,7 @@ from datetime import timedelta
 from pathlib import Path
 
 import environ
+from celery.schedules import crontab
 
 # backend/config/settings/base.py -> backend/
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
@@ -57,6 +58,7 @@ LOCAL_APPS = [
     'apps.ai_strategy',
     'apps.creative_generation',
     'apps.video_generation',
+    'apps.notifications',
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -248,3 +250,12 @@ CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TASK_TRACK_STARTED = True
 CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
+
+# Reminder notifications (Epic 12/13) - requires `celery -A config beat` running
+# alongside the worker, or this schedule never fires.
+CELERY_BEAT_SCHEDULE = {
+    'send-content-reminders': {
+        'task': 'apps.notifications.tasks.send_content_reminders',
+        'schedule': crontab(hour=9, minute=0),
+    },
+}

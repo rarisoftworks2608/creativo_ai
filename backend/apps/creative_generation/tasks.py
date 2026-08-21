@@ -8,6 +8,8 @@ from apps.ai_strategy.ai_client import get_provider as get_text_provider
 from apps.ai_strategy.models import BrandContext
 from apps.brand.models import BrandProfile
 from apps.content_calendar.models import ContentCalendarItem
+from apps.notifications.models import Notification
+from apps.notifications.services import notify_content_ready
 from common.ai_errors import AIProviderError
 
 from . import prompts
@@ -122,3 +124,16 @@ def generate_creative_variations(self, generation_request_id):
         ContentCalendarItem.objects.filter(pk=request.content_calendar_item_id).update(
             status=ContentCalendarItem.Status.GENERATED,
         )
+
+    is_regeneration = request.retry_count > 0
+    notify_content_ready(
+        company=company,
+        created_by=request.created_by,
+        notification_type=(
+            Notification.NotificationType.CONTENT_REGENERATED if is_regeneration
+            else Notification.NotificationType.CONTENT_GENERATED
+        ),
+        title=f'{request.get_creative_type_display()} {"regenerated" if is_regeneration else "ready"}',
+        message=f'{image_count} variation(s) generated for {company.name}.',
+        url=f'/companies/{company.id}/creative-generation',
+    )
