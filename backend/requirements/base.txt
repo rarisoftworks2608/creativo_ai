@@ -31,3 +31,4 @@ openpyxl==3.1.5                        # Content calendar Excel template generat
 
 # AI / LLM
 anthropic==0.123.0                     # Claude API client (Epic 05: AI content strategy generation)
+google-genai==2.19.0                   # Gemini API client (Epic 06: AI creative image generation)

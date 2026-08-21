@@ -359,6 +359,18 @@ export default function CompanyDetailPage() {
         </div>
       )}
 
+      {isAdmin && (
+        <div className="card">
+          <div className="card-header">
+            <h2>AI creative generation</h2>
+            <Link to={`/companies/${id}/creative-generation`} className="btn btn-primary">
+              Open creative generation
+            </Link>
+          </div>
+          <p className="page-subtitle">Generate brand-aware image + copy variations for social creatives.</p>
+        </div>
+      )}
+
       <div className="card">
         <div className="card-header">
           <h2>Content calendar</h2>

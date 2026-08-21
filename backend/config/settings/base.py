@@ -55,6 +55,7 @@ LOCAL_APPS = [
     'apps.content_calendar',
     'apps.brand',
     'apps.ai_strategy',
+    'apps.creative_generation',
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -215,3 +216,28 @@ FRONTEND_URL = env('FRONTEND_URL', default='http://localhost:5173')
 
 AI_TEXT_PROVIDER = env('AI_TEXT_PROVIDER', default='anthropic')
 AI_TEXT_MODEL = env('AI_TEXT_MODEL', default='claude-opus-5')
+
+
+# AI image provider (Epic 06: AI Creative Generation)
+# GEMINI_API_KEY itself is read directly by the google-genai SDK from the
+# environment (set it in .env) - it is deliberately not duplicated here.
+
+AI_IMAGE_PROVIDER = env('AI_IMAGE_PROVIDER', default='gemini')
+AI_IMAGE_MODEL = env('AI_IMAGE_MODEL', default='gemini-3.1-flash-image')
+
+# Optional per-image cost for usage/cost tracking (Epic 06: Generation Management).
+# Left blank by default since real pricing should be confirmed against the
+# provider's current rate card rather than assumed - cost_usd stays null until set.
+AI_IMAGE_COST_PER_IMAGE_USD = env('AI_IMAGE_COST_PER_IMAGE_USD', default='')
+
+
+# Celery / Redis (Epic 06: Generation Management - Queue)
+
+REDIS_URL = env('REDIS_URL', default='redis://localhost:6379/0')
+CELERY_BROKER_URL = env('CELERY_BROKER_URL', default=REDIS_URL)
+CELERY_RESULT_BACKEND = env('CELERY_RESULT_BACKEND', default=REDIS_URL)
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TASK_TRACK_STARTED = True
+CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True

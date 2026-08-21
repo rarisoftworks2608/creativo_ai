@@ -11,13 +11,9 @@ from abc import ABC, abstractmethod
 
 from django.conf import settings
 
+from common.ai_errors import AIProviderError, AIProviderNotConfigured
 
-class AIProviderError(Exception):
-    """Raised when the configured AI provider can't fulfill a request."""
-
-
-class AIProviderNotConfigured(AIProviderError):
-    """Raised when no API credentials are available for the configured provider."""
+__all__ = ['AIProviderError', 'AIProviderNotConfigured', 'TextAIProvider', 'AnthropicProvider', 'get_provider']
 
 
 class TextAIProvider(ABC):
