@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { getCompany } from '../api/companies'
 import {
@@ -14,6 +14,8 @@ import {
 import { extractErrorMessage } from '../api/client'
 import Modal from '../components/Modal'
 import TagsInput from '../components/TagsInput'
+import CalendarMonthGrid from '../components/CalendarMonthGrid'
+import { addMonths, formatDayLabel, formatMonthLabel, toDateKey, toMonthKey } from '../utils/calendarDate'
 
 // Suggestions only - Category and Format are free text so each client's own
 // planning vocabulary (weekly themes, format names, etc.) is never rejected.
@@ -59,6 +61,14 @@ export default function ContentCalendarPage() {
   const [platformFilter, setPlatformFilter] = useState('')
   const [search, setSearch] = useState('')
 
+  const [viewMode, setViewMode] = useState('calendar')
+  const [visibleMonth, setVisibleMonth] = useState(() => {
+    const d = new Date()
+    d.setDate(1)
+    return d
+  })
+  const [dayDetailDate, setDayDetailDate] = useState(null)
+
   const [showChoice, setShowChoice] = useState(false)
   const [showItemForm, setShowItemForm] = useState(false)
   const [editingItem, setEditingItem] = useState(null)
@@ -81,7 +91,10 @@ export default function ContentCalendarPage() {
     try {
       const [companyData, itemsData] = await Promise.all([
         getCompany(companyId),
-        listCalendarItems(companyId, { status: statusFilter, platform: platformFilter, search }),
+        listCalendarItems(companyId, {
+          status: statusFilter, platform: platformFilter, search,
+          month: toMonthKey(visibleMonth),
+        }),
       ])
       setCompany(companyData)
       setItems(itemsData.results)
@@ -91,16 +104,39 @@ export default function ContentCalendarPage() {
     } finally {
       setLoading(false)
     }
-  }, [companyId, statusFilter, platformFilter, search])
+  }, [companyId, statusFilter, platformFilter, search, visibleMonth])
 
   useEffect(() => {
     const timeout = setTimeout(load, 250)
     return () => clearTimeout(timeout)
   }, [load])
 
-  function openCreateForm() {
+  const itemsByDate = useMemo(() => {
+    const map = {}
+    for (const item of items) {
+      if (!map[item.scheduled_date]) map[item.scheduled_date] = []
+      map[item.scheduled_date].push(item)
+    }
+    return map
+  }, [items])
+
+  function goToPrevMonth() {
+    setVisibleMonth((prev) => addMonths(prev, -1))
+  }
+
+  function goToNextMonth() {
+    setVisibleMonth((prev) => addMonths(prev, 1))
+  }
+
+  function goToToday() {
+    const d = new Date()
+    d.setDate(1)
+    setVisibleMonth(d)
+  }
+
+  function openCreateForm(date) {
     setEditingItem(null)
-    setItemForm(EMPTY_ITEM_FORM)
+    setItemForm(date instanceof Date ? { ...EMPTY_ITEM_FORM, scheduled_date: toDateKey(date) } : EMPTY_ITEM_FORM)
     setItemFormError('')
     setShowChoice(false)
     setShowItemForm(true)
@@ -255,6 +291,23 @@ export default function ContentCalendarPage() {
         </button>
       </div>
 
+      <div className="cal-toolbar">
+        <div className="cal-nav">
+          <button type="button" className="cal-nav-btn" onClick={goToPrevMonth} aria-label="Previous month">‹</button>
+          <span className="cal-nav-label">{formatMonthLabel(visibleMonth)}</span>
+          <button type="button" className="cal-nav-btn" onClick={goToNextMonth} aria-label="Next month">›</button>
+          <button type="button" className="btn btn-ghost" onClick={goToToday}>Today</button>
+        </div>
+        <div className="view-toggle">
+          <button type="button" className={viewMode === 'calendar' ? 'active' : ''} onClick={() => setViewMode('calendar')}>
+            Calendar
+          </button>
+          <button type="button" className={viewMode === 'list' ? 'active' : ''} onClick={() => setViewMode('list')}>
+            List
+          </button>
+        </div>
+      </div>
+
       <div className="toolbar">
         <input
           type="search"
@@ -279,17 +332,29 @@ export default function ContentCalendarPage() {
 
       {loadError && <div className="alert alert-error">{loadError}</div>}
 
-      <div className="card">
-        {loading ? (
+      {loading ? (
+        <div className="card">
           <div className="empty-state">Loading…</div>
-        ) : items.length === 0 ? (
+        </div>
+      ) : items.length === 0 ? (
+        <div className="card">
           <div className="empty-state">
             <p>No content scheduled yet.</p>
             <button type="button" className="btn btn-primary" onClick={() => setShowChoice(true)}>
               Add your first content item
             </button>
           </div>
-        ) : (
+        </div>
+      ) : viewMode === 'calendar' ? (
+        <CalendarMonthGrid
+          month={visibleMonth}
+          itemsByDate={itemsByDate}
+          onDayClick={openCreateForm}
+          onItemClick={openEditForm}
+          onMoreClick={(date) => setDayDetailDate(date)}
+        />
+      ) : (
+        <div className="card">
           <div className="table-wrapper">
             <table className="table">
               <thead>
@@ -351,14 +416,64 @@ export default function ContentCalendarPage() {
               </tbody>
             </table>
           </div>
-        )}
-      </div>
+        </div>
+      )}
+
+      {dayDetailDate && (
+        <Modal title={formatDayLabel(dayDetailDate)} onClose={() => setDayDetailDate(null)} width={560}>
+          <div className="day-detail-list">
+            {(itemsByDate[toDateKey(dayDetailDate)] || []).map((item) => (
+              <div className="day-detail-item" key={item.id}>
+                <span className={`cal-chip-dot cal-dot-${item.status}`} aria-hidden="true" />
+                <div className="day-detail-item-main">
+                  <div className="day-detail-topic">{item.topic}</div>
+                  <div className="day-detail-meta">
+                    {item.scheduled_time ? `${item.scheduled_time.slice(0, 5)} · ` : ''}
+                    {item.content_type}
+                    {item.platforms.length > 0 ? ` · ${item.platforms.map((p) => PLATFORM_LABELS[p] || p).join(', ')}` : ''}
+                  </div>
+                </div>
+                <div className="day-detail-actions">
+                  <button type="button" className="btn-link" onClick={() => { setDayDetailDate(null); openEditForm(item) }}>
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-link"
+                    disabled={busyItemId === item.id}
+                    onClick={() => handleDuplicate(item)}
+                  >
+                    Duplicate
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-link btn-link-danger"
+                    disabled={busyItemId === item.id}
+                    onClick={() => handleDelete(item)}
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="modal-actions">
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => { const d = dayDetailDate; setDayDetailDate(null); openCreateForm(d) }}
+            >
+              + Add content for this day
+            </button>
+          </div>
+        </Modal>
+      )}
 
       {showChoice && (
         <Modal title="Add content" onClose={() => setShowChoice(false)} width={560}>
           <p className="modal-hint">How do you want to add content to this calendar?</p>
           <div className="choice-grid">
-            <button type="button" className="choice-card" onClick={openCreateForm}>
+            <button type="button" className="choice-card" onClick={() => openCreateForm()}>
               <span className="choice-icon" aria-hidden="true">✎</span>
               <span className="choice-title">Create manually</span>
               <span className="choice-desc">Fill in one content item using a form.</span>

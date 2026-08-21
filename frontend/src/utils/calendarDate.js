@@ -3,6 +3,8 @@ const MONTH_LABELS = [
   'July', 'August', 'September', 'October', 'November', 'December',
 ]
 
+const WEEKDAY_LABELS_LONG = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+
 export function toDateKey(date) {
   const y = date.getFullYear()
   const m = String(date.getMonth() + 1).padStart(2, '0')
@@ -16,6 +18,10 @@ export function toMonthKey(date) {
 
 export function formatMonthLabel(date) {
   return `${MONTH_LABELS[date.getMonth()]} ${date.getFullYear()}`
+}
+
+export function formatDayLabel(date) {
+  return `${WEEKDAY_LABELS_LONG[date.getDay()]}, ${MONTH_LABELS[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`
 }
 
 export function startOfMonth(date) {
