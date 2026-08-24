@@ -51,15 +51,16 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         return data
 
 
-class CreateClientSerializer(serializers.ModelSerializer):
-    """Used by an Admin to create a Client login (Epic 01: Create client user)."""
+class CreateUserSerializer(serializers.ModelSerializer):
+    """Used by an Admin to create a Client or (Epic 24: Team management) Admin login."""
 
     password = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    role = serializers.ChoiceField(choices=User.Role.choices, default=User.Role.CLIENT)
     generated_password = serializers.SerializerMethodField()
 
     class Meta:
         model = User
-        fields = ['id', 'email', 'first_name', 'last_name', 'phone_number', 'password', 'generated_password']
+        fields = ['id', 'email', 'first_name', 'last_name', 'phone_number', 'password', 'role', 'generated_password']
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -78,7 +79,6 @@ class CreateClientSerializer(serializers.ModelSerializer):
         self._plain_password = password
         request = self.context.get('request')
         user = User(
-            role=User.Role.CLIENT,
             created_by=getattr(request, 'user', None),
             **validated_data,
         )

@@ -9,6 +9,8 @@ from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 
+from apps.notifications.models import Notification
+from apps.notifications.services import notify, notify_admins
 from common.emails import send_client_welcome_email
 from common.permissions import IsAdmin
 
@@ -16,7 +18,7 @@ from .models import LoginHistory, User
 from .serializers import (
     AdminUserUpdateSerializer,
     ChangePasswordSerializer,
-    CreateClientSerializer,
+    CreateUserSerializer,
     CustomTokenObtainPairSerializer,
     ForgotPasswordSerializer,
     LoginHistorySerializer,
@@ -167,14 +169,14 @@ class MyLoginHistoryView(generics.ListAPIView):
 
 
 class UserListCreateView(generics.ListCreateAPIView):
-    """Admin: list all users, or create a new Client login (Epic 01/02)."""
+    """Admin: list all users, or create a new Client or Admin login (Epic 01/02/24)."""
 
     permission_classes = [IsAdmin]
     queryset = User.objects.all()
 
     def get_serializer_class(self):
         if self.request.method == 'POST':
-            return CreateClientSerializer
+            return CreateUserSerializer
         return UserSerializer
 
     def get_queryset(self):
@@ -186,9 +188,26 @@ class UserListCreateView(generics.ListCreateAPIView):
 
     def perform_create(self, serializer):
         serializer.save()
+        new_user = serializer.instance
         plain_password = serializer._plain_password  # noqa: SLF001 - only known right after creation
         if plain_password:
-            send_client_welcome_email(serializer.instance, plain_password)
+            send_client_welcome_email(new_user, plain_password)
+
+        if new_user.is_admin:
+            notify_admins(
+                actor=self.request.user,
+                notification_type=Notification.NotificationType.ADMIN_ADDED,
+                title=f'{new_user.get_short_name()} joined as an admin',
+                message=f'Added by {self.request.user.get_short_name()}.',
+                url='/team',
+            )
+            notify(
+                new_user,
+                Notification.NotificationType.ADMIN_ADDED,
+                title='You were added as an admin',
+                message='You now have full access to the platform.',
+                url='/team',
+            )
 
 
 class UserDetailView(generics.RetrieveUpdateAPIView):

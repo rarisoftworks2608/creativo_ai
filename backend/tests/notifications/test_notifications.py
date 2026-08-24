@@ -145,6 +145,18 @@ class OnboardingNotificationTests(BaseNotificationsTestCase):
         recipients = set(notifications.values_list('recipient_id', flat=True))
         self.assertEqual(recipients, {self.other_admin.id, new_user.id})
 
+    def test_adding_a_new_admin_notifies_other_admins_and_the_new_admin(self):
+        self.authenticate_as('admin@example.com', 'StrongPass123!')
+        response = self.client.post(reverse('authentication:user-list-create'), {
+            'email': 'newadmin@example.com', 'first_name': 'New', 'role': 'admin',
+        })
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        new_admin = User.objects.get(email='newadmin@example.com')
+
+        notifications = Notification.objects.filter(notification_type=Notification.NotificationType.ADMIN_ADDED)
+        recipients = set(notifications.values_list('recipient_id', flat=True))
+        self.assertEqual(recipients, {self.other_admin.id, new_admin.id})
+
     def test_assigning_an_existing_client_still_notifies(self):
         standalone = User.objects.create_user(
             email='standalone@example.com', password='StrongPass123!', role=User.Role.CLIENT,

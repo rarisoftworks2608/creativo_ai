@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import NotificationBell from './NotificationBell'
 
 export default function Layout() {
-  const { user, logout } = useAuth()
+  const { user, isAdmin, logout } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const [navOpen, setNavOpen] = useState(false)
@@ -39,6 +39,25 @@ export default function Layout() {
             </span>
             Companies
           </NavLink>
+          {isAdmin && (
+            <NavLink to="/team" className={({ isActive }) => (isActive ? 'active' : '')} onClick={() => setNavOpen(false)}>
+              <span className="nav-icon" aria-hidden="true">
+                <svg viewBox="0 0 20 20" fill="none">
+                  <circle cx="7" cy="6.5" r="2.75" stroke="currentColor" strokeWidth="1.5" />
+                  <path
+                    d="M2.5 16.5c0-2.9 2.24-4.75 4.5-4.75s4.5 1.85 4.5 4.75"
+                    stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"
+                  />
+                  <circle cx="14" cy="6.5" r="2.25" stroke="currentColor" strokeWidth="1.5" />
+                  <path
+                    d="M12.5 12c1.9.35 3.5 1.9 3.5 4.5"
+                    stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"
+                  />
+                </svg>
+              </span>
+              Team
+            </NavLink>
+          )}
         </nav>
       </aside>
 

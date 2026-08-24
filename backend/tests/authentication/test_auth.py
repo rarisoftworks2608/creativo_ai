@@ -151,6 +151,16 @@ class UserManagementTests(BaseAuthTestCase):
         self.assertEqual(created.created_by, self.admin)
         self.assertTrue(response.data['generated_password'])
 
+    def test_admin_can_create_another_admin(self):
+        self.authenticate_as('admin@example.com', 'StrongPass123!')
+        response = self.client.post(reverse('authentication:user-list-create'), {
+            'email': 'newadmin@example.com', 'first_name': 'New', 'role': 'admin',
+        })
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        created = User.objects.get(email='newadmin@example.com')
+        self.assertEqual(created.role, User.Role.ADMIN)
+        self.assertTrue(response.data['generated_password'])
+
     def test_client_cannot_create_users(self):
         self.authenticate_as('client@example.com', 'StrongPass123!')
         response = self.client.post(reverse('authentication:user-list-create'), {
