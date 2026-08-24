@@ -117,6 +117,48 @@ class WelcomeEmailTests(BaseNotificationsTestCase):
         self.assertEqual(len(mail.outbox), 0)
 
 
+class OnboardingNotificationTests(BaseNotificationsTestCase):
+    """Company/client creation notifies the admin team, in addition to the
+    welcome email covered by WelcomeEmailTests."""
+
+    def setUp(self):
+        super().setUp()
+        self.other_admin = User.objects.create_superuser(email='admin2@example.com', password='StrongPass123!')
+
+    def test_creating_a_company_notifies_other_admins_not_the_creator(self):
+        self.authenticate_as('admin@example.com', 'StrongPass123!')
+        response = self.client.post(reverse('companies:company-list-create'), {'name': 'New Co'})
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        notifications = Notification.objects.filter(notification_type=Notification.NotificationType.COMPANY_CREATED)
+        recipients = set(notifications.values_list('recipient_id', flat=True))
+        self.assertEqual(recipients, {self.other_admin.id})
+
+    def test_adding_a_new_client_notifies_other_admins_and_the_client(self):
+        self.authenticate_as('admin@example.com', 'StrongPass123!')
+        url = reverse('companies:company-client-list-create', kwargs={'company_id': self.company.pk})
+        response = self.client.post(url, {'email': 'brandnew@example.com', 'first_name': 'Brand'})
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        new_user = User.objects.get(email='brandnew@example.com')
+
+        notifications = Notification.objects.filter(notification_type=Notification.NotificationType.CLIENT_ADDED)
+        recipients = set(notifications.values_list('recipient_id', flat=True))
+        self.assertEqual(recipients, {self.other_admin.id, new_user.id})
+
+    def test_assigning_an_existing_client_still_notifies(self):
+        standalone = User.objects.create_user(
+            email='standalone@example.com', password='StrongPass123!', role=User.Role.CLIENT,
+        )
+        self.authenticate_as('admin@example.com', 'StrongPass123!')
+        url = reverse('companies:company-client-list-create', kwargs={'company_id': self.company.pk})
+        response = self.client.post(url, {'user_id': standalone.pk})
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        notifications = Notification.objects.filter(notification_type=Notification.NotificationType.CLIENT_ADDED)
+        recipients = set(notifications.values_list('recipient_id', flat=True))
+        self.assertEqual(recipients, {self.other_admin.id, standalone.id})
+
+
 class ContentGeneratedNotificationTests(BaseNotificationsTestCase):
     """Confirms the AI generation tasks actually create notifications - not
     just that they store the flag, since that's the part a refactor could

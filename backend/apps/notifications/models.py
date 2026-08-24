@@ -9,12 +9,13 @@ from common.models import TimeStampedModel
 class Notification(TimeStampedModel):
     """An in-app notification for one recipient (Epic 13: Notification Center - In-App).
 
-    The event types below match the plan's notification list verbatim
+    The first eight event types match the plan's notification list verbatim
     (Epic 12/13). Approval/publishing events are included now so they never
     need a schema change, but nothing creates them yet - there's no
     Approval Workflow or Publishing module in the codebase to trigger them
-    from. Only content_generated/content_regenerated (AI generation) and
-    reminder (scheduled) are wired up today.
+    from. company_created/client_added are an addition beyond the plan's
+    list, requested so the admin team sees onboarding activity in the bell
+    too, not just via email.
     """
 
     class NotificationType(models.TextChoices):
@@ -26,6 +27,8 @@ class Notification(TimeStampedModel):
         CONTENT_PUBLISHED = 'content_published', 'Content Published'
         PUBLISHING_FAILED = 'publishing_failed', 'Publishing Failed'
         REMINDER = 'reminder', 'Reminder'
+        COMPANY_CREATED = 'company_created', 'Company Created'
+        CLIENT_ADDED = 'client_added', 'Client Added'
 
     recipient = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='notifications')
     company = models.ForeignKey(

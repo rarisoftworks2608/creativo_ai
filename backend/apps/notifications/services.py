@@ -22,6 +22,23 @@ def notify(recipient, notification_type, title, *, message='', url='', company=N
     )
 
 
+def notify_admins(*, actor, notification_type, title, message='', url='', company=None):
+    """Notifies every other active admin about something one admin just did
+    (e.g. creating a company or adding a client) - the actor already knows,
+    so they're excluded.
+    """
+    from apps.authentication.models import User
+
+    admins = User.objects.filter(role=User.Role.ADMIN, is_active=True)
+    if actor is not None:
+        admins = admins.exclude(id=actor.id)
+
+    return [
+        notify(admin, notification_type, title, message=message, url=url, company=company)
+        for admin in admins
+    ]
+
+
 def notify_content_ready(*, company, created_by, notification_type, title, message='', url=''):
     """Notifies the admin who requested an AI generation, plus every client
     contact at the company - both "sides" care that new content is ready.

@@ -3,6 +3,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.notifications.models import Notification
+from apps.notifications.services import notify, notify_admins
 from common.emails import send_client_welcome_email
 from common.permissions import IsAdmin
 
@@ -42,6 +44,17 @@ class CompanyListCreateView(generics.ListCreateAPIView):
             queryset = queryset.filter(name__icontains=search)
 
         return queryset
+
+    def perform_create(self, serializer):
+        company = serializer.save()
+        notify_admins(
+            actor=self.request.user,
+            notification_type=Notification.NotificationType.COMPANY_CREATED,
+            title=f'"{company.name}" was added',
+            message=f'New company created by {self.request.user.get_short_name()}.',
+            url=f'/companies/{company.id}',
+            company=company,
+        )
 
 
 class CompanyDetailView(generics.RetrieveUpdateAPIView):
@@ -127,6 +140,24 @@ class CompanyClientListCreateView(generics.ListCreateAPIView):
         plain_password = serializer._plain_password  # noqa: SLF001 - only known right after creation
         if plain_password:
             send_client_welcome_email(profile.user, plain_password)
+
+        notify_admins(
+            actor=request.user,
+            notification_type=Notification.NotificationType.CLIENT_ADDED,
+            title=f'{profile.user.get_short_name()} added to "{company.name}"',
+            message=f'New client contact added by {request.user.get_short_name()}.',
+            url=f'/companies/{company.id}',
+            company=company,
+        )
+        notify(
+            profile.user,
+            Notification.NotificationType.CLIENT_ADDED,
+            title=f'You were added to "{company.name}"',
+            message='You now have access to this company on the platform.',
+            url=f'/companies/{company.id}',
+            company=company,
+        )
+
         return Response(
             {
                 **ClientProfileSerializer(profile).data,
