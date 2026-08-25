@@ -1,8 +1,10 @@
 import datetime
+import io
 from unittest.mock import patch
 
 from django.test import override_settings
 from django.urls import reverse
+from PIL import Image
 from rest_framework import status
 from rest_framework.test import APITestCase
 
@@ -24,7 +26,9 @@ COPY_RESULT = {
 
 
 def fake_png_bytes():
-    return b'\x89PNG\r\n\x1a\n' + b'0' * 32
+    buffer = io.BytesIO()
+    Image.new('RGB', (100, 100), color='teal').save(buffer, format='PNG')
+    return buffer.getvalue()
 
 
 class FakeImageProvider:

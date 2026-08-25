@@ -62,7 +62,10 @@ def build_brand_context_prompt(company, brand_profile=None):
 STRATEGY_SYSTEM_PROMPT = (
     'You are a senior social media strategist for a digital marketing agency. '
     'Ground every suggestion in the brand context provided - do not suggest anything that '
-    'contradicts the brand voice, restricted words, or stated audience.'
+    'contradicts the brand voice, restricted words, or stated audience. '
+    'Always respond with only the requested JSON output - never ask clarifying questions or add '
+    'commentary. Where the brand context is thin, make reasonable, on-brand assumptions and '
+    'proceed rather than asking for more information.'
 )
 
 

@@ -46,16 +46,20 @@ def build_image_prompt(company, brand_profile, creative_type, prompt_brief, prod
         *_brand_lines(brand_profile),
         f'This is variation {variation_number} of 3 - make it visually distinct from the other variations '
         'while staying on-brand.',
-        'Do not include any text overlay unless explicitly part of the brief - focus on the visual.',
+        'Do not render any text, headline, caption, CTA, or logo into the image itself - '
+        'produce a clean visual only. Any text and the brand logo are composited on afterward '
+        'from separately-generated, guaranteed-accurate copy, so text baked into the image by '
+        'you would only ever be redundant or, worse, misspelled.',
     ]
-    if brand_profile is not None and brand_profile.logo:
-        lines.append('A reference image of the brand logo is attached - incorporate it tastefully (e.g. a small corner mark).')
     return '\n'.join(lines)
 
 
 COPY_SYSTEM_PROMPT = (
     'You are a senior social media copywriter for a digital marketing agency. '
-    'Write copy that matches the brand voice/tone exactly and never uses restricted words.'
+    'Write copy that matches the brand voice/tone exactly and never uses restricted words. '
+    'Always respond with only the requested JSON output - never ask clarifying questions or add '
+    'commentary. Where the brief or brand details are sparse, make reasonable, on-brand assumptions '
+    'and proceed rather than asking for more information.'
 )
 
 

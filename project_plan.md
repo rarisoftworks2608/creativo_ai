@@ -9,6 +9,9 @@ python manage.py runserver
 # terminal 2
 cd frontend; npm run dev
 
+# terminal 3
+celery -A config worker -l info --pool=solo
+
 
 
 1. Product Overview

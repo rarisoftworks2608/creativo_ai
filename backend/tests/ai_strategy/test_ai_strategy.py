@@ -5,7 +5,7 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from apps.ai_strategy.ai_client import AIProviderError, AIProviderNotConfigured, AnthropicProvider
+from apps.ai_strategy.ai_client import AIProviderError, AIProviderNotConfigured, AnthropicProvider, GroqProvider
 from apps.ai_strategy.models import BrandContext, StrategyOutput
 from apps.authentication.models import User
 from apps.companies.models import ClientProfile, Company
@@ -216,3 +216,44 @@ class AnthropicProviderTests(TestCase):
                 os.environ['ANTHROPIC_API_KEY'] = old_key
             if old_token is not None:
                 os.environ['ANTHROPIC_AUTH_TOKEN'] = old_token
+
+
+class GroqProviderTests(TestCase):
+    """Same guarantee as AnthropicProviderTests, for the Groq wrapper: every
+    client-side failure mode maps to AIProviderError/AIProviderNotConfigured.
+    """
+
+    def test_missing_credentials_raises_not_configured_not_a_bare_exception(self):
+        import os
+        old_key = os.environ.pop('GROQ_API_KEY', None)
+        try:
+            provider = GroqProvider(model='openai/gpt-oss-120b')
+            with self.assertRaises(AIProviderNotConfigured):
+                provider.generate_json(system='sys', prompt='hello', json_schema={'type': 'object'})
+        finally:
+            if old_key is not None:
+                os.environ['GROQ_API_KEY'] = old_key
+
+
+class GetProviderFactoryTests(TestCase):
+    def test_defaults_to_anthropic(self):
+        from django.test import override_settings
+
+        from apps.ai_strategy.ai_client import get_provider
+        with override_settings(AI_TEXT_PROVIDER='anthropic'):
+            self.assertIsInstance(get_provider(), AnthropicProvider)
+
+    def test_selects_groq(self):
+        from django.test import override_settings
+
+        from apps.ai_strategy.ai_client import get_provider
+        with override_settings(AI_TEXT_PROVIDER='groq'):
+            self.assertIsInstance(get_provider(), GroqProvider)
+
+    def test_unknown_provider_raises(self):
+        from django.test import override_settings
+
+        from apps.ai_strategy.ai_client import get_provider
+        with override_settings(AI_TEXT_PROVIDER='not-a-real-provider'):
+            with self.assertRaises(AIProviderError):
+                get_provider()

@@ -1,8 +1,10 @@
 import datetime
+import io
 from unittest.mock import patch
 
 from django.core import mail
 from django.urls import reverse
+from PIL import Image
 from rest_framework import status
 from rest_framework.test import APITestCase
 
@@ -197,7 +199,9 @@ class ContentGeneratedNotificationTests(BaseNotificationsTestCase):
             model = 'gemini-3.1-flash-image'
 
             def generate_image(self, *, prompt, reference_images=None):
-                return b'\x89PNG\r\n\x1a\n' + b'0' * 32, 'image/png'
+                buffer = io.BytesIO()
+                Image.new('RGB', (100, 100), color='teal').save(buffer, format='PNG')
+                return buffer.getvalue(), 'image/png'
 
         class FakeText:
             model = 'claude-opus-5'

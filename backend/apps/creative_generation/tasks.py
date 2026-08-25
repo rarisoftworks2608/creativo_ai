@@ -13,6 +13,7 @@ from apps.notifications.services import notify_content_ready
 from common.ai_errors import AIProviderError
 
 from . import prompts
+from .compositor import compose_creative
 from .image_client import get_image_provider
 from .models import GenerationRequest, GenerationVariation
 from .schemas import COPY_SCHEMA
@@ -54,11 +55,11 @@ def generate_creative_variations(self, generation_request_id):
     brand_profile = BrandProfile.objects.filter(company=company).first()
     brand_context = BrandContext.objects.filter(company=company).first()
 
-    reference_images = []
+    logo_bytes = None
     if brand_profile is not None and brand_profile.logo:
         try:
             with brand_profile.logo.open('rb') as f:
-                reference_images.append((f.read(), 'image/png'))
+                logo_bytes = f.read()
         except (FileNotFoundError, OSError):
             pass
 
@@ -82,7 +83,7 @@ def generate_creative_variations(self, generation_request_id):
         )
 
         try:
-            image_bytes, mime_type = image_provider.generate_image(prompt=image_prompt, reference_images=reference_images)
+            image_bytes, mime_type = image_provider.generate_image(prompt=image_prompt)
             copy_data = text_provider.generate_json(
                 system=prompts.COPY_SYSTEM_PROMPT, prompt=copy_prompt, json_schema=COPY_SCHEMA,
             )
@@ -93,6 +94,11 @@ def generate_creative_variations(self, generation_request_id):
             _fail(request, f'Unexpected error on variation {variation_number}: {exc}')
             return
 
+        image_bytes, mime_type = compose_creative(
+            image_bytes, mime_type,
+            headline=copy_data.get('headline', ''), cta=copy_data.get('cta', ''),
+            logo_bytes=logo_bytes, brand_profile=brand_profile,
+        )
         ext = MIME_EXTENSIONS.get(mime_type, 'png')
         variation = GenerationVariation(
             generation_request=request,

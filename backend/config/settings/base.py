@@ -219,16 +219,23 @@ FRONTEND_URL = env('FRONTEND_URL', default='http://localhost:5173')
 
 
 # AI text provider (Epic 05: AI Content Strategy)
-# ANTHROPIC_API_KEY itself is read directly by the Anthropic SDK from the
-# environment (set it in .env) - it is deliberately not duplicated here.
+# 'anthropic' reads ANTHROPIC_API_KEY / 'groq' reads GROQ_API_KEY - both read
+# directly by their own SDK from the environment (set it in .env), not
+# duplicated here. AI_TEXT_MODEL must match whichever provider is active
+# (e.g. claude-opus-5 for anthropic, openai/gpt-oss-120b for groq).
 
 AI_TEXT_PROVIDER = env('AI_TEXT_PROVIDER', default='anthropic')
 AI_TEXT_MODEL = env('AI_TEXT_MODEL', default='claude-opus-5')
 
 
 # AI image provider (Epic 06: AI Creative Generation)
-# GEMINI_API_KEY itself is read directly by the google-genai SDK from the
-# environment (set it in .env) - it is deliberately not duplicated here.
+# 'gemini' reads GEMINI_API_KEY, read directly by the google-genai SDK from
+# the environment (set it in .env) - deliberately not duplicated here.
+# 'huggingface' reads HF_TOKEN (free to create, no card required) and runs
+# on Hugging Face's own serverless compute (see HuggingFaceImageProvider).
+# AI_IMAGE_MODEL must match whichever provider is active (e.g.
+# gemini-3.1-flash-image for gemini,
+# stabilityai/stable-diffusion-3-medium-diffusers for huggingface).
 
 AI_IMAGE_PROVIDER = env('AI_IMAGE_PROVIDER', default='gemini')
 AI_IMAGE_MODEL = env('AI_IMAGE_MODEL', default='gemini-3.1-flash-image')
