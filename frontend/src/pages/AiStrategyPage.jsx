@@ -87,10 +87,6 @@ export default function AiStrategyPage() {
   const [contextError, setContextError] = useState('')
 
   const load = useCallback(async () => {
-    if (!isAdmin) {
-      setLoading(false)
-      return
-    }
     setLoading(true)
     setLoadError('')
     try {
@@ -107,7 +103,7 @@ export default function AiStrategyPage() {
     } finally {
       setLoading(false)
     }
-  }, [companyId, isAdmin])
+  }, [companyId])
 
   useEffect(() => {
     load()
@@ -127,9 +123,6 @@ export default function AiStrategyPage() {
     }
   }
 
-  if (!isAdmin) {
-    return <div className="alert alert-error">AI Content Strategy is only available to admins.</div>
-  }
   if (loading) return <div className="page-loading">Loading…</div>
   if (loadError && !company) return <div className="alert alert-error">{loadError}</div>
   if (!company) return null
@@ -152,16 +145,21 @@ export default function AiStrategyPage() {
       <div className="card">
         <div className="card-header">
           <h2>Brand Context</h2>
-          <button type="button" className="btn btn-primary" disabled={generatingContext} onClick={handleGenerateContext}>
-            {generatingContext ? 'Generating…' : brandContext ? 'Regenerate' : 'Generate brand context'}
-          </button>
+          {isAdmin && (
+            <button type="button" className="btn btn-primary" disabled={generatingContext} onClick={handleGenerateContext}>
+              {generatingContext ? 'Generating…' : brandContext ? 'Regenerate' : 'Generate brand context'}
+            </button>
+          )}
         </div>
 
         {contextError && <div className="alert alert-error">{contextError}</div>}
 
         {!brandContext ? (
           <div className="empty-state">
-            <p>No brand context yet. Generate one to unlock AI Planning and AI Strategy below.</p>
+            <p>
+              No brand context yet.
+              {isAdmin ? ' Generate one to unlock AI Planning and AI Strategy below.' : ' Check back once your account manager has generated one.'}
+            </p>
           </div>
         ) : (
           <>
@@ -199,21 +197,21 @@ export default function AiStrategyPage() {
       <h2 style={{ marginTop: 32 }}>AI Planning</h2>
       <div className="kind-grid">
         {PLANNING_KINDS.map((spec) => (
-          <StrategyKindCard key={spec.kind} companyId={companyId} spec={spec} enabled={Boolean(brandContext)} />
+          <StrategyKindCard key={spec.kind} companyId={companyId} spec={spec} enabled={Boolean(brandContext)} canGenerate={isAdmin} />
         ))}
       </div>
 
       <h2 style={{ marginTop: 32 }}>AI Strategy</h2>
       <div className="kind-grid">
         {STRATEGY_KINDS.map((spec) => (
-          <StrategyKindCard key={spec.kind} companyId={companyId} spec={spec} enabled={Boolean(brandContext)} />
+          <StrategyKindCard key={spec.kind} companyId={companyId} spec={spec} enabled={Boolean(brandContext)} canGenerate={isAdmin} />
         ))}
       </div>
     </div>
   )
 }
 
-function StrategyKindCard({ companyId, spec, enabled }) {
+function StrategyKindCard({ companyId, spec, enabled, canGenerate }) {
   const [latest, setLatest] = useState(null)
   const [history, setHistory] = useState([])
   const [historyExpanded, setHistoryExpanded] = useState(false)
@@ -263,19 +261,21 @@ function StrategyKindCard({ companyId, spec, enabled }) {
       <p className="page-subtitle">{spec.description}</p>
 
       {!enabled ? (
-        <p className="muted">Generate the brand context above first.</p>
+        <p className="muted">{canGenerate ? 'Generate the brand context above first.' : 'Not available yet.'}</p>
       ) : (
         <>
-          <div className="kind-card-actions">
-            <input
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Optional guidance for this generation"
-            />
-            <button type="button" className="btn btn-ghost" disabled={generating} onClick={handleGenerate}>
-              {generating ? 'Generating…' : latest ? 'Regenerate' : 'Generate'}
-            </button>
-          </div>
+          {canGenerate && (
+            <div className="kind-card-actions">
+              <input
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Optional guidance for this generation"
+              />
+              <button type="button" className="btn btn-ghost" disabled={generating} onClick={handleGenerate}>
+                {generating ? 'Generating…' : latest ? 'Regenerate' : 'Generate'}
+              </button>
+            </div>
+          )}
 
           {error && <div className="alert alert-error">{error}</div>}
 

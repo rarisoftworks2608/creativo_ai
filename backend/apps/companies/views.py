@@ -86,9 +86,12 @@ class MyCompanyView(generics.RetrieveAPIView):
     permission_classes = [IsAuthenticated]
 
     def get_object(self):
+        from rest_framework.exceptions import NotFound
+
         profile = getattr(self.request.user, 'client_profile', None)
         if profile is None:
-            from rest_framework.exceptions import NotFound
+            raise NotFound('No company is associated with this account.')
+        if not self.request.user.is_admin and not profile.can_access(ClientProfile.Page.DASHBOARD):
             raise NotFound('No company is associated with this account.')
         return profile.company
 
@@ -168,7 +171,7 @@ class CompanyClientListCreateView(generics.ListCreateAPIView):
 
 
 class CompanyClientDetailView(generics.RetrieveUpdateDestroyAPIView):
-    """Admin: view/update a client's role at the company, or remove them from it."""
+    """Admin: view/update a client's role/page access at the company, or remove them from it."""
 
     serializer_class = ClientProfileSerializer
     permission_classes = [IsAdmin]
@@ -180,3 +183,17 @@ class CompanyClientDetailView(generics.RetrieveUpdateDestroyAPIView):
         if self.request.method in ('PUT', 'PATCH'):
             return ClientProfileUpdateSerializer
         return ClientProfileSerializer
+
+    def update(self, request, *args, **kwargs):
+        """Validates/saves via ClientProfileUpdateSerializer (writable fields only), but
+        always responds with the full ClientProfileSerializer representation - the Access
+        Control page merges this response straight into local state on every checkbox
+        toggle, so a write-only serializer's response (missing id/user/company) would
+        break the very next toggle on that row, the same bug fixed on UserDetailView.
+        """
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(ClientProfileSerializer(instance).data)

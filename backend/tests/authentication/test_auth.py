@@ -181,6 +181,27 @@ class UserManagementTests(BaseAuthTestCase):
         self.client_user.refresh_from_db()
         self.assertFalse(self.client_user.is_active)
 
+    def test_patch_response_includes_full_representation_not_just_writable_fields(self):
+        """Regression test: the response used to come back from AdminUserUpdateSerializer,
+        which omits id/email/full_name - callers (TeamPage, AccessControlPage) merge this
+        response straight into local state, so a second edit on the same row had no id to
+        send (`/auth/users/undefined/`). The response must always carry the full user.
+        """
+        self.authenticate_as('admin@example.com', 'StrongPass123!')
+        url = reverse('authentication:user-detail', kwargs={'pk': self.client_user.pk})
+
+        response = self.client.patch(url, {'is_active': False})
+
+        self.assertEqual(response.data['id'], self.client_user.pk)
+        self.assertEqual(response.data['email'], self.client_user.email)
+        self.assertIn('full_name', response.data)
+        self.assertFalse(response.data['is_active'])
+
+        # And a second edit using only the first response's data must still work.
+        second = self.client.patch(url, {'is_active': True})
+        self.assertEqual(second.status_code, status.HTTP_200_OK)
+        self.assertTrue(second.data['is_active'])
+
     def test_admin_can_view_user_login_history(self):
         self.login('client@example.com', 'StrongPass123!')
         self.authenticate_as('admin@example.com', 'StrongPass123!')

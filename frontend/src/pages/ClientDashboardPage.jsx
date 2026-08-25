@@ -102,6 +102,15 @@ export default function ClientDashboardPage() {
             View calendar
           </Link>
         </div>
+        <div className="card">
+          <div className="card-header">
+            <h2>AI strategy</h2>
+          </div>
+          <p className="page-subtitle">Brand context, content planning and strategy generated for you.</p>
+          <Link to={`/companies/${company.id}/ai-strategy`} className="btn btn-primary">
+            View AI strategy
+          </Link>
+        </div>
       </div>
 
       <div className="card">

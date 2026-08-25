@@ -5,7 +5,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.companies.models import Company
+from apps.companies.models import ClientProfile, Company
 from common.permissions import IsAdmin
 
 from .models import BrandAsset, BrandProfile
@@ -20,7 +20,12 @@ IMAGE_SLOTS = {'logo', 'secondary_logo', 'favicon'}
 
 
 class CompanyScopedMixin:
-    """Resolves the company from the URL, 404ing if a client tries to reach a company that isn't theirs."""
+    """Resolves the company from the URL, 404ing if a client tries to reach a company that
+    isn't theirs, or (if `required_page` is set on the view) one they haven't been
+    granted access to (Epic 01: Role & Access - Access Control page).
+    """
+
+    required_page = None
 
     def get_company(self):
         company = generics.get_object_or_404(Company, pk=self.kwargs['company_id'])
@@ -28,6 +33,8 @@ class CompanyScopedMixin:
         if not user.is_admin:
             profile = getattr(user, 'client_profile', None)
             if not profile or profile.company_id != company.id:
+                raise Http404
+            if self.required_page and not profile.can_access(self.required_page):
                 raise Http404
         return company
 
@@ -50,6 +57,7 @@ class BrandProfileView(CompanyScopedMixin, AdminWriteMixin, generics.RetrieveUpd
     """
 
     permission_classes = [IsAuthenticated]
+    required_page = ClientProfile.Page.BRAND
 
     def get_serializer_class(self):
         if self.request.method in ('PUT', 'PATCH'):
@@ -109,6 +117,7 @@ class BrandAssetListCreateView(CompanyScopedMixin, AdminWriteMixin, generics.Lis
     """List a company's brand asset library, or upload a new file into it (Epic 03: Brand Assets)."""
 
     permission_classes = [IsAuthenticated]
+    required_page = ClientProfile.Page.BRAND
     parser_classes = [MultiPartParser, FormParser]
 
     def get_serializer_class(self):
@@ -136,6 +145,7 @@ class BrandAssetDetailView(CompanyScopedMixin, AdminWriteMixin, generics.Retriev
 
     serializer_class = BrandAssetSerializer
     permission_classes = [IsAuthenticated]
+    required_page = ClientProfile.Page.BRAND
 
     def get_queryset(self):
         return BrandAsset.objects.filter(company=self.get_company())

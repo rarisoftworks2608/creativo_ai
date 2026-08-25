@@ -18,8 +18,9 @@ export default function LoginPage() {
     setError('')
     setSubmitting(true)
     try {
-      await login(email, password)
-      navigate(location.state?.from || '/companies', { replace: true })
+      const loggedInUser = await login(email, password)
+      const homePath = loggedInUser.role === 'admin' ? '/companies' : '/client'
+      navigate(location.state?.from || homePath, { replace: true })
     } catch (err) {
       setError(extractErrorMessage(err, 'Invalid email or password.'))
     } finally {

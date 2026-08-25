@@ -79,8 +79,29 @@ class Company(TimeStampedModel):
         }
 
 
+def _all_pages():
+    """Default page_permissions for a new (or pre-existing, via migration) client -
+    everything granted, matching how access already worked before this field existed.
+    An admin restricts it afterward via the Access Control page, rather than every new
+    client starting locked out of pages that used to just work.
+    """
+    return list(ClientProfile.Page.values)
+
+
 class ClientProfile(TimeStampedModel):
     """Links a Client login (apps.authentication.User) to the Company they belong to."""
+
+    class Page(models.TextChoices):
+        """Every client-facing page an admin can grant/revoke individually (Epic 01:
+        Role & Access). Enforced server-side by each app's CompanyScopedMixin, not just
+        hidden in the frontend nav - see `required_page` on the relevant views.
+        """
+        DASHBOARD = 'dashboard', 'Dashboard'
+        BRAND = 'brand', 'Brand'
+        AI_STRATEGY = 'ai_strategy', 'AI Strategy'
+        CALENDAR = 'calendar', 'Content Calendar'
+        CREATIVE_GENERATION = 'creative_generation', 'Creative Generation'
+        VIDEO_GENERATION = 'video_generation', 'Video Generation'
 
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL,
@@ -94,9 +115,16 @@ class ClientProfile(TimeStampedModel):
     )
     designation = models.CharField(max_length=150, blank=True, help_text="Client's job title at the company.")
     is_primary_contact = models.BooleanField(default=False)
+    page_permissions = models.JSONField(
+        default=_all_pages, blank=True,
+        help_text='List of Page keys this client can access, e.g. ["dashboard", "brand"].',
+    )
 
     class Meta:
         ordering = ['-created_at']
 
     def __str__(self):
         return f'{self.user.email} @ {self.company.name}'
+
+    def can_access(self, page):
+        return page in (self.page_permissions or [])

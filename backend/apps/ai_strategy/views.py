@@ -1,9 +1,11 @@
+from django.http import Http404
 from rest_framework import generics, status
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.brand.models import BrandProfile
-from apps.companies.models import Company
+from apps.companies.models import ClientProfile, Company
 from common.permissions import IsAdmin
 
 from . import prompts, schemas
@@ -12,8 +14,24 @@ from .models import BrandContext, StrategyOutput
 from .serializers import BrandContextSerializer, GenerateStrategySerializer, StrategyOutputSerializer
 
 
-def _get_company(company_id):
-    return generics.get_object_or_404(Company, pk=company_id)
+class CompanyScopedMixin:
+    """Resolves the company from the URL, 404ing if a client tries to reach a company that
+    isn't theirs, or (if `required_page` is set on the view) one they haven't been
+    granted access to (Epic 01: Role & Access - Access Control page).
+    """
+
+    required_page = None
+
+    def get_company(self):
+        company = generics.get_object_or_404(Company, pk=self.kwargs['company_id'])
+        user = self.request.user
+        if not user.is_admin:
+            profile = getattr(user, 'client_profile', None)
+            if not profile or profile.company_id != company.id:
+                raise Http404
+            if self.required_page and not profile.can_access(self.required_page):
+                raise Http404
+        return company
 
 
 def _ai_error_response(exc):
@@ -22,14 +40,17 @@ def _ai_error_response(exc):
     return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
 
 
-class BrandContextView(generics.RetrieveAPIView):
-    """Admin: view the company's most recently generated brand context (Epic 05: Create brand context)."""
+class BrandContextView(CompanyScopedMixin, generics.RetrieveAPIView):
+    """View the company's most recently generated brand context - admin or the owning
+    client, read-only for the client (Epic 05: Create brand context).
+    """
 
     serializer_class = BrandContextSerializer
-    permission_classes = [IsAdmin]
+    permission_classes = [IsAuthenticated]
+    required_page = ClientProfile.Page.AI_STRATEGY
 
     def get_object(self):
-        company = _get_company(self.kwargs['company_id'])
+        company = self.get_company()
         return generics.get_object_or_404(BrandContext, company=company)
 
 
@@ -44,7 +65,7 @@ class BrandContextGenerateView(APIView):
     serializer_class = BrandContextSerializer
 
     def post(self, request, company_id):
-        company = _get_company(company_id)
+        company = generics.get_object_or_404(Company, pk=company_id)
         brand_profile = BrandProfile.objects.filter(company=company).first()
 
         provider = get_provider()
@@ -72,14 +93,17 @@ class BrandContextGenerateView(APIView):
         return Response(BrandContextSerializer(context).data)
 
 
-class StrategyOutputListView(generics.ListAPIView):
-    """Admin: list a company's past AI Planning / AI Strategy generations, optionally filtered by kind."""
+class StrategyOutputListView(CompanyScopedMixin, generics.ListAPIView):
+    """List a company's past AI Planning / AI Strategy generations, optionally filtered
+    by kind - admin or the owning client, read-only for the client.
+    """
 
     serializer_class = StrategyOutputSerializer
-    permission_classes = [IsAdmin]
+    permission_classes = [IsAuthenticated]
+    required_page = ClientProfile.Page.AI_STRATEGY
 
     def get_queryset(self):
-        company = _get_company(self.kwargs['company_id'])
+        company = self.get_company()
         queryset = StrategyOutput.objects.filter(company=company)
         kind = self.request.query_params.get('kind')
         if kind:
@@ -87,13 +111,17 @@ class StrategyOutputListView(generics.ListAPIView):
         return queryset
 
 
-class StrategyOutputDetailView(generics.RetrieveAPIView):
-    """Admin: view a single past AI Planning / AI Strategy generation."""
+class StrategyOutputDetailView(CompanyScopedMixin, generics.RetrieveAPIView):
+    """View a single past AI Planning / AI Strategy generation - admin or the owning
+    client, read-only for the client.
+    """
 
     serializer_class = StrategyOutputSerializer
-    permission_classes = [IsAdmin]
+    permission_classes = [IsAuthenticated]
+    required_page = ClientProfile.Page.AI_STRATEGY
 
     def get_queryset(self):
+        self.get_company()
         return StrategyOutput.objects.filter(company_id=self.kwargs['company_id'])
 
 
@@ -112,7 +140,7 @@ class StrategyOutputGenerateView(APIView):
         if kind not in schemas.STRATEGY_KINDS:
             return Response({'detail': f'Unknown strategy kind "{kind}".'}, status=status.HTTP_404_NOT_FOUND)
 
-        company = _get_company(company_id)
+        company = generics.get_object_or_404(Company, pk=company_id)
         brand_context = BrandContext.objects.filter(company=company).first()
         if brand_context is None:
             return Response(

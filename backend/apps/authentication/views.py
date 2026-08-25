@@ -221,6 +221,20 @@ class UserDetailView(generics.RetrieveUpdateAPIView):
             return AdminUserUpdateSerializer
         return UserSerializer
 
+    def update(self, request, *args, **kwargs):
+        """Validates/saves via AdminUserUpdateSerializer (writable fields only), but
+        always responds with the full UserSerializer representation - callers that merge
+        this response into local state (TeamPage, AccessControlPage) need `id`/`email`/
+        `full_name` to still be there for a second edit, and AdminUserUpdateSerializer
+        deliberately omits them since they're not writable.
+        """
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(UserSerializer(instance).data)
+
 
 class UserLoginHistoryView(generics.ListAPIView):
     """Admin: view a specific user's login history."""

@@ -11,7 +11,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.companies.models import Company
+from apps.companies.models import ClientProfile, Company
 from apps.notifications.models import Notification
 from apps.notifications.services import notify_admins
 from common.permissions import IsAdmin
@@ -22,7 +22,12 @@ from .serializers import ContentCalendarItemSerializer, ExcelUploadSerializer
 
 
 class CompanyScopedMixin:
-    """Resolves the company from the URL, 404ing if a client tries to reach a company that isn't theirs."""
+    """Resolves the company from the URL, 404ing if a client tries to reach a company that
+    isn't theirs, or (if `required_page` is set on the view) one they haven't been
+    granted access to (Epic 01: Role & Access - Access Control page).
+    """
+
+    required_page = None
 
     def get_company(self):
         company = generics.get_object_or_404(Company, pk=self.kwargs['company_id'])
@@ -30,6 +35,8 @@ class CompanyScopedMixin:
         if not user.is_admin:
             profile = getattr(user, 'client_profile', None)
             if not profile or profile.company_id != company.id:
+                raise Http404
+            if self.required_page and not profile.can_access(self.required_page):
                 raise Http404
         return company
 
@@ -57,6 +64,7 @@ class ContentCalendarItemListCreateView(CompanyScopedMixin, generics.ListCreateA
 
     serializer_class = ContentCalendarItemSerializer
     permission_classes = [IsAuthenticated]
+    required_page = ClientProfile.Page.CALENDAR
     pagination_class = CalendarPagination
 
     def check_permissions(self, request):
@@ -113,6 +121,7 @@ class ContentCalendarItemDetailView(CompanyScopedMixin, generics.RetrieveUpdateD
 
     serializer_class = ContentCalendarItemSerializer
     permission_classes = [IsAuthenticated]
+    required_page = ClientProfile.Page.CALENDAR
 
     def check_permissions(self, request):
         super().check_permissions(request)
@@ -184,6 +193,7 @@ class ContentCalendarApproveView(CompanyScopedMixin, APIView):
     """Client (or admin): approve a piece of content that's pending review (Epic 09: Approval)."""
 
     permission_classes = [IsAuthenticated]
+    required_page = ClientProfile.Page.CALENDAR
     serializer_class = ContentCalendarItemSerializer
 
     def post(self, request, company_id, pk):
@@ -212,6 +222,7 @@ class ContentCalendarRejectView(CompanyScopedMixin, APIView):
     """
 
     permission_classes = [IsAuthenticated]
+    required_page = ClientProfile.Page.CALENDAR
     serializer_class = ContentCalendarItemSerializer
 
     def post(self, request, company_id, pk):

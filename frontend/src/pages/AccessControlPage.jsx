@@ -1,9 +1,18 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { listCompanies, listCompanyClients } from '../api/companies'
+import { listCompanies, listCompanyClients, updateCompanyClient } from '../api/companies'
 import { setUserActive } from '../api/team'
 import { extractErrorMessage } from '../api/client'
+
+const PAGES = [
+  { key: 'dashboard', label: 'Dashboard' },
+  { key: 'brand', label: 'Brand' },
+  { key: 'ai_strategy', label: 'AI Strategy' },
+  { key: 'calendar', label: 'Calendar' },
+  { key: 'creative_generation', label: 'Creative' },
+  { key: 'video_generation', label: 'Video' },
+]
 
 export default function AccessControlPage() {
   const { isAdmin } = useAuth()
@@ -52,12 +61,35 @@ export default function AccessControlPage() {
     }
   }
 
+  async function handleTogglePage(companyId, client, pageKey) {
+    const current = client.page_permissions || []
+    const next = current.includes(pageKey) ? current.filter((p) => p !== pageKey) : [...current, pageKey]
+
+    setBusyClientId(client.id)
+    try {
+      const updated = await updateCompanyClient(companyId, client.id, { page_permissions: next })
+      setGroups((prev) =>
+        prev.map((group) =>
+          group.company.id !== companyId
+            ? group
+            : { ...group, clients: group.clients.map((c) => (c.id === client.id ? updated : c)) },
+        ),
+      )
+    } catch (err) {
+      setLoadError(extractErrorMessage(err, 'Could not update page access.'))
+    } finally {
+      setBusyClientId(null)
+    }
+  }
+
   return (
     <div>
       <div className="page-header">
         <div>
           <h1>Access Control</h1>
-          <p className="page-subtitle">Every client login, grouped by company — activate or deactivate access.</p>
+          <p className="page-subtitle">
+            Every client login, grouped by company — activate/deactivate the login, and choose exactly which pages they can reach.
+          </p>
         </div>
       </div>
 
@@ -92,6 +124,7 @@ export default function AccessControlPage() {
                       <th>Email</th>
                       <th>Designation</th>
                       <th>Status</th>
+                      <th>Pages</th>
                       <th />
                     </tr>
                   </thead>
@@ -105,6 +138,21 @@ export default function AccessControlPage() {
                           <span className={`badge badge-${client.user.is_active ? 'active' : 'inactive'}`}>
                             {client.user.is_active ? 'Active' : 'Deactivated'}
                           </span>
+                        </td>
+                        <td>
+                          <div className="checkbox-row">
+                            {PAGES.map((page) => (
+                              <label key={page.key} className="field-checkbox field-checkbox-inline">
+                                <input
+                                  type="checkbox"
+                                  checked={(client.page_permissions || []).includes(page.key)}
+                                  disabled={busyClientId === client.id}
+                                  onChange={() => handleTogglePage(group.company.id, client, page.key)}
+                                />
+                                <span>{page.label}</span>
+                              </label>
+                            ))}
+                          </div>
                         </td>
                         <td>
                           <button

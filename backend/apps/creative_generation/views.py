@@ -6,7 +6,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.companies.models import Company
+from apps.companies.models import ClientProfile, Company
 from common.permissions import IsAdmin
 
 from .models import GenerationRequest, GenerationVariation
@@ -34,7 +34,12 @@ def _enqueue(generation_request):
 
 
 class CompanyScopedMixin:
-    """Resolves the company from the URL, 404ing if a client tries to reach a company that isn't theirs."""
+    """Resolves the company from the URL, 404ing if a client tries to reach a company that
+    isn't theirs, or (if `required_page` is set on the view) one they haven't been
+    granted access to (Epic 01: Role & Access - Access Control page).
+    """
+
+    required_page = None
 
     def get_company(self):
         company = generics.get_object_or_404(Company, pk=self.kwargs['company_id'])
@@ -42,6 +47,8 @@ class CompanyScopedMixin:
         if not user.is_admin:
             profile = getattr(user, 'client_profile', None)
             if not profile or profile.company_id != company.id:
+                raise Http404
+            if self.required_page and not profile.can_access(self.required_page):
                 raise Http404
         return company
 
@@ -53,6 +60,7 @@ class GenerationRequestListCreateView(CompanyScopedMixin, generics.ListCreateAPI
     """
 
     permission_classes = [IsAuthenticated]
+    required_page = ClientProfile.Page.CREATIVE_GENERATION
 
     def check_permissions(self, request):
         super().check_permissions(request)
@@ -99,6 +107,7 @@ class GenerationRequestDetailView(CompanyScopedMixin, generics.RetrieveAPIView):
 
     serializer_class = GenerationRequestSerializer
     permission_classes = [IsAuthenticated]
+    required_page = ClientProfile.Page.CREATIVE_GENERATION
 
     def get_queryset(self):
         return GenerationRequest.objects.filter(company=self.get_company())

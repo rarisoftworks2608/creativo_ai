@@ -47,11 +47,22 @@ class CompanyWriteSerializer(serializers.ModelSerializer):
 
 
 class ClientProfileUpdateSerializer(serializers.ModelSerializer):
-    """Used by an Admin to edit a client's designation/primary-contact flag within a company."""
+    """Used by an Admin to edit a client's designation/primary-contact flag/page access
+    within a company (Epic 01: Role & Access - Access Control page).
+    """
 
     class Meta:
         model = ClientProfile
-        fields = ['designation', 'is_primary_contact']
+        fields = ['designation', 'is_primary_contact', 'page_permissions']
+
+    def validate_page_permissions(self, value):
+        valid = {choice for choice, _label in ClientProfile.Page.choices}
+        if not isinstance(value, list):
+            raise serializers.ValidationError('page_permissions must be a list.')
+        invalid = [v for v in value if v not in valid]
+        if invalid:
+            raise serializers.ValidationError(f'Invalid page(s): {", ".join(invalid)}')
+        return value
 
 
 class ClientProfileSerializer(serializers.ModelSerializer):
@@ -61,7 +72,7 @@ class ClientProfileSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ClientProfile
-        fields = ['id', 'user', 'company', 'designation', 'is_primary_contact', 'created_at']
+        fields = ['id', 'user', 'company', 'designation', 'is_primary_contact', 'page_permissions', 'created_at']
         read_only_fields = fields
 
 
