@@ -178,7 +178,7 @@ def generate_video(self, video_request_id):
     ])
     if request.content_calendar_item_id:
         ContentCalendarItem.objects.filter(pk=request.content_calendar_item_id).update(
-            status=ContentCalendarItem.Status.GENERATED,
+            status=ContentCalendarItem.Status.PENDING_APPROVAL,
         )
 
     is_regeneration = request.retry_count > 0

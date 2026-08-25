@@ -12,6 +12,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.companies.models import Company
+from apps.notifications.models import Notification
+from apps.notifications.services import notify_admins
 from common.permissions import IsAdmin
 
 from . import excel
@@ -139,6 +141,106 @@ class ContentCalendarDuplicateView(CompanyScopedMixin, APIView):
         item.created_by = request.user
         item.save()
         return Response(ContentCalendarItemSerializer(item).data, status=status.HTTP_201_CREATED)
+
+
+def _trigger_regeneration(item):
+    """Re-runs whichever generation pipeline (creative or video) produced this item's
+    most recent content, with the client's rejection feedback appended to the brief.
+    Only ever called once per item (Epic 09: One-time regeneration) - the caller checks
+    regeneration_count before calling this.
+    """
+    from apps.content_calendar.tasks import _enqueue_creative, _enqueue_video
+    from apps.creative_generation.models import GenerationRequest
+    from apps.video_generation.models import VideoGenerationRequest
+
+    feedback_note = f'Client feedback on the previous version: {item.client_feedback}'
+    last_video = item.video_generation_requests.order_by('-created_at').first()
+    last_creative = item.generation_requests.order_by('-created_at').first()
+
+    if last_video is not None and (last_creative is None or last_video.created_at > last_creative.created_at):
+        video_request = VideoGenerationRequest.objects.create(
+            company=item.company, content_calendar_item=item, video_type=last_video.video_type,
+            aspect_ratio=last_video.aspect_ratio, target_duration_seconds=last_video.target_duration_seconds,
+            prompt_brief=f'{last_video.prompt_brief}\n\n{feedback_note}'.strip(),
+            product_info=last_video.product_info,
+        )
+        _enqueue_video(video_request)
+    elif last_creative is not None:
+        generation_request = GenerationRequest.objects.create(
+            company=item.company, content_calendar_item=item, creative_type=last_creative.creative_type,
+            prompt_brief=f'{last_creative.prompt_brief}\n\n{feedback_note}'.strip(),
+            product_info=last_creative.product_info,
+        )
+        _enqueue_creative(generation_request)
+    else:
+        return
+
+    item.regeneration_count += 1
+    item.status = ContentCalendarItem.Status.GENERATING
+    item.save(update_fields=['regeneration_count', 'status', 'updated_at'])
+
+
+class ContentCalendarApproveView(CompanyScopedMixin, APIView):
+    """Client (or admin): approve a piece of content that's pending review (Epic 09: Approval)."""
+
+    permission_classes = [IsAuthenticated]
+    serializer_class = ContentCalendarItemSerializer
+
+    def post(self, request, company_id, pk):
+        company = self.get_company()
+        item = generics.get_object_or_404(ContentCalendarItem, pk=pk, company=company)
+        if item.status != ContentCalendarItem.Status.PENDING_APPROVAL:
+            return Response({'detail': 'Only content pending approval can be approved.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        item.status = ContentCalendarItem.Status.APPROVED
+        item.save(update_fields=['status', 'updated_at'])
+
+        notify_admins(
+            actor=request.user,
+            notification_type=Notification.NotificationType.CONTENT_APPROVED,
+            title=f'"{item.topic}" was approved',
+            message=f'Approved by {request.user.get_short_name()} for {company.name}.',
+            url=f'/companies/{company.id}/calendar',
+            company=company,
+        )
+        return Response(ContentCalendarItemSerializer(item).data)
+
+
+class ContentCalendarRejectView(CompanyScopedMixin, APIView):
+    """Client (or admin): reject pending content with required feedback, which triggers
+    one automatic AI regeneration attempt (Epic 09: Rejection / Feedback / Regeneration).
+    """
+
+    permission_classes = [IsAuthenticated]
+    serializer_class = ContentCalendarItemSerializer
+
+    def post(self, request, company_id, pk):
+        company = self.get_company()
+        item = generics.get_object_or_404(ContentCalendarItem, pk=pk, company=company)
+        if item.status != ContentCalendarItem.Status.PENDING_APPROVAL:
+            return Response({'detail': 'Only content pending approval can be rejected.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        feedback = (request.data.get('feedback') or '').strip()
+        if not feedback:
+            return Response({'detail': 'Feedback is required to reject content.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        item.client_feedback = feedback
+        item.status = ContentCalendarItem.Status.REJECTED
+        item.save(update_fields=['client_feedback', 'status', 'updated_at'])
+
+        notify_admins(
+            actor=request.user,
+            notification_type=Notification.NotificationType.CONTENT_REJECTED,
+            title=f'"{item.topic}" was rejected',
+            message=feedback,
+            url=f'/companies/{company.id}/calendar',
+            company=company,
+        )
+
+        if item.regeneration_count < 1:
+            _trigger_regeneration(item)
+
+        return Response(ContentCalendarItemSerializer(item).data)
 
 
 class ContentCalendarTemplateView(APIView):

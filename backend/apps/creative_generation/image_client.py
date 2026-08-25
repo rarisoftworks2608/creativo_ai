@@ -1,9 +1,9 @@
 """Provider-agnostic image generation client (Epic 06: AI Creative Generation).
 
-Gemini and Hugging Face are implemented. Swapping providers means adding a
-branch to `get_image_provider()` and a class implementing
-`ImageAIProvider` - the same pattern as apps.ai_strategy.ai_client's text
-provider (Epic 05).
+Gemini, Hugging Face, and Cloudflare Workers AI are implemented. Swapping
+providers means adding a branch to `get_image_provider()` and a class
+implementing `ImageAIProvider` - the same pattern as
+apps.ai_strategy.ai_client's text provider (Epic 05).
 
 The google-genai SDK's exact exception hierarchy for auth/quota/network
 failures is less battle-tested here than the Anthropic client in Epic 05,
@@ -12,6 +12,7 @@ AIProviderError/AIProviderNotConfigured rather than risking an unhandled
 exception reaching the view layer.
 """
 
+import base64
 import os
 from abc import ABC, abstractmethod
 
@@ -21,7 +22,7 @@ from common.ai_errors import AIProviderError, AIProviderNotConfigured
 
 __all__ = [
     'AIProviderError', 'AIProviderNotConfigured', 'ImageAIProvider', 'GeminiImageProvider',
-    'HuggingFaceImageProvider', 'get_image_provider',
+    'HuggingFaceImageProvider', 'CloudflareImageProvider', 'get_image_provider',
 ]
 
 
@@ -87,6 +88,20 @@ class HuggingFaceImageProvider(ImageAIProvider):
     BASE_URL = 'https://router.huggingface.co/hf-inference/models'
     DEFAULT_TIMEOUT_SECONDS = 120.0
 
+    # A prompt-level "do not render text" instruction is unreliable on diffusion models -
+    # negative_prompt is the mechanism actually built for suppressing unwanted elements,
+    # and is far more effective in practice. Also targets the usual diffusion artifacts
+    # (blur, distortion, extra limbs) since a clean, in-focus photo matters just as much
+    # as a text-free one once the compositor is the only thing drawing text/logo.
+    NEGATIVE_PROMPT = (
+        'text, words, letters, typography, writing, caption, watermark, '
+        'logo, brand logo, emblem, insignia, brand mark, badge, seal, trademark, product label, packaging text, '
+        'blurry, low quality, distorted, deformed, disfigured, extra limbs, extra fingers, '
+        'mutated hands, out of frame, cropped, jpeg artifacts, worst quality, '
+        'illustration, cartoon, anime, painting, drawing, sketch, 3d render, cgi, plastic skin, '
+        'airbrushed, artificial, fake, doll-like'
+    )
+
     def __init__(self, model=None):
         self.model = model or settings.AI_IMAGE_MODEL
 
@@ -104,7 +119,7 @@ class HuggingFaceImageProvider(ImageAIProvider):
             response = httpx.post(
                 f'{self.BASE_URL}/{self.model}',
                 headers=headers,
-                json={'inputs': prompt},
+                json={'inputs': prompt, 'parameters': {'negative_prompt': self.NEGATIVE_PROMPT}},
                 timeout=self.DEFAULT_TIMEOUT_SECONDS,
             )
             response.raise_for_status()
@@ -128,10 +143,105 @@ class HuggingFaceImageProvider(ImageAIProvider):
         return response.content, content_type
 
 
+class CloudflareImageProvider(ImageAIProvider):
+    """Uses Cloudflare Workers AI (https://developers.cloudflare.com/workers-ai/) to run
+    FLUX.1 [schnell]. The best free tier found so far: every Cloudflare account gets
+    10,000 free "Neurons" a day (resets daily, not monthly), enough for roughly 100+
+    full-size images/day - versus Hugging Face's $0.10/month. Needs CF_ACCOUNT_ID (from
+    the Cloudflare dashboard URL/sidebar) and CF_API_TOKEN (an API token with "Workers AI
+    - Read/Edit" permission, from dash.cloudflare.com/profile/api-tokens) - both free, no
+    card required to create them, though Cloudflare may ask for one on the account itself.
+
+    Reference images aren't supported - FLUX.1 [schnell] is text-to-image only.
+    reference_images is accepted for interface compatibility but ignored, same as the
+    other providers above.
+    """
+
+    BASE_URL = 'https://api.cloudflare.com/client/v4/accounts'
+    DEFAULT_TIMEOUT_SECONDS = 60.0
+
+    # FLUX.1 [schnell]'s hard limit, per Cloudflare's docs - the shared prompt built by
+    # prompts.build_image_prompt() (brand voice, do's/don'ts, ...) routinely exceeds this
+    # for a company with a fleshed-out brand profile, even though it's well within what
+    # every other provider here accepts, so this provider has to defend itself.
+    MAX_PROMPT_CHARS = 2048
+    # Since there's no negative_prompt on this model (see NEGATIVE_PROMPT's absence),
+    # this is the only lever suppressing baked-in text/logos - it must never be the part
+    # that gets cut if the prompt is over budget.
+    CRITICAL_SUFFIX = (
+        ' Do not render any text, logo, or watermark into the image - clean photographic '
+        'visual only, photorealistic, professional photography.'
+    )
+
+    def __init__(self, model=None):
+        self.model = model or settings.AI_IMAGE_MODEL
+
+    def _fit_prompt(self, prompt):
+        if len(prompt) <= self.MAX_PROMPT_CHARS:
+            return prompt
+        budget = self.MAX_PROMPT_CHARS - len(self.CRITICAL_SUFFIX)
+        return prompt[:budget].rsplit(' ', 1)[0] + self.CRITICAL_SUFFIX
+
+    def generate_image(self, *, prompt, reference_images=None):
+        import httpx
+
+        prompt = self._fit_prompt(prompt)
+
+        account_id = os.environ.get('CF_ACCOUNT_ID')
+        api_token = os.environ.get('CF_API_TOKEN')
+        if not account_id or not api_token:
+            raise AIProviderNotConfigured(
+                'Cloudflare credentials are missing. Set CF_ACCOUNT_ID and CF_API_TOKEN in the backend environment.'
+            )
+        headers = {'Authorization': f'Bearer {api_token}'}
+
+        try:
+            response = httpx.post(
+                f'{self.BASE_URL}/{account_id}/ai/run/{self.model}',
+                headers=headers,
+                # FLUX.1 [schnell] has no negative_prompt/guidance parameter at all (it's a
+                # guidance-distilled model) - `steps` (max 8, default 4) is the only lever
+                # available for quality/prompt-adherence on this endpoint.
+                json={'prompt': prompt, 'steps': 8},
+                timeout=self.DEFAULT_TIMEOUT_SECONDS,
+            )
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code in (401, 403):
+                raise AIProviderNotConfigured(
+                    'Cloudflare API token is invalid or missing "Workers AI" permission. '
+                    'Check CF_API_TOKEN in the backend environment.'
+                ) from exc
+            if exc.response.status_code == 429:
+                raise AIProviderError('The AI provider is rate-limiting requests. Try again shortly.') from exc
+            raise AIProviderError(f'Cloudflare image generation failed: {exc}') from exc
+        except httpx.HTTPError as exc:
+            raise AIProviderError(f'Could not reach the AI provider: {exc}') from exc
+
+        try:
+            payload = response.json()
+        except ValueError as exc:
+            raise AIProviderError('The AI provider returned a non-JSON response.') from exc
+
+        if not payload.get('success'):
+            messages = [e.get('message', str(e)) for e in (payload.get('errors') or [])]
+            raise AIProviderError(f'Cloudflare image generation failed: {"; ".join(messages) or "unknown error"}')
+
+        image_b64 = (payload.get('result') or {}).get('image')
+        if not image_b64:
+            raise AIProviderError('The AI provider returned no image content.')
+        try:
+            return base64.b64decode(image_b64), 'image/jpeg'
+        except ValueError as exc:
+            raise AIProviderError('The AI provider returned malformed image data.') from exc
+
+
 def get_image_provider() -> ImageAIProvider:
     provider_name = getattr(settings, 'AI_IMAGE_PROVIDER', 'gemini')
     if provider_name == 'gemini':
         return GeminiImageProvider()
     if provider_name == 'huggingface':
         return HuggingFaceImageProvider()
+    if provider_name == 'cloudflare':
+        return CloudflareImageProvider()
     raise AIProviderError(f'Unknown AI_IMAGE_PROVIDER "{provider_name}".')

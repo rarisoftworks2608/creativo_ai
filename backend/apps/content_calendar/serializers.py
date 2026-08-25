@@ -10,9 +10,11 @@ class ContentCalendarItemSerializer(serializers.ModelSerializer):
             'id', 'company', 'topic', 'category', 'weekly_theme', 'content_type', 'platforms',
             'objective', 'campaign', 'scheduled_date', 'scheduled_time',
             'caption_requirements', 'creative_requirements', 'cta', 'hashtags', 'source_notes',
-            'status', 'source', 'created_by', 'created_at', 'updated_at',
+            'status', 'source', 'client_feedback', 'regeneration_count', 'created_by', 'created_at', 'updated_at',
         ]
-        read_only_fields = ['id', 'company', 'source', 'created_by', 'created_at', 'updated_at']
+        read_only_fields = [
+            'id', 'company', 'source', 'client_feedback', 'regeneration_count', 'created_by', 'created_at', 'updated_at',
+        ]
 
     def validate_platforms(self, value):
         valid = {choice for choice, _label in ContentCalendarItem.Platform.choices}

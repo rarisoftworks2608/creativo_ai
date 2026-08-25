@@ -46,10 +46,19 @@ def build_image_prompt(company, brand_profile, creative_type, prompt_brief, prod
         *_brand_lines(brand_profile),
         f'This is variation {variation_number} of 3 - make it visually distinct from the other variations '
         'while staying on-brand.',
-        'Do not render any text, headline, caption, CTA, or logo into the image itself - '
-        'produce a clean visual only. Any text and the brand logo are composited on afterward '
-        'from separately-generated, guaranteed-accurate copy, so text baked into the image by '
-        'you would only ever be redundant or, worse, misspelled.',
+        'Do not render any text, headline, caption, CTA, logo, brand mark, emblem, or badge into '
+        'the image itself - produce a clean photographic visual only, with no typography or '
+        'invented branding anywhere in the scene (not on packaging, clothing, signage, or props). '
+        'The real text and the real brand logo are composited on afterward from '
+        'separately-generated, guaranteed-accurate assets, so anything you render yourself would '
+        'only ever be redundant or, worse, misspelled/fake.',
+        'Photorealistic, shot on a professional camera - natural skin texture, realistic fabric '
+        'and lighting, shallow depth of field, no illustration/cartoon/painterly/3D-render look.',
+        'Compose the shot so the bottom of the frame (roughly the lower third) is naturally '
+        'darker, softly blurred, or otherwise visually calm - like a shaded background, an '
+        'out-of-focus foreground element, or open ground/sky - so a headline can be overlaid '
+        'there afterward without fighting for attention against busy detail. The main subject '
+        'should stay in the upper two-thirds of the frame.',
     ]
     return '\n'.join(lines)
 

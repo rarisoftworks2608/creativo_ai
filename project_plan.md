@@ -10,9 +10,14 @@ python manage.py runserver
 cd frontend; npm run dev
 
 # terminal 3
-celery -A config worker -l info --pool=solo
+cd backend
+venv\Scripts\Activate.ps1
+celery -A config worker -l info--pool=solo
 
-
+# terminal 4
+cd backend
+venv\Scripts\Activate.ps1
+celery -A config beat -l info
 
 1. Product Overview
 

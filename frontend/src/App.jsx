@@ -11,12 +11,15 @@ import AiStrategyPage from './pages/AiStrategyPage'
 import CreativeGenerationPage from './pages/CreativeGenerationPage'
 import VideoGenerationPage from './pages/VideoGenerationPage'
 import TeamPage from './pages/TeamPage'
+import AccessControlPage from './pages/AccessControlPage'
+import ClientDashboardPage from './pages/ClientDashboardPage'
 import './App.css'
 
 function RootRedirect() {
-  const { isAuthenticated, loading } = useAuth()
+  const { isAuthenticated, isAdmin, loading } = useAuth()
   if (loading) return <div className="page-loading">Loading…</div>
-  return <Navigate to={isAuthenticated ? '/companies' : '/login'} replace />
+  if (!isAuthenticated) return <Navigate to="/login" replace />
+  return <Navigate to={isAdmin ? '/companies' : '/client'} replace />
 }
 
 function App() {
@@ -35,7 +38,9 @@ function App() {
             <Route path="/companies/:id/ai-strategy" element={<AiStrategyPage />} />
             <Route path="/companies/:id/creative-generation" element={<CreativeGenerationPage />} />
             <Route path="/companies/:id/video-generation" element={<VideoGenerationPage />} />
+            <Route path="/client" element={<ClientDashboardPage />} />
             <Route path="/team" element={<TeamPage />} />
+            <Route path="/access" element={<AccessControlPage />} />
           </Route>
         </Route>
 

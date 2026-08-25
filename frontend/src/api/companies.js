@@ -13,6 +13,11 @@ export async function getCompany(id) {
   return response.data
 }
 
+export async function getMyCompany() {
+  const response = await apiClient.get('/companies/me/')
+  return response.data
+}
+
 export async function createCompany(payload) {
   const response = await apiClient.post('/companies/', payload)
   return response.data

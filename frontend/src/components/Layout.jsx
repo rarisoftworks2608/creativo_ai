@@ -26,19 +26,46 @@ export default function Layout() {
           <span>Marketing OS</span>
         </div>
         <nav className="sidebar-nav">
-          <NavLink to="/companies" className={({ isActive }) => (isActive ? 'active' : '')} onClick={() => setNavOpen(false)}>
-            <span className="nav-icon" aria-hidden="true">
-              <svg viewBox="0 0 20 20" fill="none">
-                <path
-                  d="M3 17V8.5L10 3l7 5.5V17a1 1 0 0 1-1 1h-3.5a.5.5 0 0 1-.5-.5V13a2 2 0 0 0-4 0v4.5a.5.5 0 0 1-.5.5H4a1 1 0 0 1-1-1Z"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </span>
-            Companies
-          </NavLink>
+          {isAdmin ? (
+            <NavLink to="/companies" className={({ isActive }) => (isActive ? 'active' : '')} onClick={() => setNavOpen(false)}>
+              <span className="nav-icon" aria-hidden="true">
+                <svg viewBox="0 0 20 20" fill="none">
+                  <path
+                    d="M3 17V8.5L10 3l7 5.5V17a1 1 0 0 1-1 1h-3.5a.5.5 0 0 1-.5-.5V13a2 2 0 0 0-4 0v4.5a.5.5 0 0 1-.5.5H4a1 1 0 0 1-1-1Z"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </span>
+              Companies
+            </NavLink>
+          ) : (
+            <NavLink to="/client" className={({ isActive }) => (isActive ? 'active' : '')} onClick={() => setNavOpen(false)}>
+              <span className="nav-icon" aria-hidden="true">
+                <svg viewBox="0 0 20 20" fill="none">
+                  <path
+                    d="M3 17V8.5L10 3l7 5.5V17a1 1 0 0 1-1 1h-3.5a.5.5 0 0 1-.5-.5V13a2 2 0 0 0-4 0v4.5a.5.5 0 0 1-.5.5H4a1 1 0 0 1-1-1Z"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </span>
+              Dashboard
+            </NavLink>
+          )}
+          {isAdmin && (
+            <NavLink to="/access" className={({ isActive }) => (isActive ? 'active' : '')} onClick={() => setNavOpen(false)}>
+              <span className="nav-icon" aria-hidden="true">
+                <svg viewBox="0 0 20 20" fill="none">
+                  <rect x="3.5" y="8.5" width="13" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
+                  <path d="M6.5 8.5V6a3.5 3.5 0 0 1 7 0v2.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                </svg>
+              </span>
+              Access
+            </NavLink>
+          )}
           {isAdmin && (
             <NavLink to="/team" className={({ isActive }) => (isActive ? 'active' : '')} onClick={() => setNavOpen(false)}>
               <span className="nav-icon" aria-hidden="true">

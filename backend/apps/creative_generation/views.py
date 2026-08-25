@@ -2,6 +2,7 @@ from django.db import transaction
 from django.http import Http404
 from django.utils import timezone
 from rest_framework import generics, status
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -46,9 +47,19 @@ class CompanyScopedMixin:
 
 
 class GenerationRequestListCreateView(CompanyScopedMixin, generics.ListCreateAPIView):
-    """Admin: list a company's creative generation requests, or start a new one (Epic 06)."""
+    """List a company's creative generation requests (admin or the owning client, read-only
+    for the client - Epic 06/09: client needs to see what's pending their approval), or
+    start a new one (admin only).
+    """
 
-    permission_classes = [IsAdmin]
+    permission_classes = [IsAuthenticated]
+
+    def check_permissions(self, request):
+        super().check_permissions(request)
+        if request.method not in ('GET', 'HEAD', 'OPTIONS') and not (
+            request.user.is_authenticated and request.user.is_admin
+        ):
+            self.permission_denied(request, message='Only admins can start a generation request.')
 
     def get_serializer_class(self):
         if self.request.method == 'POST':
@@ -84,10 +95,10 @@ class GenerationRequestListCreateView(CompanyScopedMixin, generics.ListCreateAPI
 
 
 class GenerationRequestDetailView(CompanyScopedMixin, generics.RetrieveAPIView):
-    """Admin: poll a single generation request's status/results (Epic 06)."""
+    """Poll a single generation request's status/results - admin or the owning client (Epic 06)."""
 
     serializer_class = GenerationRequestSerializer
-    permission_classes = [IsAdmin]
+    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         return GenerationRequest.objects.filter(company=self.get_company())

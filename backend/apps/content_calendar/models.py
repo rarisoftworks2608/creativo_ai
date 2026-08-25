@@ -60,6 +60,11 @@ class ContentCalendarItem(TimeStampedModel):
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
     source = models.CharField(max_length=20, choices=Source.choices, default=Source.MANUAL)
 
+    client_feedback = models.TextField(blank=True, help_text="Client's rejection feedback / change request.")
+    regeneration_count = models.PositiveSmallIntegerField(
+        default=0, help_text='How many times this item has been auto-regenerated after a rejection (max 1).',
+    )
+
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         null=True,

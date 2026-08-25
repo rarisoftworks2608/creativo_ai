@@ -11,6 +11,12 @@ export async function createAdmin(payload) {
 }
 
 export async function setAdminActive(userId, isActive) {
+  return setUserActive(userId, isActive)
+}
+
+// Generic - PATCH /auth/users/<id>/ works for any role (admin or client), so this is
+// reused by the Access Control page for toggling a client login too.
+export async function setUserActive(userId, isActive) {
   const response = await apiClient.patch(`/auth/users/${userId}/`, { is_active: isActive })
   return response.data
 }

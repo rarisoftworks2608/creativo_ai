@@ -1,6 +1,7 @@
 from django.http import Http404
 from django.utils import timezone
 from rest_framework import generics, status
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -43,9 +44,18 @@ class CompanyScopedMixin:
 
 
 class VideoGenerationRequestListCreateView(CompanyScopedMixin, generics.ListCreateAPIView):
-    """Admin: list a company's video generation requests, or start a new one (Epic 07)."""
+    """List a company's video generation requests (admin or the owning client, read-only for
+    the client), or start a new one (admin only) (Epic 07).
+    """
 
-    permission_classes = [IsAdmin]
+    permission_classes = [IsAuthenticated]
+
+    def check_permissions(self, request):
+        super().check_permissions(request)
+        if request.method not in ('GET', 'HEAD', 'OPTIONS') and not (
+            request.user.is_authenticated and request.user.is_admin
+        ):
+            self.permission_denied(request, message='Only admins can start a video generation request.')
 
     def get_serializer_class(self):
         if self.request.method == 'POST':
@@ -81,10 +91,10 @@ class VideoGenerationRequestListCreateView(CompanyScopedMixin, generics.ListCrea
 
 
 class VideoGenerationRequestDetailView(CompanyScopedMixin, generics.RetrieveAPIView):
-    """Admin: poll a single video generation request's status/results (Epic 07)."""
+    """Poll a single video generation request's status/results - admin or the owning client (Epic 07)."""
 
     serializer_class = VideoGenerationRequestSerializer
-    permission_classes = [IsAdmin]
+    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         return VideoGenerationRequest.objects.filter(company=self.get_company())

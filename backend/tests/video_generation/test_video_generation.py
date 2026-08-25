@@ -142,7 +142,7 @@ class VideoGenerationCreateTests(BaseVideoGenerationTestCase):
         self.assertTrue(all(scene.voice_over_audio for scene in request_obj.scenes.all()))
 
         self.calendar_item.refresh_from_db()
-        self.assertEqual(self.calendar_item.status, ContentCalendarItem.Status.GENERATED)
+        self.assertEqual(self.calendar_item.status, ContentCalendarItem.Status.PENDING_APPROVAL)
 
     @patch('apps.video_generation.tasks.rendering.render_video', return_value=fake_render_result())
     @patch('apps.video_generation.tasks.get_voice_provider')
@@ -207,6 +207,29 @@ class VideoGenerationCreateTests(BaseVideoGenerationTestCase):
         url = reverse('video_generation:request-list-create', kwargs={'company_id': self.company.pk})
         response = self.client.post(url, {'video_type': 'instagram_reel'})
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_client_can_list_and_retrieve_their_own_companys_requests(self):
+        created = self.create_request()
+        request_id = created.data['id']
+
+        self.authenticate_as('acmeclient@example.com', 'StrongPass123!')
+        list_url = reverse('video_generation:request-list-create', kwargs={'company_id': self.company.pk})
+        self.assertEqual(self.client.get(list_url).status_code, status.HTTP_200_OK)
+
+        detail_url = reverse(
+            'video_generation:request-detail', kwargs={'company_id': self.company.pk, 'pk': request_id},
+        )
+        self.assertEqual(self.client.get(detail_url).status_code, status.HTTP_200_OK)
+
+    def test_client_from_another_company_cannot_list(self):
+        other_client = User.objects.create_user(
+            email='othervideoclient@example.com', password='StrongPass123!', role=User.Role.CLIENT,
+        )
+        ClientProfile.objects.create(user=other_client, company=self.other_company)
+        self.authenticate_as('othervideoclient@example.com', 'StrongPass123!')
+
+        url = reverse('video_generation:request-list-create', kwargs={'company_id': self.company.pk})
+        self.assertEqual(self.client.get(url).status_code, status.HTTP_404_NOT_FOUND)
 
     def test_rejects_calendar_item_from_other_company(self):
         other_item = ContentCalendarItem.objects.create(

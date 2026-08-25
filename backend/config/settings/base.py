@@ -233,9 +233,12 @@ AI_TEXT_MODEL = env('AI_TEXT_MODEL', default='claude-opus-5')
 # the environment (set it in .env) - deliberately not duplicated here.
 # 'huggingface' reads HF_TOKEN (free to create, no card required) and runs
 # on Hugging Face's own serverless compute (see HuggingFaceImageProvider).
-# AI_IMAGE_MODEL must match whichever provider is active (e.g.
-# gemini-3.1-flash-image for gemini,
-# stabilityai/stable-diffusion-3-medium-diffusers for huggingface).
+# 'cloudflare' reads CF_ACCOUNT_ID + CF_API_TOKEN and runs FLUX.1 [schnell]
+# on Cloudflare Workers AI - free (10,000 Neurons/day, resets daily, see
+# CloudflareImageProvider). AI_IMAGE_MODEL must match whichever provider is
+# active (e.g. gemini-3.1-flash-image for gemini,
+# stabilityai/stable-diffusion-3-medium-diffusers for huggingface,
+# @cf/black-forest-labs/flux-1-schnell for cloudflare).
 
 AI_IMAGE_PROVIDER = env('AI_IMAGE_PROVIDER', default='gemini')
 AI_IMAGE_MODEL = env('AI_IMAGE_MODEL', default='gemini-3.1-flash-image')
@@ -263,9 +266,17 @@ CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TASK_TRACK_STARTED = True
 CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
 
-# Reminder notifications (Epic 12/13) - requires `celery -A config beat` running
-# alongside the worker, or this schedule never fires.
+# Scheduled jobs (Epic 12/13/22) - requires `celery -A config beat` running alongside
+# the worker, or these schedules never fire.
 CELERY_BEAT_SCHEDULE = {
+    'auto-generate-due-content': {
+        # Every 15 minutes rather than a single daily slot, so a calendar item's actual
+        # scheduled_time (not just scheduled_date) is honored reasonably promptly - see
+        # apps.content_calendar.tasks.auto_generate_due_content for why a once-daily run
+        # can't do that.
+        'task': 'apps.content_calendar.tasks.auto_generate_due_content',
+        'schedule': crontab(minute='*/15'),
+    },
     'send-content-reminders': {
         'task': 'apps.notifications.tasks.send_content_reminders',
         'schedule': crontab(hour=9, minute=0),

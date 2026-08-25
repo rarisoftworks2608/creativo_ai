@@ -55,13 +55,17 @@ def generate_creative_variations(self, generation_request_id):
     brand_profile = BrandProfile.objects.filter(company=company).first()
     brand_context = BrandContext.objects.filter(company=company).first()
 
-    logo_bytes = None
-    if brand_profile is not None and brand_profile.logo:
+    def _read(field):
+        if not field:
+            return None
         try:
-            with brand_profile.logo.open('rb') as f:
-                logo_bytes = f.read()
+            with field.open('rb') as f:
+                return f.read()
         except (FileNotFoundError, OSError):
-            pass
+            return None
+
+    logo_bytes = _read(brand_profile.logo if brand_profile is not None else None)
+    symbol_bytes = _read(brand_profile.secondary_logo if brand_profile is not None else None)
 
     try:
         image_provider = get_image_provider()
@@ -97,7 +101,7 @@ def generate_creative_variations(self, generation_request_id):
         image_bytes, mime_type = compose_creative(
             image_bytes, mime_type,
             headline=copy_data.get('headline', ''), cta=copy_data.get('cta', ''),
-            logo_bytes=logo_bytes, brand_profile=brand_profile,
+            logo_bytes=logo_bytes, symbol_bytes=symbol_bytes, brand_profile=brand_profile,
         )
         ext = MIME_EXTENSIONS.get(mime_type, 'png')
         variation = GenerationVariation(
@@ -128,7 +132,7 @@ def generate_creative_variations(self, generation_request_id):
     request.save(update_fields=['status', 'error_message', 'model_used', 'usage', 'cost_usd', 'updated_at'])
     if request.content_calendar_item_id:
         ContentCalendarItem.objects.filter(pk=request.content_calendar_item_id).update(
-            status=ContentCalendarItem.Status.GENERATED,
+            status=ContentCalendarItem.Status.PENDING_APPROVAL,
         )
 
     is_regeneration = request.retry_count > 0
