@@ -79,3 +79,17 @@ def build_scene_image_prompt(company, brand_profile, video_type, visual_descript
         'well-centered with room around the edges. Do not include any text overlay.',
     ]
     return '\n'.join(lines)
+
+
+def build_scene_motion_prompt(video_type, visual_description):
+    """Prompt for animating a scene's already-generated still image into a short video
+    clip (Epic 07: AI motion). Deliberately short and motion-focused, unlike the still
+    image prompt above - the video model is only adding movement to an existing frame,
+    not composing a new one.
+    """
+    format_guidance = VIDEO_TYPE_GUIDANCE.get(video_type, 'a short marketing video')
+    return (
+        f'Subtle, natural motion for one scene of {format_guidance}: {visual_description}. '
+        'Gentle camera movement or in-scene motion only - keep the composition and subject '
+        'stable and recognizable, no jarring cuts or morphing, no added text.'
+    )

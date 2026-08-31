@@ -36,6 +36,7 @@ class ContentCalendarItem(TimeStampedModel):
     class Source(models.TextChoices):
         MANUAL = 'manual', 'Manual'
         EXCEL_IMPORT = 'excel_import', 'Excel Import'
+        AD_HOC = 'ad_hoc', 'Ad Hoc Generation'
 
     company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='content_calendar_items')
 

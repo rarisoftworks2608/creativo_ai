@@ -30,6 +30,11 @@ export async function duplicateCalendarItem(companyId, itemId) {
   return response.data
 }
 
+export async function generateNowCalendarItem(companyId, itemId) {
+  const response = await apiClient.post(`/companies/${companyId}/content-calendar/${itemId}/generate-now/`)
+  return response.data
+}
+
 export async function approveCalendarItem(companyId, itemId) {
   const response = await apiClient.post(`/companies/${companyId}/content-calendar/${itemId}/approve/`)
   return response.data

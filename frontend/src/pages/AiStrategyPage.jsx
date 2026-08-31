@@ -129,8 +129,8 @@ export default function AiStrategyPage() {
 
   return (
     <div>
-      <Link to={`/companies/${companyId}`} className="back-link">
-        ← Back to {company.name}
+      <Link to={isAdmin ? `/companies/${companyId}` : '/client'} className="back-link">
+        ← Back to {isAdmin ? company.name : 'your dashboard'}
       </Link>
 
       <div className="page-header">

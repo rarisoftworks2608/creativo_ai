@@ -13,11 +13,13 @@ If it's missing, rendering fails with a clear FFmpegNotAvailable error
 of crashing - the same "fail clearly, don't crash" contract as a missing
 AI provider API key.
 
-Approach: each scene's still image becomes a short clip (slow zoom/pan for
-some visual life) with that scene's voice-over as its audio track, then all
-clips are joined with the concat demuxer (reliable for same-codec clips,
-unlike a single complex filter graph), then the logo overlay and subtitle
-burn-in are each a further single-pass filter over the joined video.
+Approach: each scene becomes a short clip - its AI-generated motion clip
+(video_client.py) if one was made, looped/trimmed to the scene's duration,
+otherwise its still image with a slow zoom/pan - with that scene's voice-over
+as its audio track. All clips are then joined with the concat demuxer
+(reliable for same-codec clips, unlike a single complex filter graph), then
+the logo overlay and subtitle burn-in are each a further single-pass filter
+over the joined video.
 
 Only works with local (FileSystemStorage) media files, since it needs real
 filesystem paths (`FieldFile.path`) - consistent with the rest of the
@@ -61,17 +63,24 @@ def _run(args):
 
 
 def _render_scene_clip(scene, width, height, output_path):
-    """Renders one scene's still image (with a slow zoom) plus its voice-over into a clip."""
+    """Renders one scene into a clip: its voice-over, over either its AI-generated
+    motion clip (looped/trimmed to the scene duration) if one was generated, or
+    - falling back - its still image with a slow zoom/pan.
+    """
     duration = max(scene.duration_seconds, 0.5)
-    zoom_frames = max(int(duration * 25), 1)
+    has_ai_clip = bool(scene.video_clip and os.path.exists(scene.video_clip.path))
 
-    video_filter = (
-        f'scale={width * 2}:{height * 2}:force_original_aspect_ratio=increase,'
-        f'crop={width * 2}:{height * 2},'
-        f"zoompan=z='min(zoom+0.0015,1.2)':d={zoom_frames}:s={width}x{height}:fps=25"
-    )
-
-    args = ['ffmpeg', '-y', '-loop', '1', '-i', scene.image.path]
+    if has_ai_clip:
+        args = ['ffmpeg', '-y', '-stream_loop', '-1', '-i', scene.video_clip.path]
+        video_filter = f'scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height}'
+    else:
+        zoom_frames = max(int(duration * 25), 1)
+        args = ['ffmpeg', '-y', '-loop', '1', '-i', scene.image.path]
+        video_filter = (
+            f'scale={width * 2}:{height * 2}:force_original_aspect_ratio=increase,'
+            f'crop={width * 2}:{height * 2},'
+            f"zoompan=z='min(zoom+0.0015,1.2)':d={zoom_frames}:s={width}x{height}:fps=25"
+        )
 
     has_audio = bool(scene.voice_over_audio and os.path.exists(scene.voice_over_audio.path))
     if has_audio:

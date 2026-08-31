@@ -8,7 +8,7 @@ class VideoSceneInline(admin.TabularInline):
     extra = 0
     readonly_fields = [
         'scene_number', 'narration', 'visual_description', 'duration_seconds',
-        'image', 'voice_over_audio', 'created_at',
+        'image', 'voice_over_audio', 'video_clip', 'created_at',
     ]
 
 

@@ -12,6 +12,41 @@ from .models import VideoGenerationRequest
 from .serializers import VideoGenerationRequestCreateSerializer, VideoGenerationRequestSerializer
 from .tasks import generate_video
 
+# Best-guess platform for an ad-hoc generation's auto-created calendar item
+# (see _link_adhoc_calendar_item) - only used for the item's `platforms` list,
+# it has no effect on what actually gets generated.
+PLATFORM_BY_VIDEO_TYPE = {
+    VideoGenerationRequest.VideoType.FACEBOOK_REEL: 'facebook',
+    VideoGenerationRequest.VideoType.LINKEDIN_VIDEO: 'linkedin',
+}
+
+
+def _link_adhoc_calendar_item(video_request, user):
+    """A video started without picking a content calendar item (the
+    VideoGenerationPage "None (ad-hoc generation)" option) still needs a
+    ContentCalendarItem behind it - that's the only thing the client's
+    approval UI (Epic 09) and ContentCalendarApproveView/RejectView know how
+    to review. Without this, an ad-hoc video would notify the client
+    (notify_content_ready) but be otherwise invisible/unapprovable to them.
+    """
+    from apps.content_calendar.models import ContentCalendarItem
+
+    platform = PLATFORM_BY_VIDEO_TYPE.get(video_request.video_type, 'instagram')
+    topic = video_request.prompt_brief.strip()[:255] or video_request.get_video_type_display()
+
+    calendar_item = ContentCalendarItem.objects.create(
+        company=video_request.company,
+        topic=topic,
+        content_type=video_request.get_video_type_display(),
+        platforms=[platform],
+        scheduled_date=timezone.now().date(),
+        source=ContentCalendarItem.Source.AD_HOC,
+        created_by=user,
+    )
+    video_request.content_calendar_item = calendar_item
+    video_request.save(update_fields=['content_calendar_item'])
+    return video_request
+
 
 def _enqueue(video_request):
     """Queues the render task and marks the request QUEUED - without clobbering a status
@@ -93,6 +128,8 @@ class VideoGenerationRequestListCreateView(CompanyScopedMixin, generics.ListCrea
         serializer = self.get_serializer(data=request.data, context={'request': request, 'company': company})
         serializer.is_valid(raise_exception=True)
         video_request = serializer.save(company=company, created_by=request.user)
+        if video_request.content_calendar_item_id is None:
+            video_request = _link_adhoc_calendar_item(video_request, request.user)
         video_request = _enqueue(video_request)
 
         return Response(VideoGenerationRequestSerializer(video_request).data, status=status.HTTP_202_ACCEPTED)

@@ -13,6 +13,41 @@ from .models import GenerationRequest, GenerationVariation
 from .serializers import GenerationRequestCreateSerializer, GenerationRequestSerializer
 from .tasks import generate_creative_variations
 
+# Best-guess platform for an ad-hoc generation's auto-created calendar item
+# (see _link_adhoc_calendar_item) - only used for the item's `platforms` list,
+# it has no effect on which provider/prompt actually generates the creative.
+PLATFORM_BY_CREATIVE_TYPE = {
+    GenerationRequest.CreativeType.FACEBOOK_POST: 'facebook',
+    GenerationRequest.CreativeType.LINKEDIN_POST: 'linkedin',
+}
+
+
+def _link_adhoc_calendar_item(generation_request, user):
+    """A generation started without picking a content calendar item (the
+    CreativeGenerationPage "None (ad-hoc generation)" option) still needs a
+    ContentCalendarItem behind it - that's the only thing the client's
+    approval UI (Epic 09) and ContentCalendarApproveView/RejectView know how
+    to review. Without this, an ad-hoc generation would notify the client
+    (notify_content_ready) but be otherwise invisible/unapprovable to them.
+    """
+    from apps.content_calendar.models import ContentCalendarItem
+
+    platform = PLATFORM_BY_CREATIVE_TYPE.get(generation_request.creative_type, 'instagram')
+    topic = generation_request.prompt_brief.strip()[:255] or generation_request.get_creative_type_display()
+
+    calendar_item = ContentCalendarItem.objects.create(
+        company=generation_request.company,
+        topic=topic,
+        content_type=generation_request.get_creative_type_display(),
+        platforms=[platform],
+        scheduled_date=timezone.now().date(),
+        source=ContentCalendarItem.Source.AD_HOC,
+        created_by=user,
+    )
+    generation_request.content_calendar_item = calendar_item
+    generation_request.save(update_fields=['content_calendar_item'])
+    return generation_request
+
 
 def _enqueue(generation_request):
     """Queues the generation task and marks the request QUEUED - without clobbering a
@@ -97,6 +132,8 @@ class GenerationRequestListCreateView(CompanyScopedMixin, generics.ListCreateAPI
         serializer = self.get_serializer(data=request.data, context={'request': request, 'company': company})
         serializer.is_valid(raise_exception=True)
         generation_request = serializer.save(company=company, created_by=request.user)
+        if generation_request.content_calendar_item_id is None:
+            generation_request = _link_adhoc_calendar_item(generation_request, request.user)
         generation_request = _enqueue(generation_request)
 
         return Response(GenerationRequestSerializer(generation_request).data, status=status.HTTP_202_ACCEPTED)
@@ -139,9 +176,12 @@ class GenerationRequestRetryView(CompanyScopedMixin, APIView):
 
 
 class VariationSelectView(CompanyScopedMixin, APIView):
-    """Admin: mark one variation as the preferred version (Epic 06: Select preferred version)."""
+    """Admin or client: mark one variation as the preferred version (Epic 06: Select
+    preferred version; Epic 09: the client picks their favorite before approving).
+    """
 
-    permission_classes = [IsAdmin]
+    permission_classes = [IsAuthenticated]
+    required_page = ClientProfile.Page.CREATIVE_GENERATION
     serializer_class = GenerationRequestSerializer
 
     def post(self, request, company_id, pk, variation_id):

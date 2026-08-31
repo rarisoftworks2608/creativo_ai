@@ -13,10 +13,12 @@ from common.ai_errors import AIProviderError
 from . import prompts, rendering, subtitles
 from .models import VideoGenerationRequest, VideoScene
 from .schemas import SCRIPT_SCHEMA
+from .video_client import get_video_provider
 from .voice_client import get_voice_provider
 
 IMAGE_MIME_EXTENSIONS = {'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp'}
 AUDIO_MIME_EXTENSIONS = {'audio/mpeg': 'mp3', 'audio/wav': 'wav'}
+VIDEO_MIME_EXTENSIONS = {'video/mp4': 'mp4'}
 
 
 def _fail(request, message):
@@ -101,7 +103,10 @@ def generate_video(self, video_request_id):
             duration_seconds=duration,
         ))
 
-    # 2. Per-scene AI visuals
+    # 2. Per-scene AI visuals, then (optionally) AI motion animating each still into a clip
+    video_provider = get_video_provider() if request.ai_motion_enabled else None
+    ai_motion_available = video_provider is not None
+
     for scene in scenes:
         image_prompt = prompts.build_scene_image_prompt(
             company, brand_profile, request.video_type, scene.visual_description,
@@ -117,6 +122,27 @@ def generate_video(self, video_request_id):
         ext = IMAGE_MIME_EXTENSIONS.get(mime_type, 'png')
         scene.image.save(f'scene_{scene.scene_number}.{ext}', ContentFile(image_bytes), save=False)
         scene.save(update_fields=['image'])
+
+        if ai_motion_available:
+            motion_prompt = prompts.build_scene_motion_prompt(request.video_type, scene.visual_description)
+            try:
+                clip_bytes, clip_mime = video_provider.generate_video_clip(
+                    image_bytes=image_bytes, mime_type=mime_type, prompt=motion_prompt,
+                )
+            except AIProviderError:
+                # Not configured, rate-limited, free-tier credit exhausted, ... - AI
+                # motion is an enhancement layer on top of the still image, not
+                # something the video needs to exist at all, so any provider failure
+                # just falls back to the zoom/pan animation for this and every
+                # remaining scene instead of failing the whole request.
+                ai_motion_available = False
+            except Exception as exc:  # noqa: BLE001
+                _fail(request, f'Unexpected error on scene {scene.scene_number} motion: {exc}')
+                return
+            else:
+                clip_ext = VIDEO_MIME_EXTENSIONS.get(clip_mime, 'mp4')
+                scene.video_clip.save(f'scene_{scene.scene_number}_clip.{clip_ext}', ContentFile(clip_bytes), save=False)
+                scene.save(update_fields=['video_clip'])
 
     # 3. Voice-over per scene (gTTS by default - free, no API key required)
     if voice_provider is not None:
@@ -170,8 +196,11 @@ def generate_video(self, video_request_id):
     request.file_size_bytes = len(video_bytes)
     request.status = VideoGenerationRequest.Status.SUCCEEDED
     request.error_message = ''
-    request.model_used = f'{getattr(text_provider, "model", "")} + {getattr(image_provider, "model", "")} + gTTS'
-    request.usage = {'scenes_generated': len(scenes)}
+    model_parts = [getattr(text_provider, 'model', ''), getattr(image_provider, 'model', ''), 'gTTS']
+    if ai_motion_available:
+        model_parts.append(getattr(video_provider, 'model', ''))
+    request.model_used = ' + '.join(p for p in model_parts if p)
+    request.usage = {'scenes_generated': len(scenes), 'ai_motion_used': ai_motion_available}
     request.save(update_fields=[
         'video_file', 'thumbnail', 'duration_seconds', 'resolution', 'file_size_bytes',
         'status', 'error_message', 'model_used', 'usage', 'updated_at',

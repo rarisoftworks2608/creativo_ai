@@ -20,6 +20,11 @@ def scene_audio_upload_path(instance, filename):
     return f'video_generation/{request.company_id}/{request.id}/audio/{filename}'
 
 
+def scene_video_clip_upload_path(instance, filename):
+    request = instance.video_request
+    return f'video_generation/{request.company_id}/{request.id}/clips/{filename}'
+
+
 class VideoGenerationRequest(TimeStampedModel):
     """A single request to generate an AI video (Epic 07: AI Video Generation).
 
@@ -71,6 +76,14 @@ class VideoGenerationRequest(TimeStampedModel):
         default=False,
         help_text='Background music mixing has no configured provider yet - left off by default.',
     )
+    ai_motion_enabled = models.BooleanField(
+        default=True,
+        help_text=(
+            'Animate each scene image into a short AI-generated video clip instead of a '
+            'static zoom/pan. Falls back to zoom/pan automatically if no video provider '
+            'is configured (REPLICATE_API_TOKEN unset).'
+        ),
+    )
 
     script = models.TextField(blank=True, help_text='Full narration script, assembled from all scenes.')
     subtitles_srt = models.TextField(blank=True)
@@ -113,6 +126,10 @@ class VideoScene(TimeStampedModel):
 
     image = models.ImageField(upload_to=scene_image_upload_path, blank=True, null=True)
     voice_over_audio = models.FileField(upload_to=scene_audio_upload_path, blank=True, null=True)
+    video_clip = models.FileField(
+        upload_to=scene_video_clip_upload_path, blank=True, null=True,
+        help_text='AI-animated version of `image`, if AI motion was enabled and available.',
+    )
 
     class Meta:
         ordering = ['scene_number']

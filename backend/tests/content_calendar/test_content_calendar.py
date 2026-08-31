@@ -1,4 +1,5 @@
 from io import BytesIO
+from unittest.mock import patch
 
 from django.urls import reverse
 from openpyxl import Workbook, load_workbook
@@ -9,6 +10,8 @@ from apps.authentication.models import User
 from apps.companies.models import ClientProfile, Company
 from apps.content_calendar.excel import TEMPLATE_HEADERS
 from apps.content_calendar.models import ContentCalendarItem
+from apps.creative_generation.models import GenerationRequest
+from apps.video_generation.models import VideoGenerationRequest
 
 
 def _build_workbook(rows, headers=None):
@@ -71,6 +74,53 @@ class BaseContentCalendarTestCase(APITestCase):
 
     def detail_url(self, pk, company_id=None):
         return reverse('content_calendar:item-detail', kwargs={'company_id': company_id or self.company.pk, 'pk': pk})
+
+    def generate_now_url(self, pk, company_id=None):
+        return reverse(
+            'content_calendar:item-generate-now', kwargs={'company_id': company_id or self.company.pk, 'pk': pk},
+        )
+
+
+class GenerateNowViewTests(BaseContentCalendarTestCase):
+    @patch('apps.content_calendar.tasks._enqueue_creative')
+    def test_admin_can_generate_now_a_draft_item(self, mock_enqueue):
+        self.authenticate_as('admin@example.com', 'StrongPass123!')
+        response = self.client.post(self.generate_now_url(self.item.pk))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.status, ContentCalendarItem.Status.GENERATING)
+        request = GenerationRequest.objects.get(content_calendar_item=self.item)
+        self.assertEqual(request.company, self.company)
+        mock_enqueue.assert_called_once_with(request)
+
+    @patch('apps.content_calendar.tasks._enqueue_video')
+    def test_video_content_type_creates_a_video_request(self, mock_enqueue):
+        video_item = ContentCalendarItem.objects.create(
+            company=self.company, topic='Behind the scenes', content_type='Reel',
+            platforms=['instagram'], scheduled_date='2026-09-05',
+        )
+        self.authenticate_as('admin@example.com', 'StrongPass123!')
+        response = self.client.post(self.generate_now_url(video_item.pk))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        video_item.refresh_from_db()
+        self.assertEqual(video_item.status, ContentCalendarItem.Status.GENERATING)
+        request = VideoGenerationRequest.objects.get(content_calendar_item=video_item)
+        mock_enqueue.assert_called_once_with(request)
+
+    def test_cannot_generate_now_an_item_already_past_draft_or_scheduled(self):
+        self.item.status = ContentCalendarItem.Status.GENERATING
+        self.item.save(update_fields=['status'])
+
+        self.authenticate_as('admin@example.com', 'StrongPass123!')
+        response = self.client.post(self.generate_now_url(self.item.pk))
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_client_cannot_generate_now(self):
+        self.authenticate_as('client@example.com', 'StrongPass123!')
+        response = self.client.post(self.generate_now_url(self.item.pk))
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
 
 class CalendarItemCrudTests(BaseContentCalendarTestCase):

@@ -79,14 +79,39 @@ def _build_prompt_brief(item):
     return ' '.join(parts)
 
 
+def generate_now(item):
+    """Starts generation for a single DRAFT/SCHEDULED calendar item right away - the
+    same effect as waiting for `auto_generate_due_content` to pick it up on its
+    scheduled_date, used both by that scheduled sweep and by the admin's manual
+    "Generate now" button on the calendar queue (Epic 22: Content Automation).
+    """
+    prompt_brief = _build_prompt_brief(item)
+    if _is_video(item.content_type):
+        video_request = VideoGenerationRequest.objects.create(
+            company=item.company, content_calendar_item=item,
+            video_type=_pick_video_type(item), prompt_brief=prompt_brief,
+        )
+        _enqueue_video(video_request)
+    else:
+        generation_request = GenerationRequest.objects.create(
+            company=item.company, content_calendar_item=item,
+            creative_type=_pick_creative_type(item), prompt_brief=prompt_brief,
+        )
+        _enqueue_creative(generation_request)
+
+    item.status = ContentCalendarItem.Status.GENERATING
+    item.save(update_fields=['status', 'updated_at'])
+    return item
+
+
 @shared_task
 def auto_generate_due_content():
     """Finds every ContentCalendarItem whose scheduled_date has arrived (today or
     earlier, to also sweep up anything a prior run/outage missed) and still hasn't had
-    generation started (status is DRAFT or SCHEDULED), and queues it - exactly what
-    clicking "Generate" does by hand, via the same _enqueue helpers the manual endpoints
-    use. Each item flips to GENERATING immediately, so a slow run can't double-queue it
-    and a manually-generated item is never touched here.
+    generation started (status is DRAFT or SCHEDULED), and queues it via generate_now()
+    - exactly what clicking "Generate now" does by hand. Each item flips to GENERATING
+    immediately, so a slow run can't double-queue it and a manually-generated item is
+    never touched here.
 
     Runs every 15 minutes (see CELERY_BEAT_SCHEDULE) rather than once a day, since a
     scheduled_time on today's date needs to actually be honored - a once-daily run can
@@ -101,20 +126,4 @@ def auto_generate_due_content():
     for item in candidates:
         if item.scheduled_date == now.date() and item.scheduled_time and item.scheduled_time > now.time():
             continue  # scheduled later today - not due yet
-
-        prompt_brief = _build_prompt_brief(item)
-        if _is_video(item.content_type):
-            video_request = VideoGenerationRequest.objects.create(
-                company=item.company, content_calendar_item=item,
-                video_type=_pick_video_type(item), prompt_brief=prompt_brief,
-            )
-            _enqueue_video(video_request)
-        else:
-            generation_request = GenerationRequest.objects.create(
-                company=item.company, content_calendar_item=item,
-                creative_type=_pick_creative_type(item), prompt_brief=prompt_brief,
-            )
-            _enqueue_creative(generation_request)
-
-        item.status = ContentCalendarItem.Status.GENERATING
-        item.save(update_fields=['status', 'updated_at'])
+        generate_now(item)

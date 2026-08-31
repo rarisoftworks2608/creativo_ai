@@ -198,6 +198,28 @@ class GenerationRequestCreateTests(BaseCreativeGenerationTestCase):
         url = reverse('creative_generation:request-list-create', kwargs={'company_id': self.company.pk})
         self.assertEqual(self.client.get(url).status_code, status.HTTP_404_NOT_FOUND)
 
+    @patch('apps.creative_generation.tasks.get_text_provider')
+    @patch('apps.creative_generation.tasks.get_image_provider')
+    def test_adhoc_generation_is_linked_to_an_auto_created_calendar_item(self, mock_get_image, mock_get_text):
+        mock_get_image.return_value = FakeImageProvider()
+        mock_get_text.return_value = FakeTextProvider()
+
+        response = self.create_request(prompt_brief='Diwali sale banner')
+
+        request_obj = GenerationRequest.objects.get(pk=response.data['id'])
+        self.assertIsNotNone(request_obj.content_calendar_item_id)
+        linked_item = request_obj.content_calendar_item
+        self.assertEqual(linked_item.source, ContentCalendarItem.Source.AD_HOC)
+        self.assertEqual(linked_item.status, ContentCalendarItem.Status.PENDING_APPROVAL)
+        self.assertEqual(linked_item.topic, 'Diwali sale banner')
+
+        # And it's now visible to the client the normal, tested way (Epic 09).
+        self.authenticate_as('acmeclient@example.com', 'StrongPass123!')
+        list_url = reverse('content_calendar:item-list-create', kwargs={'company_id': self.company.pk})
+        list_response = self.client.get(list_url, {'status': 'pending_approval'})
+        self.assertEqual(list_response.status_code, status.HTTP_200_OK)
+        self.assertIn(linked_item.id, [row['id'] for row in list_response.data['results']])
+
     def test_rejects_calendar_item_from_other_company(self):
         other_item = ContentCalendarItem.objects.create(
             company=self.other_company, topic='X', content_type='Single image',
@@ -276,3 +298,44 @@ class VariationSelectTests(BaseCreativeGenerationTestCase):
         variations[1].refresh_from_db()
         self.assertTrue(variations[0].is_selected)
         self.assertFalse(variations[1].is_selected)
+
+    @patch('apps.creative_generation.tasks.get_text_provider')
+    @patch('apps.creative_generation.tasks.get_image_provider')
+    def test_client_can_select_their_own_companys_variation(self, mock_get_image, mock_get_text):
+        mock_get_image.return_value = FakeImageProvider()
+        mock_get_text.return_value = FakeTextProvider()
+
+        response = self.create_request()
+        request_id = response.data['id']
+        variation = GenerationVariation.objects.filter(generation_request_id=request_id).order_by('variation_number').first()
+
+        self.authenticate_as('acmeclient@example.com', 'StrongPass123!')
+        select_url = reverse('creative_generation:variation-select', kwargs={
+            'company_id': self.company.pk, 'pk': request_id, 'variation_id': variation.pk,
+        })
+        select_response = self.client.post(select_url)
+
+        self.assertEqual(select_response.status_code, status.HTTP_200_OK)
+        variation.refresh_from_db()
+        self.assertTrue(variation.is_selected)
+
+    @patch('apps.creative_generation.tasks.get_text_provider')
+    @patch('apps.creative_generation.tasks.get_image_provider')
+    def test_client_from_another_company_cannot_select_variation(self, mock_get_image, mock_get_text):
+        mock_get_image.return_value = FakeImageProvider()
+        mock_get_text.return_value = FakeTextProvider()
+
+        response = self.create_request()
+        request_id = response.data['id']
+        variation = GenerationVariation.objects.filter(generation_request_id=request_id).order_by('variation_number').first()
+
+        other_client = User.objects.create_user(
+            email='otherclient2@example.com', password='StrongPass123!', role=User.Role.CLIENT,
+        )
+        ClientProfile.objects.create(user=other_client, company=self.other_company)
+        self.authenticate_as('otherclient2@example.com', 'StrongPass123!')
+
+        select_url = reverse('creative_generation:variation-select', kwargs={
+            'company_id': self.company.pk, 'pk': request_id, 'variation_id': variation.pk,
+        })
+        self.assertEqual(self.client.post(select_url).status_code, status.HTTP_404_NOT_FOUND)

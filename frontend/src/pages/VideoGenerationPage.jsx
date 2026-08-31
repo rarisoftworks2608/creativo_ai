@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { createVideoRequest, listVideoRequests, retryVideoRequest } from '../api/videoGeneration'
-import { listCalendarItems } from '../api/contentCalendar'
+import { generateNowCalendarItem, listCalendarItems } from '../api/contentCalendar'
 import { getCompany } from '../api/companies'
 import { extractErrorMessage } from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import Modal from '../components/Modal'
+import ContentQueue from '../components/ContentQueue'
+import { isVideoContentType } from '../utils/contentType'
 
 const VIDEO_TYPES = [
   { value: 'instagram_reel', label: 'Instagram Reel' },
@@ -35,6 +37,7 @@ const EMPTY_FORM = {
   voice_over_enabled: true,
   subtitles_enabled: true,
   include_logo: true,
+  ai_motion_enabled: true,
 }
 
 export default function VideoGenerationPage() {
@@ -51,6 +54,8 @@ export default function VideoGenerationPage() {
   const [form, setForm] = useState(EMPTY_FORM)
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState('')
+
+  const [generatingItemId, setGeneratingItemId] = useState(null)
 
   const pollRef = useRef(null)
 
@@ -140,6 +145,18 @@ export default function VideoGenerationPage() {
     }
   }
 
+  async function handleGenerateNow(itemId) {
+    setGeneratingItemId(itemId)
+    try {
+      await generateNowCalendarItem(companyId, itemId)
+      await load()
+    } catch (err) {
+      setLoadError(extractErrorMessage(err, 'Could not start generation for this item.'))
+    } finally {
+      setGeneratingItemId(null)
+    }
+  }
+
   if (!isAdmin) {
     return <div className="alert alert-error">AI Video Generation is only available to admins.</div>
   }
@@ -164,6 +181,13 @@ export default function VideoGenerationPage() {
       </div>
 
       {loadError && <div className="alert alert-error">{loadError}</div>}
+
+      <ContentQueue
+        items={calendarItems.filter((item) => isVideoContentType(item.content_type))}
+        onGenerateNow={handleGenerateNow}
+        generatingId={generatingItemId}
+        emptyMessage="Nothing waiting in the calendar - planned reels/videos will appear here until they're generated."
+      />
 
       {requests.length === 0 ? (
         <div className="card">
@@ -220,7 +244,7 @@ export default function VideoGenerationPage() {
                   value={form.content_calendar_item}
                   onChange={(e) => updateForm('content_calendar_item', e.target.value)}
                 >
-                  <option value="">None (ad-hoc generation)</option>
+                  <option value="">None (auto-added to the calendar for approval)</option>
                   {calendarItems.map((item) => (
                     <option key={item.id} value={item.id}>{item.topic} ({item.scheduled_date})</option>
                   ))}
@@ -271,6 +295,14 @@ export default function VideoGenerationPage() {
                   onChange={(e) => updateForm('include_logo', e.target.checked)}
                 />
                 <span>Include logo</span>
+              </label>
+              <label className="field-checkbox field-checkbox-inline">
+                <input
+                  type="checkbox"
+                  checked={form.ai_motion_enabled}
+                  onChange={(e) => updateForm('ai_motion_enabled', e.target.checked)}
+                />
+                <span>AI motion (animate scenes)</span>
               </label>
             </div>
 

@@ -30,6 +30,10 @@ def fake_mp3_bytes():
     return b'ID3' + b'0' * 32
 
 
+def fake_mp4_bytes():
+    return b'FAKE_CLIP_MP4' + b'0' * 32
+
+
 class FakeTextProvider:
     model = 'claude-opus-5'
 
@@ -62,6 +66,19 @@ class FakeVoiceProvider:
         self.error = error
 
     def synthesize_speech(self, *, text, voice=''):
+        if self.error:
+            raise self.error
+        return self.result
+
+
+class FakeVideoProvider:
+    model = 'Wan-AI/Wan2.2-TI2V-5B'
+
+    def __init__(self, result=None, error=None):
+        self.result = result or (fake_mp4_bytes(), 'video/mp4')
+        self.error = error
+
+    def generate_video_clip(self, *, image_bytes, mime_type, prompt):
         if self.error:
             raise self.error
         return self.result
@@ -123,10 +140,11 @@ class BaseVideoGenerationTestCase(APITestCase):
 
 class VideoGenerationCreateTests(BaseVideoGenerationTestCase):
     @patch('apps.video_generation.tasks.rendering.render_video', return_value=fake_render_result())
+    @patch('apps.video_generation.tasks.get_video_provider', return_value=FakeVideoProvider())
     @patch('apps.video_generation.tasks.get_voice_provider', return_value=FakeVoiceProvider())
     @patch('apps.video_generation.tasks.get_image_provider', return_value=FakeImageProvider())
     @patch('apps.video_generation.tasks.get_text_provider', return_value=FakeTextProvider())
-    def test_admin_can_generate_a_video(self, mock_text, mock_image, mock_voice, mock_render):
+    def test_admin_can_generate_a_video(self, mock_text, mock_image, mock_voice, mock_video, mock_render):
         response = self.create_request(content_calendar_item=self.calendar_item.pk)
 
         self.assertEqual(response.status_code, status.HTTP_202_ACCEPTED)
@@ -140,15 +158,59 @@ class VideoGenerationCreateTests(BaseVideoGenerationTestCase):
         self.assertEqual(request_obj.duration_seconds, 11.0)
         self.assertTrue(request_obj.subtitles_srt)
         self.assertTrue(all(scene.voice_over_audio for scene in request_obj.scenes.all()))
+        self.assertTrue(all(scene.video_clip for scene in request_obj.scenes.all()))
+        self.assertTrue(request_obj.usage.get('ai_motion_used'))
 
         self.calendar_item.refresh_from_db()
         self.assertEqual(self.calendar_item.status, ContentCalendarItem.Status.PENDING_APPROVAL)
 
     @patch('apps.video_generation.tasks.rendering.render_video', return_value=fake_render_result())
+    @patch('apps.video_generation.tasks.get_video_provider', return_value=FakeVideoProvider())
+    @patch('apps.video_generation.tasks.get_voice_provider', return_value=FakeVoiceProvider())
+    @patch('apps.video_generation.tasks.get_image_provider', return_value=FakeImageProvider())
+    @patch('apps.video_generation.tasks.get_text_provider', return_value=FakeTextProvider())
+    def test_adhoc_video_is_linked_to_an_auto_created_calendar_item(self, mock_text, mock_image, mock_voice, mock_video, mock_render):
+        response = self.create_request(prompt_brief='Diwali reel')
+
+        request_obj = VideoGenerationRequest.objects.get(pk=response.data['id'])
+        self.assertIsNotNone(request_obj.content_calendar_item_id)
+        linked_item = request_obj.content_calendar_item
+        self.assertEqual(linked_item.source, ContentCalendarItem.Source.AD_HOC)
+        self.assertEqual(linked_item.status, ContentCalendarItem.Status.PENDING_APPROVAL)
+        self.assertEqual(linked_item.topic, 'Diwali reel')
+
+        self.authenticate_as('acmeclient@example.com', 'StrongPass123!')
+        list_url = reverse('content_calendar:item-list-create', kwargs={'company_id': self.company.pk})
+        list_response = self.client.get(list_url, {'status': 'pending_approval'})
+        self.assertEqual(list_response.status_code, status.HTTP_200_OK)
+        self.assertIn(linked_item.id, [row['id'] for row in list_response.data['results']])
+
+    @patch('apps.video_generation.tasks.rendering.render_video', return_value=fake_render_result())
+    @patch('apps.video_generation.tasks.get_video_provider')
+    @patch('apps.video_generation.tasks.get_voice_provider', return_value=FakeVoiceProvider())
+    @patch('apps.video_generation.tasks.get_image_provider', return_value=FakeImageProvider())
+    @patch('apps.video_generation.tasks.get_text_provider', return_value=FakeTextProvider())
+    def test_ai_motion_failure_falls_back_to_zoompan(self, mock_text, mock_image, mock_voice, mock_video, mock_render):
+        """AI motion is an enhancement layer on the free HF tier (finite monthly credit) -
+        a provider failure mid-request (credit exhausted, rate limited, ...) must not
+        block the reel from rendering; it should just fall back to the still-image
+        zoom/pan for the rest of the scenes."""
+        mock_video.return_value = FakeVideoProvider(error=AIProviderError('Free credit is used up for this month.'))
+
+        response = self.create_request()
+
+        self.assertEqual(response.status_code, status.HTTP_202_ACCEPTED)
+        request_obj = VideoGenerationRequest.objects.get(pk=response.data['id'])
+        self.assertEqual(request_obj.status, VideoGenerationRequest.Status.SUCCEEDED)
+        self.assertFalse(any(scene.video_clip for scene in request_obj.scenes.all()))
+        self.assertFalse(request_obj.usage.get('ai_motion_used'))
+
+    @patch('apps.video_generation.tasks.rendering.render_video', return_value=fake_render_result())
+    @patch('apps.video_generation.tasks.get_video_provider', return_value=FakeVideoProvider())
     @patch('apps.video_generation.tasks.get_voice_provider')
     @patch('apps.video_generation.tasks.get_image_provider', return_value=FakeImageProvider())
     @patch('apps.video_generation.tasks.get_text_provider', return_value=FakeTextProvider())
-    def test_voice_over_disabled_skips_voice_generation(self, mock_text, mock_image, mock_voice, mock_render):
+    def test_voice_over_disabled_skips_voice_generation(self, mock_text, mock_image, mock_voice, mock_video, mock_render):
         response = self.create_request(voice_over_enabled=False)
 
         self.assertEqual(response.status_code, status.HTTP_202_ACCEPTED)
@@ -181,10 +243,11 @@ class VideoGenerationCreateTests(BaseVideoGenerationTestCase):
         self.calendar_item.refresh_from_db()
         self.assertEqual(self.calendar_item.status, ContentCalendarItem.Status.FAILED)
 
+    @patch('apps.video_generation.tasks.get_video_provider', return_value=FakeVideoProvider())
     @patch('apps.video_generation.tasks.get_voice_provider')
     @patch('apps.video_generation.tasks.get_image_provider', return_value=FakeImageProvider())
     @patch('apps.video_generation.tasks.get_text_provider', return_value=FakeTextProvider())
-    def test_voice_provider_failure_marks_failed(self, mock_text, mock_image, mock_voice):
+    def test_voice_provider_failure_marks_failed(self, mock_text, mock_image, mock_voice, mock_video):
         mock_voice.return_value = FakeVoiceProvider(error=AIProviderError('tts down'))
 
         response = self.create_request()
@@ -192,10 +255,11 @@ class VideoGenerationCreateTests(BaseVideoGenerationTestCase):
         self.assertEqual(request_obj.status, VideoGenerationRequest.Status.FAILED)
         self.assertIn('Voice-over', request_obj.error_message)
 
+    @patch('apps.video_generation.tasks.get_video_provider', return_value=FakeVideoProvider())
     @patch('apps.video_generation.tasks.get_voice_provider', return_value=FakeVoiceProvider())
     @patch('apps.video_generation.tasks.get_image_provider', return_value=FakeImageProvider())
     @patch('apps.video_generation.tasks.get_text_provider', return_value=FakeTextProvider())
-    def test_rendering_failure_marks_failed(self, mock_text, mock_image, mock_voice):
+    def test_rendering_failure_marks_failed(self, mock_text, mock_image, mock_voice, mock_video):
         with patch('apps.video_generation.tasks.rendering.render_video', side_effect=AIProviderError('ffmpeg exploded')):
             response = self.create_request()
         request_obj = VideoGenerationRequest.objects.get(pk=response.data['id'])
@@ -208,7 +272,8 @@ class VideoGenerationCreateTests(BaseVideoGenerationTestCase):
         response = self.client.post(url, {'video_type': 'instagram_reel'})
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
-    def test_client_can_list_and_retrieve_their_own_companys_requests(self):
+    @patch('apps.video_generation.tasks.get_video_provider', return_value=FakeVideoProvider())
+    def test_client_can_list_and_retrieve_their_own_companys_requests(self, mock_video):
         created = self.create_request()
         request_id = created.data['id']
 
@@ -249,10 +314,11 @@ class VideoGenerationCreateTests(BaseVideoGenerationTestCase):
 
 class RetryTests(BaseVideoGenerationTestCase):
     @patch('apps.video_generation.tasks.rendering.render_video', return_value=fake_render_result())
+    @patch('apps.video_generation.tasks.get_video_provider', return_value=FakeVideoProvider())
     @patch('apps.video_generation.tasks.get_voice_provider', return_value=FakeVoiceProvider())
     @patch('apps.video_generation.tasks.get_image_provider', return_value=FakeImageProvider())
     @patch('apps.video_generation.tasks.get_text_provider', return_value=FakeTextProvider())
-    def test_can_only_retry_failed_requests(self, mock_text, mock_image, mock_voice, mock_render):
+    def test_can_only_retry_failed_requests(self, mock_text, mock_image, mock_voice, mock_video, mock_render):
         response = self.create_request()
         request_id = response.data['id']  # succeeded
 
@@ -260,10 +326,11 @@ class RetryTests(BaseVideoGenerationTestCase):
         retry_response = self.client.post(retry_url)
         self.assertEqual(retry_response.status_code, status.HTTP_400_BAD_REQUEST)
 
+    @patch('apps.video_generation.tasks.get_video_provider', return_value=FakeVideoProvider())
     @patch('apps.video_generation.tasks.get_voice_provider', return_value=FakeVoiceProvider())
     @patch('apps.video_generation.tasks.get_image_provider', return_value=FakeImageProvider())
     @patch('apps.video_generation.tasks.get_text_provider', return_value=FakeTextProvider())
-    def test_retry_regenerates_a_failed_request(self, mock_text, mock_image, mock_voice):
+    def test_retry_regenerates_a_failed_request(self, mock_text, mock_image, mock_voice, mock_video):
         with patch('apps.video_generation.tasks.rendering.render_video', side_effect=AIProviderError('boom')):
             response = self.create_request()
         request_id = response.data['id']
@@ -307,10 +374,11 @@ class FFmpegAvailabilityTests(BaseVideoGenerationTestCase):
         with self.assertRaises(rendering.FFmpegNotAvailable):
             rendering.check_ffmpeg_available()
 
+    @patch('apps.video_generation.tasks.get_video_provider', return_value=FakeVideoProvider())
     @patch('apps.video_generation.tasks.get_voice_provider', return_value=FakeVoiceProvider())
     @patch('apps.video_generation.tasks.get_image_provider', return_value=FakeImageProvider())
     @patch('apps.video_generation.tasks.get_text_provider', return_value=FakeTextProvider())
-    def test_full_pipeline_fails_clearly_without_ffmpeg(self, mock_text, mock_image, mock_voice):
+    def test_full_pipeline_fails_clearly_without_ffmpeg(self, mock_text, mock_image, mock_voice, mock_video):
         """End-to-end through script/visuals/voice-over for real, hitting the real
         (missing) ffmpeg only at the render stage - everything up to there is genuine."""
         response = self.create_request()

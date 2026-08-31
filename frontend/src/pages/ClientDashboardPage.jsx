@@ -2,8 +2,10 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { getMyCompany } from '../api/companies'
 import { approveCalendarItem, listCalendarItems, rejectCalendarItem } from '../api/contentCalendar'
+import { selectVariation } from '../api/creativeGeneration'
 import { extractErrorMessage } from '../api/client'
 import Modal from '../components/Modal'
+import VariationGrid from '../components/VariationGrid'
 
 export default function ClientDashboardPage() {
   const [company, setCompany] = useState(null)
@@ -15,6 +17,8 @@ export default function ClientDashboardPage() {
   const [rejectingItem, setRejectingItem] = useState(null)
   const [feedback, setFeedback] = useState('')
   const [rejectError, setRejectError] = useState('')
+
+  const [selectingVariationId, setSelectingVariationId] = useState(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -44,6 +48,20 @@ export default function ClientDashboardPage() {
       setLoadError(extractErrorMessage(err, 'Could not approve this content.'))
     } finally {
       setBusyId(null)
+    }
+  }
+
+  async function handleSelectVariation(item, generationRequestId, variationId) {
+    setSelectingVariationId(variationId)
+    try {
+      const updatedRequest = await selectVariation(company.id, generationRequestId, variationId)
+      setPendingItems((prev) =>
+        prev.map((i) => (i.id === item.id ? { ...i, latest_generation_request: updatedRequest } : i)),
+      )
+    } catch (err) {
+      setLoadError(extractErrorMessage(err, 'Could not select this variation.'))
+    } finally {
+      setSelectingVariationId(null)
     }
   }
 
@@ -123,44 +141,62 @@ export default function ClientDashboardPage() {
             <p>Nothing waiting on you right now.</p>
           </div>
         ) : (
-          <div className="table-wrapper">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Topic</th>
-                  <th>Type</th>
-                  <th>Scheduled</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {pendingItems.map((item) => (
-                  <tr key={item.id}>
-                    <td>{item.topic}</td>
-                    <td>{item.content_type}</td>
-                    <td>{item.scheduled_date}</td>
-                    <td className="table-actions">
-                      <button
-                        type="button"
-                        className="btn btn-primary"
-                        disabled={busyId === item.id}
-                        onClick={() => handleApprove(item)}
-                      >
-                        Approve
-                      </button>
-                      <button
-                        type="button"
-                        className="btn-link btn-link-danger"
-                        disabled={busyId === item.id}
-                        onClick={() => openReject(item)}
-                      >
-                        Reject
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="request-list">
+            {pendingItems.map((item) => {
+              const generationRequest = item.latest_generation_request
+              const videoRequest = item.latest_video_request
+              const hasVariations = generationRequest?.status === 'succeeded' && generationRequest.variations.length > 0
+              const hasVideo = videoRequest?.status === 'succeeded' && videoRequest.video_file
+
+              return (
+                <div className="card request-card" key={item.id}>
+                  <div className="card-header">
+                    <div>
+                      <h2>{item.topic}</h2>
+                      <p className="page-subtitle">
+                        {item.content_type} · {item.scheduled_date}
+                      </p>
+                    </div>
+                  </div>
+
+                  {hasVariations && (
+                    <>
+                      <p className="modal-hint">Pick your favorite version, then Approve.</p>
+                      <VariationGrid
+                        variations={generationRequest.variations}
+                        selecting={selectingVariationId}
+                        onSelect={(variationId) => handleSelectVariation(item, generationRequest.id, variationId)}
+                      />
+                    </>
+                  )}
+
+                  {hasVideo && (
+                    <video controls src={videoRequest.video_file} poster={videoRequest.thumbnail || undefined} className="variation-image" />
+                  )}
+
+                  {!hasVariations && !hasVideo && <p className="page-subtitle">Preview not available for this item.</p>}
+
+                  <div className="modal-actions">
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      disabled={busyId === item.id}
+                      onClick={() => handleApprove(item)}
+                    >
+                      Approve
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-link btn-link-danger"
+                      disabled={busyId === item.id}
+                      onClick={() => openReject(item)}
+                    >
+                      Reject
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
           </div>
         )}
       </div>

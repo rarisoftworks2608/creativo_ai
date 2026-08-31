@@ -6,11 +6,14 @@ import {
   retryGenerationRequest,
   selectVariation,
 } from '../api/creativeGeneration'
-import { listCalendarItems } from '../api/contentCalendar'
+import { generateNowCalendarItem, listCalendarItems } from '../api/contentCalendar'
 import { getCompany } from '../api/companies'
 import { extractErrorMessage } from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import Modal from '../components/Modal'
+import VariationGrid from '../components/VariationGrid'
+import ContentQueue from '../components/ContentQueue'
+import { isVideoContentType } from '../utils/contentType'
 
 const CREATIVE_TYPES = [
   { value: 'instagram_post', label: 'Instagram Post' },
@@ -41,6 +44,8 @@ export default function CreativeGenerationPage() {
   const [form, setForm] = useState(EMPTY_FORM)
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState('')
+
+  const [generatingItemId, setGeneratingItemId] = useState(null)
 
   const pollRef = useRef(null)
 
@@ -135,6 +140,18 @@ export default function CreativeGenerationPage() {
     }
   }
 
+  async function handleGenerateNow(itemId) {
+    setGeneratingItemId(itemId)
+    try {
+      await generateNowCalendarItem(companyId, itemId)
+      await load()
+    } catch (err) {
+      setLoadError(extractErrorMessage(err, 'Could not start generation for this item.'))
+    } finally {
+      setGeneratingItemId(null)
+    }
+  }
+
   if (!isAdmin) {
     return <div className="alert alert-error">AI Creative Generation is only available to admins.</div>
   }
@@ -159,6 +176,13 @@ export default function CreativeGenerationPage() {
       </div>
 
       {loadError && <div className="alert alert-error">{loadError}</div>}
+
+      <ContentQueue
+        items={calendarItems.filter((item) => !isVideoContentType(item.content_type))}
+        onGenerateNow={handleGenerateNow}
+        generatingId={generatingItemId}
+        emptyMessage="Nothing waiting in the calendar - planned image/carousel/story content will appear here until it's generated."
+      />
 
       {requests.length === 0 ? (
         <div className="card">
@@ -203,7 +227,7 @@ export default function CreativeGenerationPage() {
                 value={form.content_calendar_item}
                 onChange={(e) => setForm((p) => ({ ...p, content_calendar_item: e.target.value }))}
               >
-                <option value="">None (ad-hoc generation)</option>
+                <option value="">None (auto-added to the calendar for approval)</option>
                 {calendarItems.map((item) => (
                   <option key={item.id} value={item.id}>
                     {item.topic} ({item.scheduled_date})
@@ -288,43 +312,7 @@ function RequestCard({ request, onRetry, onSelectVariation }) {
       )}
 
       {request.status === 'succeeded' && (
-        <div className="variation-grid">
-          {request.variations.map((variation) => (
-            <div className={`variation-card ${variation.is_selected ? 'variation-card-selected' : ''}`} key={variation.id}>
-              <img src={variation.image} alt={`Variation ${variation.variation_number}`} className="variation-image" />
-              <div className="variation-body">
-                <div className="variation-label">
-                  Variation {variation.variation_number}
-                  {variation.is_selected && <span className="variation-selected-tag">Selected</span>}
-                </div>
-                {variation.headline && <div className="variation-headline">{variation.headline}</div>}
-                {variation.caption && <p className="variation-caption">{variation.caption}</p>}
-                {variation.cta && (
-                  <p className="variation-caption">
-                    <strong>CTA:</strong> {variation.cta}
-                  </p>
-                )}
-                {variation.hashtags.length > 0 && (
-                  <div className="tag-list">
-                    {variation.hashtags.map((tag) => (
-                      <span key={tag} className="tag-chip tag-chip-static">
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-                )}
-                <button
-                  type="button"
-                  className="btn btn-ghost btn-block"
-                  disabled={variation.is_selected}
-                  onClick={() => onSelectVariation(variation.id)}
-                >
-                  {variation.is_selected ? 'Selected' : 'Select this version'}
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
+        <VariationGrid variations={request.variations} onSelect={onSelectVariation} />
       )}
     </div>
   )

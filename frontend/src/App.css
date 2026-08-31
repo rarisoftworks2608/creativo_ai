@@ -1060,6 +1060,18 @@
   background: var(--danger-bg);
   color: var(--danger);
 }
+.badge-connected {
+  background: var(--success-bg);
+  color: var(--success);
+}
+.badge-expired {
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+.badge-disconnected {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
 
 .status-badge {
   text-transform: none;

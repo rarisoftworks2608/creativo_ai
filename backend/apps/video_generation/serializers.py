@@ -8,7 +8,7 @@ class VideoSceneSerializer(serializers.ModelSerializer):
         model = VideoScene
         fields = [
             'id', 'scene_number', 'narration', 'visual_description', 'duration_seconds',
-            'image', 'voice_over_audio', 'created_at',
+            'image', 'voice_over_audio', 'video_clip', 'created_at',
         ]
         read_only_fields = fields
 
@@ -22,7 +22,7 @@ class VideoGenerationRequestSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'company', 'content_calendar_item', 'video_type', 'video_type_display',
             'aspect_ratio', 'target_duration_seconds', 'prompt_brief', 'product_info',
-            'voice_over_enabled', 'subtitles_enabled', 'include_logo', 'music_enabled',
+            'voice_over_enabled', 'subtitles_enabled', 'include_logo', 'music_enabled', 'ai_motion_enabled',
             'script', 'subtitles_srt', 'status', 'error_message', 'retry_count',
             'model_used', 'usage', 'cost_usd',
             'video_file', 'thumbnail', 'resolution', 'duration_seconds', 'file_size_bytes',
@@ -37,6 +37,7 @@ class VideoGenerationRequestCreateSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'content_calendar_item', 'video_type', 'aspect_ratio', 'target_duration_seconds',
             'prompt_brief', 'product_info', 'voice_over_enabled', 'subtitles_enabled', 'include_logo',
+            'ai_motion_enabled',
         ]
         read_only_fields = ['id']
 

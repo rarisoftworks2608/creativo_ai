@@ -21,6 +21,7 @@ urlpatterns = [
     path('api/v1/companies/<int:company_id>/ai-strategy/', include('apps.ai_strategy.urls')),
     path('api/v1/companies/<int:company_id>/creative-generation/', include('apps.creative_generation.urls')),
     path('api/v1/companies/<int:company_id>/video-generation/', include('apps.video_generation.urls')),
+    path('api/v1/companies/<int:company_id>/social-accounts/', include('apps.social_accounts.urls')),
 
     # API schema / docs
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),

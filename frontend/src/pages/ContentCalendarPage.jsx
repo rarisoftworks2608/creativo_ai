@@ -12,6 +12,7 @@ import {
   updateCalendarItem,
 } from '../api/contentCalendar'
 import { extractErrorMessage } from '../api/client'
+import { useAuth } from '../context/AuthContext'
 import Modal from '../components/Modal'
 import TagsInput from '../components/TagsInput'
 import CalendarMonthGrid from '../components/CalendarMonthGrid'
@@ -49,6 +50,7 @@ const EMPTY_ITEM_FORM = {
 
 export default function ContentCalendarPage() {
   const { id: companyId } = useParams()
+  const { isAdmin } = useAuth()
   const fileInputRef = useRef(null)
 
   const [company, setCompany] = useState(null)
@@ -275,8 +277,8 @@ export default function ContentCalendarPage() {
 
   return (
     <div>
-      <Link to={`/companies/${companyId}`} className="back-link">
-        ← Back to {company?.name || 'company'}
+      <Link to={isAdmin ? `/companies/${companyId}` : '/client'} className="back-link">
+        ← Back to {isAdmin ? company?.name || 'company' : 'your dashboard'}
       </Link>
 
       <div className="page-header">
@@ -286,9 +288,11 @@ export default function ContentCalendarPage() {
             {company?.name} · {count} item{count === 1 ? '' : 's'}
           </p>
         </div>
-        <button type="button" className="btn btn-primary" onClick={() => setShowChoice(true)}>
-          + Add content
-        </button>
+        {isAdmin && (
+          <button type="button" className="btn btn-primary" onClick={() => setShowChoice(true)}>
+            + Add content
+          </button>
+        )}
       </div>
 
       <div className="cal-toolbar">
@@ -340,17 +344,19 @@ export default function ContentCalendarPage() {
         <div className="card">
           <div className="empty-state">
             <p>No content scheduled yet.</p>
-            <button type="button" className="btn btn-primary" onClick={() => setShowChoice(true)}>
-              Add your first content item
-            </button>
+            {isAdmin && (
+              <button type="button" className="btn btn-primary" onClick={() => setShowChoice(true)}>
+                Add your first content item
+              </button>
+            )}
           </div>
         </div>
       ) : viewMode === 'calendar' ? (
         <CalendarMonthGrid
           month={visibleMonth}
           itemsByDate={itemsByDate}
-          onDayClick={openCreateForm}
-          onItemClick={openEditForm}
+          onDayClick={isAdmin ? openCreateForm : undefined}
+          onItemClick={isAdmin ? openEditForm : undefined}
           onMoreClick={(date) => setDayDetailDate(date)}
         />
       ) : (
@@ -391,25 +397,29 @@ export default function ContentCalendarPage() {
                       </span>
                     </td>
                     <td className="table-actions">
-                      <button type="button" className="btn-link" onClick={() => openEditForm(item)}>
-                        Edit
-                      </button>
-                      <button
-                        type="button"
-                        className="btn-link"
-                        disabled={busyItemId === item.id}
-                        onClick={() => handleDuplicate(item)}
-                      >
-                        Duplicate
-                      </button>
-                      <button
-                        type="button"
-                        className="btn-link btn-link-danger"
-                        disabled={busyItemId === item.id}
-                        onClick={() => handleDelete(item)}
-                      >
-                        Delete
-                      </button>
+                      {isAdmin && (
+                        <>
+                          <button type="button" className="btn-link" onClick={() => openEditForm(item)}>
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-link"
+                            disabled={busyItemId === item.id}
+                            onClick={() => handleDuplicate(item)}
+                          >
+                            Duplicate
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-link btn-link-danger"
+                            disabled={busyItemId === item.id}
+                            onClick={() => handleDelete(item)}
+                          >
+                            Delete
+                          </button>
+                        </>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -433,39 +443,43 @@ export default function ContentCalendarPage() {
                     {item.platforms.length > 0 ? ` · ${item.platforms.map((p) => PLATFORM_LABELS[p] || p).join(', ')}` : ''}
                   </div>
                 </div>
-                <div className="day-detail-actions">
-                  <button type="button" className="btn-link" onClick={() => { setDayDetailDate(null); openEditForm(item) }}>
-                    Edit
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-link"
-                    disabled={busyItemId === item.id}
-                    onClick={() => handleDuplicate(item)}
-                  >
-                    Duplicate
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-link btn-link-danger"
-                    disabled={busyItemId === item.id}
-                    onClick={() => handleDelete(item)}
-                  >
-                    Delete
-                  </button>
-                </div>
+                {isAdmin && (
+                  <div className="day-detail-actions">
+                    <button type="button" className="btn-link" onClick={() => { setDayDetailDate(null); openEditForm(item) }}>
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-link"
+                      disabled={busyItemId === item.id}
+                      onClick={() => handleDuplicate(item)}
+                    >
+                      Duplicate
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-link btn-link-danger"
+                      disabled={busyItemId === item.id}
+                      onClick={() => handleDelete(item)}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
           </div>
-          <div className="modal-actions">
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={() => { const d = dayDetailDate; setDayDetailDate(null); openCreateForm(d) }}
-            >
-              + Add content for this day
-            </button>
-          </div>
+          {isAdmin && (
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => { const d = dayDetailDate; setDayDetailDate(null); openCreateForm(d) }}
+              >
+                + Add content for this day
+              </button>
+            </div>
+          )}
         </Modal>
       )}
 

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, Navigate, useParams } from 'react-router-dom'
 import {
   addCompanyClient,
   getCompany,
@@ -65,6 +65,13 @@ export default function CompanyDetailPage() {
   const [removingClientId, setRemovingClientId] = useState(null)
 
   const load = useCallback(async () => {
+    if (!isAdmin) {
+      // This page is an admin management console (company/client CRUD) - a client
+      // who lands here (stale link, browser history) gets redirected below rather
+      // than this page firing admin-only requests (listCompanyClients) on their behalf.
+      setLoading(false)
+      return
+    }
     setLoading(true)
     setLoadError('')
     try {
@@ -81,7 +88,7 @@ export default function CompanyDetailPage() {
     } finally {
       setLoading(false)
     }
-  }, [id])
+  }, [id, isAdmin])
 
   useEffect(() => {
     load()
@@ -191,6 +198,7 @@ export default function CompanyDetailPage() {
     }
   }
 
+  if (!isAdmin) return <Navigate to="/client" replace />
   if (loading) return <div className="page-loading">Loading…</div>
   if (loadError && !company) return <div className="alert alert-error">{loadError}</div>
   if (!company) return null
@@ -380,6 +388,18 @@ export default function CompanyDetailPage() {
             </Link>
           </div>
           <p className="page-subtitle">Generate scripted, scene-by-scene videos with voice-over and subtitles.</p>
+        </div>
+      )}
+
+      {isAdmin && (
+        <div className="card">
+          <div className="card-header">
+            <h2>Social media accounts</h2>
+            <Link to={`/companies/${id}/social-accounts`} className="btn btn-primary">
+              Open social accounts
+            </Link>
+          </div>
+          <p className="page-subtitle">Connect Instagram, Facebook and LinkedIn accounts for publishing.</p>
         </div>
       )}
 

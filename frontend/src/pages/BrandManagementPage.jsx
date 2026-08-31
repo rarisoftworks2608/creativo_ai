@@ -11,6 +11,7 @@ import {
 } from '../api/brand'
 import { getCompany } from '../api/companies'
 import { extractErrorMessage } from '../api/client'
+import { useAuth } from '../context/AuthContext'
 import BrandImageSlot from '../components/BrandImageSlot'
 import ColorPaletteInput from '../components/ColorPaletteInput'
 import ListOfObjectsInput from '../components/ListOfObjectsInput'
@@ -44,6 +45,7 @@ function pick(source, keys) {
 
 export default function BrandManagementPage() {
   const { id: companyId } = useParams()
+  const { isAdmin } = useAuth()
 
   const [company, setCompany] = useState(null)
   const [brand, setBrand] = useState(null)
@@ -75,8 +77,8 @@ export default function BrandManagementPage() {
 
   return (
     <div>
-      <Link to={`/companies/${companyId}`} className="back-link">
-        ← Back to {company.name}
+      <Link to={isAdmin ? `/companies/${companyId}` : '/client'} className="back-link">
+        ← Back to {isAdmin ? company.name : 'your dashboard'}
       </Link>
 
       <div className="page-header">

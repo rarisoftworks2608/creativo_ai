@@ -10,6 +10,7 @@ import BrandManagementPage from './pages/BrandManagementPage'
 import AiStrategyPage from './pages/AiStrategyPage'
 import CreativeGenerationPage from './pages/CreativeGenerationPage'
 import VideoGenerationPage from './pages/VideoGenerationPage'
+import SocialAccountsPage from './pages/SocialAccountsPage'
 import TeamPage from './pages/TeamPage'
 import AccessControlPage from './pages/AccessControlPage'
 import ClientDashboardPage from './pages/ClientDashboardPage'
@@ -38,6 +39,7 @@ function App() {
             <Route path="/companies/:id/ai-strategy" element={<AiStrategyPage />} />
             <Route path="/companies/:id/creative-generation" element={<CreativeGenerationPage />} />
             <Route path="/companies/:id/video-generation" element={<VideoGenerationPage />} />
+            <Route path="/companies/:id/social-accounts" element={<SocialAccountsPage />} />
             <Route path="/client" element={<ClientDashboardPage />} />
             <Route path="/team" element={<TeamPage />} />
             <Route path="/access" element={<AccessControlPage />} />

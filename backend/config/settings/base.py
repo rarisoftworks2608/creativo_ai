@@ -27,6 +27,12 @@ if env_file.exists():
 
 SECRET_KEY = env('SECRET_KEY', default='django-insecure-change-me-in-env-file')
 
+# Epic 10: Social Media Account Management - key used to encrypt stored social
+# access tokens (common/crypto.py). Falls back to SECRET_KEY so no new env var
+# is required in development; production should set this independently so
+# rotating SECRET_KEY doesn't also break decryption of every stored token.
+SOCIAL_TOKEN_ENCRYPTION_KEY = env('SOCIAL_TOKEN_ENCRYPTION_KEY', default='')
+
 DEBUG = env.bool('DEBUG', default=False)
 
 ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=[])
@@ -59,6 +65,7 @@ LOCAL_APPS = [
     'apps.creative_generation',
     'apps.video_generation',
     'apps.notifications',
+    'apps.social_accounts',
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -253,6 +260,24 @@ AI_IMAGE_COST_PER_IMAGE_USD = env('AI_IMAGE_COST_PER_IMAGE_USD', default='')
 # gTTS is free and needs no API key - it works out of the box.
 
 AI_VOICE_PROVIDER = env('AI_VOICE_PROVIDER', default='gtts')
+
+
+# AI motion (video generation) provider (Epic 07: AI Video Generation)
+# 'huggingface' reads HF_TOKEN (free to create, no card required - same token as
+# HuggingFaceImageProvider, Epic 06) and generates text-to-video via Hugging Face's
+# Inference Providers, routed to fal-ai and billed against the free monthly HF
+# credit ($0.10/month - a couple of scenes' worth; falls back to zoom/pan once
+# spent). AI_VIDEO_MODEL must be a model that route supports
+# (e.g. Wan-AI/Wan2.2-TI2V-5B).
+# 'replicate' reads REPLICATE_API_TOKEN, read directly by ReplicateVideoProvider
+# from the environment (set it in .env) - deliberately not duplicated here. No
+# free tier - billed per second of generated video, but proper image-to-video
+# (animates the actual scene image) and much higher quality. AI_VIDEO_MODEL must
+# then be a Replicate image-to-video model slug (e.g. wan-video/wan-2.2-i2v-fast).
+
+AI_VIDEO_PROVIDER = env('AI_VIDEO_PROVIDER', default='huggingface')
+AI_VIDEO_MODEL = env('AI_VIDEO_MODEL', default='Wan-AI/Wan2.2-TI2V-5B')
+REPLICATE_API_TOKEN = env('REPLICATE_API_TOKEN', default='')
 
 
 # Celery / Redis (Epic 06: Generation Management - Queue)

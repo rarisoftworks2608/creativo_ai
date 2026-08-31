@@ -149,7 +149,7 @@ class ContentCalendarDuplicateView(CompanyScopedMixin, APIView):
         item.source = ContentCalendarItem.Source.MANUAL
         item.created_by = request.user
         item.save()
-        return Response(ContentCalendarItemSerializer(item).data, status=status.HTTP_201_CREATED)
+        return Response(ContentCalendarItemSerializer(item, context={'request': request}).data, status=status.HTTP_201_CREATED)
 
 
 def _trigger_regeneration(item):
@@ -189,6 +189,28 @@ def _trigger_regeneration(item):
     item.save(update_fields=['regeneration_count', 'status', 'updated_at'])
 
 
+class ContentCalendarGenerateNowView(CompanyScopedMixin, APIView):
+    """Admin: start generation for a queued (Draft/Scheduled) calendar item right away,
+    instead of waiting for the next auto_generate_due_content sweep (Epic 22).
+    """
+
+    permission_classes = [IsAdmin]
+    serializer_class = ContentCalendarItemSerializer
+
+    def post(self, request, company_id, pk):
+        from .tasks import generate_now
+
+        company = self.get_company()
+        item = generics.get_object_or_404(ContentCalendarItem, pk=pk, company=company)
+        if item.status not in (ContentCalendarItem.Status.DRAFT, ContentCalendarItem.Status.SCHEDULED):
+            return Response(
+                {'detail': 'Only draft or scheduled content can be generated.'}, status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        item = generate_now(item)
+        return Response(ContentCalendarItemSerializer(item, context={'request': request}).data)
+
+
 class ContentCalendarApproveView(CompanyScopedMixin, APIView):
     """Client (or admin): approve a piece of content that's pending review (Epic 09: Approval)."""
 
@@ -213,7 +235,7 @@ class ContentCalendarApproveView(CompanyScopedMixin, APIView):
             url=f'/companies/{company.id}/calendar',
             company=company,
         )
-        return Response(ContentCalendarItemSerializer(item).data)
+        return Response(ContentCalendarItemSerializer(item, context={'request': request}).data)
 
 
 class ContentCalendarRejectView(CompanyScopedMixin, APIView):
@@ -251,7 +273,7 @@ class ContentCalendarRejectView(CompanyScopedMixin, APIView):
         if item.regeneration_count < 1:
             _trigger_regeneration(item)
 
-        return Response(ContentCalendarItemSerializer(item).data)
+        return Response(ContentCalendarItemSerializer(item, context={'request': request}).data)
 
 
 class ContentCalendarTemplateView(APIView):
