@@ -403,6 +403,18 @@ export default function CompanyDetailPage() {
         </div>
       )}
 
+      {isAdmin && (
+        <div className="card">
+          <div className="card-header">
+            <h2>Media library</h2>
+            <Link to={`/companies/${id}/media-library`} className="btn btn-primary">
+              Open media library
+            </Link>
+          </div>
+          <p className="page-subtitle">Browse brand assets, generated creatives and videos in one place.</p>
+        </div>
+      )}
+
       <div className="card">
         <div className="card-header">
           <h2>Content calendar</h2>

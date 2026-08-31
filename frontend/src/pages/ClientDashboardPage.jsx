@@ -6,6 +6,7 @@ import { selectVariation } from '../api/creativeGeneration'
 import { extractErrorMessage } from '../api/client'
 import Modal from '../components/Modal'
 import VariationGrid from '../components/VariationGrid'
+import ICONS from '../components/DashboardIcons'
 
 export default function ClientDashboardPage() {
   const [company, setCompany] = useState(null)
@@ -90,48 +91,63 @@ export default function ClientDashboardPage() {
   if (loadError && !company) return <div className="alert alert-error">{loadError}</div>
   if (!company) return null
 
+  const today = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })
+
   return (
     <div>
       <div className="page-header">
         <div>
           <h1>{company.name}</h1>
-          <p className="page-subtitle">Your content dashboard</p>
+          <p className="dashboard-greeting">{today} · your content dashboard</p>
         </div>
       </div>
 
       {loadError && <div className="alert alert-error">{loadError}</div>}
 
-      <div className="detail-grid">
-        <div className="card">
-          <div className="card-header">
-            <h2>Brand</h2>
+      {pendingItems.length > 0 && (
+        <>
+          <h2 className="dashboard-section-title">Needs your attention</h2>
+          <div className="stat-grid">
+            <div className="stat-tile stat-tile-warning">
+              <div className="stat-tile-icon">{ICONS.clock}</div>
+              <div className="stat-tile-body">
+                <div className="stat-tile-value">{pendingItems.length}</div>
+                <div className="stat-tile-label">Pending your approval</div>
+              </div>
+            </div>
           </div>
-          <p className="page-subtitle">Your logo, colors, guidelines and marketing information.</p>
+        </>
+      )}
+
+      <h2 className="dashboard-section-title">Quick links</h2>
+      <div className="quick-link-grid">
+        <div className="quick-link-card">
+          <div className="quick-link-icon">{ICONS.image}</div>
+          <h2>Brand</h2>
+          <p>Your logo, colors, guidelines and marketing information.</p>
           <Link to={`/companies/${company.id}/brand`} className="btn btn-primary">
             View brand
           </Link>
         </div>
-        <div className="card">
-          <div className="card-header">
-            <h2>Content calendar</h2>
-          </div>
-          <p className="page-subtitle">Everything planned for this month.</p>
+        <div className="quick-link-card">
+          <div className="quick-link-icon">{ICONS.calendar}</div>
+          <h2>Content calendar</h2>
+          <p>Everything planned for this month.</p>
           <Link to={`/companies/${company.id}/calendar`} className="btn btn-primary">
             View calendar
           </Link>
         </div>
-        <div className="card">
-          <div className="card-header">
-            <h2>AI strategy</h2>
-          </div>
-          <p className="page-subtitle">Brand context, content planning and strategy generated for you.</p>
+        <div className="quick-link-card">
+          <div className="quick-link-icon">{ICONS.sparkle}</div>
+          <h2>AI strategy</h2>
+          <p>Brand context, content planning and strategy generated for you.</p>
           <Link to={`/companies/${company.id}/ai-strategy`} className="btn btn-primary">
             View AI strategy
           </Link>
         </div>
       </div>
 
-      <div className="card">
+      <div className="card" style={{ marginTop: 28 }}>
         <div className="card-header">
           <h2>Pending your approval ({pendingItems.length})</h2>
         </div>

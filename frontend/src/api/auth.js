@@ -22,3 +22,20 @@ export async function fetchProfile() {
   const response = await apiClient.get('/auth/profile/')
   return response.data
 }
+
+export async function requestPasswordReset(email) {
+  const response = await apiClient.post('/auth/forgot-password/', { email })
+  return response.data
+}
+
+export async function resetPassword({ uid, token, newPassword }) {
+  const response = await apiClient.post('/auth/reset-password/', { uid, token, new_password: newPassword })
+  return response.data
+}
+
+export async function changePassword({ oldPassword, newPassword }) {
+  const response = await apiClient.post('/auth/change-password/', {
+    old_password: oldPassword, new_password: newPassword,
+  })
+  return response.data
+}

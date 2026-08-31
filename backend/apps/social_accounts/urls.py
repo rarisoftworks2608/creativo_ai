@@ -8,4 +8,5 @@ urlpatterns = [
     path('accounts/', views.SocialAccountListCreateView.as_view(), name='account-list-create'),
     path('accounts/<int:pk>/', views.SocialAccountDetailView.as_view(), name='account-detail'),
     path('accounts/<int:pk>/disconnect/', views.SocialAccountDisconnectView.as_view(), name='account-disconnect'),
+    path('accounts/<int:pk>/test-connection/', views.SocialAccountTestConnectionView.as_view(), name='account-test-connection'),
 ]

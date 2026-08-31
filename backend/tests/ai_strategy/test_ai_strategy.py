@@ -189,13 +189,39 @@ class StrategyOutputTests(BaseAiStrategyTestCase):
         response_all = self.client.get(list_url)
         self.assertEqual(response_all.data['count'], 2)
 
-    def test_client_cannot_generate_or_list(self):
+    def test_client_cannot_generate_but_can_list(self):
         self.authenticate_as('acmeclient@example.com', 'StrongPass123!')
         gen_url = reverse('ai_strategy:output-generate', kwargs={'company_id': self.company.pk, 'kind': 'content_ideas'})
         self.assertEqual(self.client.post(gen_url).status_code, status.HTTP_403_FORBIDDEN)
 
+        # Read-only access is allowed for the client (StrategyOutputListView's own docstring).
         list_url = reverse('ai_strategy:output-list', kwargs={'company_id': self.company.pk})
-        self.assertEqual(self.client.get(list_url).status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(self.client.get(list_url).status_code, status.HTTP_200_OK)
+
+    def test_client_cannot_delete(self):
+        self.authenticate_as('admin@example.com', 'StrongPass123!')
+        self.generate_brand_context()
+        with patch('apps.ai_strategy.views.get_provider') as mock_get_provider:
+            mock_get_provider.return_value = FakeProvider(CONTENT_IDEAS_RESULT)
+            gen_url = reverse('ai_strategy:output-generate', kwargs={'company_id': self.company.pk, 'kind': 'content_ideas'})
+            output_id = self.client.post(gen_url).data['id']
+
+        self.authenticate_as('acmeclient@example.com', 'StrongPass123!')
+        detail_url = reverse('ai_strategy:output-detail', kwargs={'company_id': self.company.pk, 'pk': output_id})
+        self.assertEqual(self.client.delete(detail_url).status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_admin_can_delete_a_history_entry(self):
+        self.authenticate_as('admin@example.com', 'StrongPass123!')
+        self.generate_brand_context()
+        with patch('apps.ai_strategy.views.get_provider') as mock_get_provider:
+            mock_get_provider.return_value = FakeProvider(CONTENT_IDEAS_RESULT)
+            gen_url = reverse('ai_strategy:output-generate', kwargs={'company_id': self.company.pk, 'kind': 'content_ideas'})
+            output_id = self.client.post(gen_url).data['id']
+
+        detail_url = reverse('ai_strategy:output-detail', kwargs={'company_id': self.company.pk, 'pk': output_id})
+        response = self.client.delete(detail_url)
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(StrategyOutput.objects.filter(pk=output_id).exists())
 
 
 class AnthropicProviderTests(TestCase):

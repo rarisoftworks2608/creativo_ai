@@ -3,6 +3,7 @@ import io
 from unittest.mock import patch
 
 from django.core import mail
+from django.test import override_settings
 from django.urls import reverse
 from PIL import Image
 from rest_framework import status
@@ -275,3 +276,33 @@ class ReminderTaskTests(BaseNotificationsTestCase):
         )
         sent = send_content_reminders()
         self.assertEqual(sent, 0)
+
+
+class NotificationEmailTests(BaseNotificationsTestCase):
+    """notify() mirrors an in-app notification as an email only when
+    SEND_NOTIFICATION_EMAILS is on (Epic 13: Notification Center - Email), which
+    defaults to off so this session's test/dev runs never send real mail."""
+
+    def test_email_not_sent_by_default(self):
+        notify(self.admin, Notification.NotificationType.REMINDER, 'Heads up', message='Something to check.')
+        self.assertEqual(len(mail.outbox), 0)
+
+    @override_settings(SEND_NOTIFICATION_EMAILS=True)
+    def test_email_sent_when_enabled(self):
+        notify(
+            self.client_user, Notification.NotificationType.CONTENT_APPROVED, 'Content approved',
+            message='Your content was approved.', url='/companies/1/calendar',
+        )
+        self.assertEqual(len(mail.outbox), 1)
+        sent = mail.outbox[0]
+        self.assertEqual(sent.to, ['client@example.com'])
+        self.assertEqual(sent.subject, 'Content approved')
+        self.assertIn('Your content was approved.', sent.body)
+        self.assertIn('/companies/1/calendar', sent.body)
+
+    @override_settings(SEND_NOTIFICATION_EMAILS=True)
+    @patch('common.emails.send_mail', side_effect=Exception('SMTP down'))
+    def test_email_failure_does_not_break_notification_creation(self, mock_send_mail):
+        notification = notify(self.admin, Notification.NotificationType.REMINDER, 'Still works')
+        self.assertIsNotNone(notification.pk)
+        self.assertTrue(mock_send_mail.called)

@@ -2,12 +2,14 @@ import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import NotificationBell from './NotificationBell'
+import ChangePasswordModal from './ChangePasswordModal'
 
 export default function Layout() {
   const { user, isAdmin, logout } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const [navOpen, setNavOpen] = useState(false)
+  const [showChangePassword, setShowChangePassword] = useState(false)
 
   useEffect(() => {
     setNavOpen(false)
@@ -27,19 +29,32 @@ export default function Layout() {
         </div>
         <nav className="sidebar-nav">
           {isAdmin ? (
-            <NavLink to="/companies" className={({ isActive }) => (isActive ? 'active' : '')} onClick={() => setNavOpen(false)}>
-              <span className="nav-icon" aria-hidden="true">
-                <svg viewBox="0 0 20 20" fill="none">
-                  <path
-                    d="M3 17V8.5L10 3l7 5.5V17a1 1 0 0 1-1 1h-3.5a.5.5 0 0 1-.5-.5V13a2 2 0 0 0-4 0v4.5a.5.5 0 0 1-.5.5H4a1 1 0 0 1-1-1Z"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-              </span>
-              Companies
-            </NavLink>
+            <>
+              <NavLink to="/dashboard" className={({ isActive }) => (isActive ? 'active' : '')} onClick={() => setNavOpen(false)}>
+                <span className="nav-icon" aria-hidden="true">
+                  <svg viewBox="0 0 20 20" fill="none">
+                    <path
+                      d="M3 17V8.5L10 3l7 5.5V17a1 1 0 0 1-1 1h-3.5a.5.5 0 0 1-.5-.5V13a2 2 0 0 0-4 0v4.5a.5.5 0 0 1-.5.5H4a1 1 0 0 1-1-1Z"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </span>
+                Dashboard
+              </NavLink>
+              <NavLink to="/companies" className={({ isActive }) => (isActive ? 'active' : '')} onClick={() => setNavOpen(false)}>
+                <span className="nav-icon" aria-hidden="true">
+                  <svg viewBox="0 0 20 20" fill="none">
+                    <rect x="3" y="3.5" width="6" height="6" rx="1" stroke="currentColor" strokeWidth="1.5" />
+                    <rect x="11" y="3.5" width="6" height="6" rx="1" stroke="currentColor" strokeWidth="1.5" />
+                    <rect x="3" y="11.5" width="6" height="6" rx="1" stroke="currentColor" strokeWidth="1.5" />
+                    <rect x="11" y="11.5" width="6" height="6" rx="1" stroke="currentColor" strokeWidth="1.5" />
+                  </svg>
+                </span>
+                Companies
+              </NavLink>
+            </>
           ) : (
             <NavLink to="/client" className={({ isActive }) => (isActive ? 'active' : '')} onClick={() => setNavOpen(false)}>
               <span className="nav-icon" aria-hidden="true">
@@ -112,6 +127,9 @@ export default function Layout() {
                 <div className="user-role">{user?.role}</div>
               </div>
             </div>
+            <button type="button" className="btn btn-ghost" onClick={() => setShowChangePassword(true)}>
+              Change password
+            </button>
             <button type="button" className="btn btn-ghost" onClick={handleLogout}>
               Log out
             </button>
@@ -122,6 +140,8 @@ export default function Layout() {
           <Outlet />
         </main>
       </div>
+
+      {showChangePassword && <ChangePasswordModal onClose={() => setShowChangePassword(false)} />}
     </div>
   )
 }

@@ -10,6 +10,7 @@ from common.permissions import IsAdmin
 
 from .models import BrandAsset, BrandProfile
 from .serializers import (
+    BrandAssetRenameSerializer,
     BrandAssetSerializer,
     BrandAssetUploadSerializer,
     BrandProfileSerializer,
@@ -140,15 +141,23 @@ class BrandAssetListCreateView(CompanyScopedMixin, AdminWriteMixin, generics.Lis
         return Response(BrandAssetSerializer(asset, context={'request': request}).data, status=status.HTTP_201_CREATED)
 
 
-class BrandAssetDetailView(CompanyScopedMixin, AdminWriteMixin, generics.RetrieveDestroyAPIView):
-    """View or delete a single brand asset."""
+class BrandAssetDetailView(CompanyScopedMixin, AdminWriteMixin, generics.RetrieveUpdateDestroyAPIView):
+    """View, rename, or delete a single brand asset."""
 
-    serializer_class = BrandAssetSerializer
     permission_classes = [IsAuthenticated]
     required_page = ClientProfile.Page.BRAND
 
+    def get_serializer_class(self):
+        if self.request.method in ('PUT', 'PATCH'):
+            return BrandAssetRenameSerializer
+        return BrandAssetSerializer
+
     def get_queryset(self):
         return BrandAsset.objects.filter(company=self.get_company())
+
+    def update(self, request, *args, **kwargs):
+        super().update(request, *args, **kwargs)
+        return Response(BrandAssetSerializer(self.get_object(), context=self.get_serializer_context()).data)
 
     def perform_destroy(self, instance):
         instance.file.delete(save=False)

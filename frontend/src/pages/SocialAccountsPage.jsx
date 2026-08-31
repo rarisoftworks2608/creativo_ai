@@ -4,6 +4,7 @@ import {
   connectSocialAccount,
   disconnectSocialAccount,
   listSocialAccounts,
+  testSocialAccountConnection,
   updateSocialAccount,
 } from '../api/socialAccounts'
 import { getCompany } from '../api/companies'
@@ -45,6 +46,8 @@ export default function SocialAccountsPage() {
   const [editError, setEditError] = useState('')
 
   const [disconnectingId, setDisconnectingId] = useState(null)
+  const [testingId, setTestingId] = useState(null)
+  const [testResult, setTestResult] = useState(null)
 
   const load = useCallback(async () => {
     if (!isAdmin) {
@@ -109,6 +112,20 @@ export default function SocialAccountsPage() {
       setEditError(extractErrorMessage(err, 'Could not save changes.'))
     } finally {
       setSavingEdit(false)
+    }
+  }
+
+  async function handleTestConnection(accountId) {
+    setTestingId(accountId)
+    setTestResult(null)
+    try {
+      const result = await testSocialAccountConnection(companyId, accountId)
+      setAccounts((prev) => prev.map((a) => (a.id === result.account.id ? result.account : a)))
+      setTestResult({ id: accountId, ok: result.account.status === 'connected', message: result.detail })
+    } catch (err) {
+      setTestResult({ id: accountId, ok: false, message: extractErrorMessage(err, 'Could not test this connection.') })
+    } finally {
+      setTestingId(null)
     }
   }
 
@@ -187,14 +204,29 @@ export default function SocialAccountsPage() {
                       Edit
                     </button>
                     {account.status !== 'disconnected' && (
-                      <button
-                        type="button"
-                        className="btn-link btn-link-danger"
-                        disabled={disconnectingId === account.id}
-                        onClick={() => handleDisconnect(account.id)}
-                      >
-                        Disconnect
-                      </button>
+                      <>
+                        <button
+                          type="button"
+                          className="btn-link"
+                          disabled={testingId === account.id}
+                          onClick={() => handleTestConnection(account.id)}
+                        >
+                          {testingId === account.id ? 'Testing…' : 'Test connection'}
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-link btn-link-danger"
+                          disabled={disconnectingId === account.id}
+                          onClick={() => handleDisconnect(account.id)}
+                        >
+                          Disconnect
+                        </button>
+                      </>
+                    )}
+                    {testResult?.id === account.id && (
+                      <div className={testResult.ok ? 'muted' : 'alert alert-error'} style={{ marginTop: 4 }}>
+                        {testResult.message}
+                      </div>
                     )}
                   </td>
                 </tr>

@@ -21,3 +21,7 @@ export async function generateStrategyOutput(companyId, kind, notes = '') {
   const response = await apiClient.post(`/companies/${companyId}/ai-strategy/outputs/generate/${kind}/`, { notes })
   return response.data
 }
+
+export async function deleteStrategyOutput(companyId, outputId) {
+  await apiClient.delete(`/companies/${companyId}/ai-strategy/outputs/${outputId}/`)
+}

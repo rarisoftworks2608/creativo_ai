@@ -5,13 +5,14 @@ video_generation, ...) depend on a small stable function surface instead of
 constructing Notification rows by hand.
 """
 
+from django.conf import settings
 from django.utils import timezone
 
 from .models import Notification
 
 
 def notify(recipient, notification_type, title, *, message='', url='', company=None, content_calendar_item=None):
-    return Notification.objects.create(
+    notification = Notification.objects.create(
         recipient=recipient,
         notification_type=notification_type,
         title=title,
@@ -20,6 +21,18 @@ def notify(recipient, notification_type, title, *, message='', url='', company=N
         company=company,
         content_calendar_item=content_calendar_item,
     )
+
+    if settings.SEND_NOTIFICATION_EMAILS:
+        # An email failure must never break notification creation - it's a mirror
+        # of the in-app notification, not the source of truth for it.
+        try:
+            from common.emails import send_notification_email
+
+            send_notification_email(recipient, title, message, url)
+        except Exception:  # noqa: BLE001 - deliberately broad, see comment above
+            pass
+
+    return notification
 
 
 def notify_admins(*, actor, notification_type, title, message='', url='', company=None):

@@ -5,6 +5,7 @@ import {
   getBrandProfile,
   listBrandAssets,
   removeBrandImage,
+  renameBrandAsset,
   updateBrandProfile,
   uploadBrandAsset,
   uploadBrandImage,
@@ -535,6 +536,9 @@ function AssetsSection({ companyId }) {
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState('')
   const [deletingId, setDeletingId] = useState(null)
+  const [renamingId, setRenamingId] = useState(null)
+  const [renameValue, setRenameValue] = useState('')
+  const [savingRename, setSavingRename] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -585,6 +589,25 @@ function AssetsSection({ companyId }) {
     }
   }
 
+  function startRename(asset) {
+    setRenamingId(asset.id)
+    setRenameValue(asset.name)
+  }
+
+  async function handleSaveRename(assetId) {
+    if (!renameValue.trim()) return
+    setSavingRename(true)
+    try {
+      const updated = await renameBrandAsset(companyId, assetId, renameValue.trim())
+      setAssets((prev) => prev.map((a) => (a.id === assetId ? updated : a)))
+      setRenamingId(null)
+    } catch (err) {
+      setError(extractErrorMessage(err, 'Could not rename this asset.'))
+    } finally {
+      setSavingRename(false)
+    }
+  }
+
   return (
     <div className="card">
       <div className="card-header">
@@ -625,19 +648,38 @@ function AssetsSection({ companyId }) {
                 )}
               </a>
               <div className="asset-meta">
-                <div className="asset-name" title={asset.name}>
-                  {asset.name}
-                </div>
+                {renamingId === asset.id ? (
+                  <input
+                    autoFocus
+                    value={renameValue}
+                    disabled={savingRename}
+                    onChange={(e) => setRenameValue(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleSaveRename(asset.id)
+                      if (e.key === 'Escape') setRenamingId(null)
+                    }}
+                    onBlur={() => handleSaveRename(asset.id)}
+                  />
+                ) : (
+                  <div className="asset-name" title={asset.name} onClick={() => startRename(asset)}>
+                    {asset.name}
+                  </div>
+                )}
                 <div className="asset-category">{ASSET_CATEGORIES.find((c) => c.value === asset.category)?.label}</div>
               </div>
-              <button
-                type="button"
-                className="btn-link btn-link-danger"
-                disabled={deletingId === asset.id}
-                onClick={() => handleDelete(asset.id)}
-              >
-                Delete
-              </button>
+              <div className="table-actions">
+                <button type="button" className="btn-link" onClick={() => startRename(asset)}>
+                  Rename
+                </button>
+                <button
+                  type="button"
+                  className="btn-link btn-link-danger"
+                  disabled={deletingId === asset.id}
+                  onClick={() => handleDelete(asset.id)}
+                >
+                  Delete
+                </button>
+              </div>
             </div>
           ))}
         </div>

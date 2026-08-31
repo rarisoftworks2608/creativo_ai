@@ -175,6 +175,43 @@ class BrandAssetTests(BaseBrandTestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data['count'], 1)
 
+    def test_admin_can_rename_asset(self):
+        self.authenticate_as('admin@example.com', 'StrongPass123!')
+        list_url = reverse('brand:brand-asset-list-create', kwargs={'company_id': self.company.pk})
+        created = self.client.post(list_url, {
+            'category': BrandAsset.Category.DOCUMENT, 'file': make_image_file('doc.png'),
+        }, format='multipart').data
+
+        detail_url = reverse('brand:brand-asset-detail', kwargs={'company_id': self.company.pk, 'pk': created['id']})
+        response = self.client.patch(detail_url, {'name': 'Signed contract'})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['name'], 'Signed contract')
+        self.assertEqual(BrandAsset.objects.get(pk=created['id']).name, 'Signed contract')
+
+    def test_blank_name_is_rejected(self):
+        self.authenticate_as('admin@example.com', 'StrongPass123!')
+        list_url = reverse('brand:brand-asset-list-create', kwargs={'company_id': self.company.pk})
+        created = self.client.post(list_url, {
+            'category': BrandAsset.Category.DOCUMENT, 'file': make_image_file('doc.png'),
+        }, format='multipart').data
+
+        detail_url = reverse('brand:brand-asset-detail', kwargs={'company_id': self.company.pk, 'pk': created['id']})
+        response = self.client.patch(detail_url, {'name': '   '})
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_client_cannot_rename_asset(self):
+        self.authenticate_as('admin@example.com', 'StrongPass123!')
+        list_url = reverse('brand:brand-asset-list-create', kwargs={'company_id': self.company.pk})
+        created = self.client.post(list_url, {
+            'category': BrandAsset.Category.DOCUMENT, 'file': make_image_file('doc.png'),
+        }, format='multipart').data
+        self.client.credentials()
+
+        self.authenticate_as('acmeclient@example.com', 'StrongPass123!')
+        detail_url = reverse('brand:brand-asset-detail', kwargs={'company_id': self.company.pk, 'pk': created['id']})
+        response = self.client.patch(detail_url, {'name': 'Hacked name'})
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
         response = self.client.post(list_url, {
             'category': BrandAsset.Category.DOCUMENT, 'file': make_image_file('doc2.png'),
         }, format='multipart')

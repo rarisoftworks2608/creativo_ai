@@ -1,3 +1,5 @@
+import re
+
 from rest_framework import generics, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -197,3 +199,126 @@ class CompanyClientDetailView(generics.RetrieveUpdateDestroyAPIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(ClientProfileSerializer(instance).data)
+
+
+IMAGE_EXTENSION_RE = re.compile(r'\.(png|jpe?g|gif|webp|svg)$', re.IGNORECASE)
+
+
+class AdminDashboardStatsView(APIView):
+    """Admin: aggregate stats for the admin dashboard landing page (Epic 14).
+
+    Publishing/subscription-status widgets from the epic's full wishlist are
+    intentionally left out - Epics 11 (Publishing) and 17 (Subscriptions) don't
+    exist yet, and fabricating numbers for features that aren't built would be
+    worse than just not showing them.
+    """
+
+    permission_classes = [IsAdmin]
+
+    def get(self, request):
+        from django.db.models import Sum
+
+        from apps.content_calendar.models import ContentCalendarItem
+        from apps.creative_generation.models import GenerationRequest
+        from apps.video_generation.models import VideoGenerationRequest
+
+        creative_succeeded = GenerationRequest.objects.filter(status=GenerationRequest.Status.SUCCEEDED).count()
+        video_succeeded = VideoGenerationRequest.objects.filter(status=VideoGenerationRequest.Status.SUCCEEDED).count()
+        creative_failed = GenerationRequest.objects.filter(status=GenerationRequest.Status.FAILED).count()
+        video_failed = VideoGenerationRequest.objects.filter(status=VideoGenerationRequest.Status.FAILED).count()
+        creative_cost = GenerationRequest.objects.aggregate(total=Sum('cost_usd'))['total'] or 0
+        video_cost = VideoGenerationRequest.objects.aggregate(total=Sum('cost_usd'))['total'] or 0
+
+        return Response({
+            'total_companies': Company.objects.count(),
+            'active_companies': Company.objects.filter(status=Company.Status.ACTIVE).count(),
+            'active_clients': ClientProfile.objects.filter(user__is_active=True).count(),
+            'content_generated': creative_succeeded + video_succeeded,
+            'pending_approvals': ContentCalendarItem.objects.filter(
+                status=ContentCalendarItem.Status.PENDING_APPROVAL,
+            ).count(),
+            'failed_generations': creative_failed + video_failed,
+            'ai_usage': {
+                'total_cost_usd': creative_cost + video_cost,
+                'creative_count': creative_succeeded,
+                'video_count': video_succeeded,
+            },
+        })
+
+
+class MediaLibraryView(APIView):
+    """Admin: a unified, read-mostly view across a company's media - brand assets,
+    generated creative variations, and generated videos (Epic 08: Media Library).
+
+    Only brand assets are renamable/deletable here (via the brand app's own
+    endpoints, linked by `source_id`) - generated creatives/videos are browse/download
+    only, since deleting one could corrupt approval history (an already-approved
+    item's selected variation, a video a client has already reviewed, ...).
+    """
+
+    permission_classes = [IsAdmin]
+
+    def get(self, request, company_id):
+        from apps.brand.models import BrandAsset
+        from apps.creative_generation.models import GenerationVariation
+        from apps.video_generation.models import VideoGenerationRequest
+
+        company = generics.get_object_or_404(Company, pk=company_id)
+        type_filter = request.query_params.get('type')
+        search = request.query_params.get('search', '').strip()
+
+        items = []
+
+        assets = BrandAsset.objects.filter(company=company)
+        if search:
+            assets = assets.filter(name__icontains=search)
+        for asset in assets:
+            is_image = bool(asset.file) and bool(IMAGE_EXTENSION_RE.search(asset.file.name))
+            url = request.build_absolute_uri(asset.file.url) if asset.file else ''
+            items.append({
+                'id': f'brand_asset-{asset.id}', 'source': 'brand_asset', 'source_id': asset.id,
+                'type': 'image' if is_image else 'document', 'name': asset.name,
+                'url': url, 'thumbnail_url': url if is_image else '',
+                'category': asset.get_category_display(), 'created_at': asset.created_at,
+                'renamable': True, 'deletable': True,
+            })
+
+        variations = GenerationVariation.objects.filter(
+            generation_request__company=company,
+        ).select_related('generation_request')
+        if search:
+            variations = variations.filter(caption__icontains=search)
+        for variation in variations:
+            if not variation.image:
+                continue
+            url = request.build_absolute_uri(variation.image.url)
+            name = variation.headline or (variation.caption[:60] if variation.caption else f'Variation {variation.variation_number}')
+            items.append({
+                'id': f'creative_variation-{variation.id}', 'source': 'creative_variation', 'source_id': variation.id,
+                'type': 'image', 'name': name, 'url': url, 'thumbnail_url': url,
+                'category': variation.generation_request.get_creative_type_display(), 'created_at': variation.created_at,
+                'renamable': False, 'deletable': False,
+            })
+
+        videos = VideoGenerationRequest.objects.filter(
+            company=company, status=VideoGenerationRequest.Status.SUCCEEDED,
+        )
+        if search:
+            videos = videos.filter(prompt_brief__icontains=search)
+        for video in videos:
+            if not video.video_file:
+                continue
+            items.append({
+                'id': f'video-{video.id}', 'source': 'video', 'source_id': video.id,
+                'type': 'video', 'name': video.prompt_brief.strip()[:60] or video.get_video_type_display(),
+                'url': request.build_absolute_uri(video.video_file.url),
+                'thumbnail_url': request.build_absolute_uri(video.thumbnail.url) if video.thumbnail else '',
+                'category': video.get_video_type_display(), 'created_at': video.created_at,
+                'renamable': False, 'deletable': False,
+            })
+
+        if type_filter:
+            items = [item for item in items if item['type'] == type_filter]
+        items.sort(key=lambda item: item['created_at'], reverse=True)
+
+        return Response({'count': len(items), 'results': items})

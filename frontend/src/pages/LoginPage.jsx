@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { extractErrorMessage } from '../api/client'
 
@@ -19,7 +19,7 @@ export default function LoginPage() {
     setSubmitting(true)
     try {
       const loggedInUser = await login(email, password)
-      const homePath = loggedInUser.role === 'admin' ? '/companies' : '/client'
+      const homePath = loggedInUser.role === 'admin' ? '/dashboard' : '/client'
       navigate(location.state?.from || homePath, { replace: true })
     } catch (err) {
       setError(extractErrorMessage(err, 'Invalid email or password.'))
@@ -102,6 +102,10 @@ export default function LoginPage() {
           <button type="submit" className="btn btn-primary btn-block auth-submit" disabled={submitting}>
             <span>{submitting ? 'Signing in…' : 'Sign in'}</span>
           </button>
+
+          <p className="auth-footer-link">
+            <Link to="/forgot-password">Forgot password?</Link>
+          </p>
         </form>
       </div>
     </div>

@@ -19,3 +19,8 @@ export async function disconnectSocialAccount(companyId, accountId) {
   const response = await apiClient.post(`/companies/${companyId}/social-accounts/accounts/${accountId}/disconnect/`)
   return response.data
 }
+
+export async function testSocialAccountConnection(companyId, accountId) {
+  const response = await apiClient.post(`/companies/${companyId}/social-accounts/accounts/${accountId}/test-connection/`)
+  return response.data
+}

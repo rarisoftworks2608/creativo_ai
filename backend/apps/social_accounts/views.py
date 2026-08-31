@@ -1,13 +1,25 @@
+import httpx
 from django.http import Http404
 from rest_framework import generics, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.companies.models import Company
+from common.crypto import decrypt_secret
 from common.permissions import IsAdmin
 
 from .models import SocialAccount
 from .serializers import SocialAccountConnectSerializer, SocialAccountSerializer
+
+# One lightweight "who am I" call per platform, used only to validate a stored
+# token actually still works (Epic 10: Account information / Connection errors) -
+# not a publishing call, so it needs no extra scopes beyond what a basic token grants.
+PLATFORM_TEST_ENDPOINTS = {
+    SocialAccount.Platform.INSTAGRAM: 'https://graph.facebook.com/v19.0/me',
+    SocialAccount.Platform.FACEBOOK: 'https://graph.facebook.com/v19.0/me',
+    SocialAccount.Platform.LINKEDIN: 'https://api.linkedin.com/v2/userinfo',
+}
+REQUEST_TIMEOUT_SECONDS = 15.0
 
 
 class CompanyScopedMixin:
@@ -89,3 +101,61 @@ class SocialAccountDisconnectView(CompanyScopedMixin, APIView):
         account.save(update_fields=['status', 'access_token', 'updated_at'])
 
         return Response(SocialAccountSerializer(account).data)
+
+
+class SocialAccountTestConnectionView(CompanyScopedMixin, APIView):
+    """Admin: validate a connected account's stored token against the real platform
+    (Epic 10: Account information / Connection errors). On success, refreshes
+    account_name/account_id from the platform's own response and marks the account
+    CONNECTED; on an auth failure marks it EXPIRED; any other error is reported
+    without changing status.
+    """
+
+    permission_classes = [IsAdmin]
+    serializer_class = SocialAccountSerializer
+
+    def post(self, request, company_id, pk):
+        company = self.get_company()
+        account = generics.get_object_or_404(SocialAccount, pk=pk, company=company)
+
+        token = decrypt_secret(account.access_token)
+        if not token:
+            return Response({'detail': 'No access token is stored for this account.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        endpoint = PLATFORM_TEST_ENDPOINTS[account.platform]
+        try:
+            if account.platform == SocialAccount.Platform.LINKEDIN:
+                response = httpx.get(
+                    endpoint, headers={'Authorization': f'Bearer {token}'}, timeout=REQUEST_TIMEOUT_SECONDS,
+                )
+            else:
+                response = httpx.get(
+                    endpoint, params={'fields': 'id,name', 'access_token': token}, timeout=REQUEST_TIMEOUT_SECONDS,
+                )
+        except httpx.HTTPError as exc:
+            return Response(
+                {'detail': f'Could not reach {account.get_platform_display()}: {exc}'},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
+        if response.status_code in (401, 403):
+            account.status = SocialAccount.Status.EXPIRED
+            account.save(update_fields=['status', 'updated_at'])
+            return Response({
+                'detail': 'This token was rejected by the platform - it has likely expired or been revoked.',
+                'account': SocialAccountSerializer(account).data,
+            })
+
+        if response.status_code >= 400:
+            return Response(
+                {'detail': f'{account.get_platform_display()} returned an error: {response.text[:300]}'},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
+        data = response.json()
+        account.account_name = data.get('name') or account.account_name
+        account.account_id = str(data.get('id') or data.get('sub') or account.account_id)
+        account.status = SocialAccount.Status.CONNECTED
+        account.save(update_fields=['account_name', 'account_id', 'status', 'updated_at'])
+
+        return Response({'detail': 'Connection is working.', 'account': SocialAccountSerializer(account).data})

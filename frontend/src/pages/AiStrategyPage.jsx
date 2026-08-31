@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
+  deleteStrategyOutput,
   generateBrandContext,
   generateStrategyOutput,
   getBrandContext,
@@ -253,6 +254,18 @@ function StrategyKindCard({ companyId, spec, enabled, canGenerate }) {
     }
   }
 
+  async function handleDelete(outputId) {
+    if (!window.confirm('Delete this generation? This cannot be undone.')) return
+    try {
+      await deleteStrategyOutput(companyId, outputId)
+      const remaining = history.filter((entry) => entry.id !== outputId)
+      setHistory(remaining)
+      if (latest?.id === outputId) setLatest(remaining[0] || null)
+    } catch (err) {
+      setError(extractErrorMessage(err, 'Could not delete this generation.'))
+    }
+  }
+
   return (
     <div className="card kind-card">
       <div className="card-header">
@@ -286,6 +299,11 @@ function StrategyKindCard({ companyId, spec, enabled, canGenerate }) {
               <p className="modal-hint">
                 {new Date(latest.created_at).toLocaleString()}
                 {latest.notes ? ` — "${latest.notes}"` : ''}
+                {canGenerate && (
+                  <button type="button" className="btn-link btn-link-danger" onClick={() => handleDelete(latest.id)}>
+                    Delete
+                  </button>
+                )}
               </p>
               <StrategyResultView result={latest.result} />
               {history.length > 1 && (
@@ -299,6 +317,11 @@ function StrategyKindCard({ companyId, spec, enabled, canGenerate }) {
                     <li key={entry.id}>
                       {new Date(entry.created_at).toLocaleString()}
                       {entry.notes ? ` — "${entry.notes}"` : ''}
+                      {canGenerate && (
+                        <button type="button" className="btn-link btn-link-danger" onClick={() => handleDelete(entry.id)}>
+                          Delete
+                        </button>
+                      )}
                     </li>
                   ))}
                 </ul>

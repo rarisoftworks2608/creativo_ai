@@ -224,6 +224,11 @@ EMAIL_USE_TLS = env.bool('EMAIL_USE_TLS', default=True)
 # (e.g. password reset links).
 FRONTEND_URL = env('FRONTEND_URL', default='http://localhost:5173')
 
+# Epic 13: Notification Center - Email. Off by default so notifications don't
+# start emailing real inboxes (EMAIL_HOST/EMAIL_HOST_PASSWORD above may already
+# be pointed at a live SMTP provider) until explicitly turned on per environment.
+SEND_NOTIFICATION_EMAILS = env.bool('SEND_NOTIFICATION_EMAILS', default=False)
+
 
 # AI text provider (Epic 05: AI Content Strategy)
 # 'anthropic' reads ANTHROPIC_API_KEY / 'groq' reads GROQ_API_KEY - both read
@@ -305,5 +310,9 @@ CELERY_BEAT_SCHEDULE = {
     'send-content-reminders': {
         'task': 'apps.notifications.tasks.send_content_reminders',
         'schedule': crontab(hour=9, minute=0),
+    },
+    'check-social-account-expiry': {
+        'task': 'apps.social_accounts.tasks.check_social_account_expiry',
+        'schedule': crontab(hour=8, minute=0),
     },
 }

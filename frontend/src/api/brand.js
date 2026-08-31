@@ -45,3 +45,8 @@ export async function uploadBrandAsset(companyId, { file, category, name }) {
 export async function deleteBrandAsset(companyId, assetId) {
   await apiClient.delete(`/companies/${companyId}/brand/assets/${assetId}/`)
 }
+
+export async function renameBrandAsset(companyId, assetId, name) {
+  const response = await apiClient.patch(`/companies/${companyId}/brand/assets/${assetId}/`, { name })
+  return response.data
+}

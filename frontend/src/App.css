@@ -223,6 +223,23 @@
   animation: authCardEnter 0.5s 0.1s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
+.auth-panel-single {
+  max-width: 440px;
+}
+
+.auth-footer-link {
+  margin-top: 20px;
+  text-align: center;
+  font-size: 13px;
+}
+.auth-footer-link a {
+  color: var(--accent);
+  text-decoration: none;
+}
+.auth-footer-link a:hover {
+  text-decoration: underline;
+}
+
 @keyframes authCardEnter {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
@@ -1041,6 +1058,135 @@
   gap: 14px;
 }
 
+/* ---------- Dashboard ---------- */
+
+.dashboard-greeting {
+  font-size: 14px;
+  color: var(--text);
+}
+.dashboard-section-title {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text);
+  opacity: 0.75;
+  margin: 28px 0 12px;
+}
+.dashboard-section-title:first-of-type {
+  margin-top: 0;
+}
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  margin-bottom: 8px;
+}
+.stat-tile {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+.stat-tile:hover {
+  box-shadow: var(--shadow);
+  transform: translateY(-1px);
+}
+.stat-tile-icon {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent-bg);
+  color: var(--accent);
+}
+.stat-tile-icon svg {
+  width: 20px;
+  height: 20px;
+}
+.stat-tile-body {
+  min-width: 0;
+}
+.stat-tile-value {
+  font-size: 30px;
+  font-weight: 600;
+  color: var(--text-h);
+  line-height: 1.15;
+  font-variant-numeric: proportional-nums;
+}
+.stat-tile-label {
+  margin-top: 2px;
+  font-size: 13px;
+  color: var(--text);
+}
+.stat-tile-warning .stat-tile-icon {
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+.stat-tile-danger .stat-tile-icon {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+.stat-tile-success .stat-tile-icon {
+  background: var(--success-bg);
+  color: var(--success);
+}
+
+.quick-link-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+  margin-bottom: 8px;
+}
+.quick-link-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 24px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+.quick-link-card:hover {
+  box-shadow: var(--shadow);
+  transform: translateY(-1px);
+}
+.quick-link-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent-bg);
+  color: var(--accent);
+  margin-bottom: 14px;
+}
+.quick-link-icon svg {
+  width: 22px;
+  height: 22px;
+}
+.quick-link-card h2 {
+  margin-bottom: 4px;
+}
+.quick-link-card p {
+  color: var(--text);
+  font-size: 14px;
+  margin-bottom: 18px;
+  flex-grow: 1;
+}
+
 /* ---------- Badges & progress ---------- */
 
 .badge {
@@ -1333,6 +1479,10 @@ textarea {
 .alert-error {
   background: var(--danger-bg);
   color: var(--danger);
+}
+.alert-success {
+  background: var(--success-bg);
+  color: var(--success);
 }
 
 .modal-hint {
@@ -1696,6 +1846,10 @@ textarea {
   align-items: center;
   justify-content: center;
   overflow: hidden;
+  border: none;
+  padding: 0;
+  width: 100%;
+  cursor: pointer;
 }
 
 .asset-thumb img {

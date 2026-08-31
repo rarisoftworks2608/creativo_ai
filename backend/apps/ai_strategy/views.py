@@ -111,14 +111,21 @@ class StrategyOutputListView(CompanyScopedMixin, generics.ListAPIView):
         return queryset
 
 
-class StrategyOutputDetailView(CompanyScopedMixin, generics.RetrieveAPIView):
+class StrategyOutputDetailView(CompanyScopedMixin, generics.RetrieveDestroyAPIView):
     """View a single past AI Planning / AI Strategy generation - admin or the owning
-    client, read-only for the client.
+    client, read-only for the client. Deleting a history entry is admin-only.
     """
 
     serializer_class = StrategyOutputSerializer
     permission_classes = [IsAuthenticated]
     required_page = ClientProfile.Page.AI_STRATEGY
+
+    def check_permissions(self, request):
+        super().check_permissions(request)
+        if request.method not in ('GET', 'HEAD', 'OPTIONS') and not (
+            request.user.is_authenticated and request.user.is_admin
+        ):
+            self.permission_denied(request, message='Only admins can delete a strategy generation.')
 
     def get_queryset(self):
         self.get_company()

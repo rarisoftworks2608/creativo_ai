@@ -91,6 +91,19 @@ class BrandAssetSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class BrandAssetRenameSerializer(serializers.ModelSerializer):
+    """Used by an Admin to rename a brand asset library entry."""
+
+    class Meta:
+        model = BrandAsset
+        fields = ['name']
+
+    def validate_name(self, value):
+        if not value.strip():
+            raise serializers.ValidationError('Name cannot be blank.')
+        return value.strip()
+
+
 class BrandAssetUploadSerializer(serializers.ModelSerializer):
     """Used by an Admin to upload a new file into the brand asset library."""
 

@@ -27,3 +27,24 @@ def send_client_welcome_email(user, plain_password):
         recipient_list=[user.email],
         fail_silently=True,
     )
+
+
+def send_notification_email(user, title, message='', url=''):
+    """Mirrors an in-app Notification as an email, gated behind
+    settings.SEND_NOTIFICATION_EMAILS (default off - see apps.notifications.services.notify).
+
+    fail_silently=True for the same reason as send_client_welcome_email: a broken
+    SMTP config must never block the in-app notification the caller already created.
+    """
+    body = message or title
+    if url:
+        link = f'{settings.FRONTEND_URL.rstrip("/")}{url if url.startswith("/") else f"/{url}"}'
+        body = f'{body}\n\nView it here: {link}'
+
+    send_mail(
+        subject=title,
+        message=body,
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        recipient_list=[user.email],
+        fail_silently=True,
+    )

@@ -30,6 +30,7 @@ class Notification(TimeStampedModel):
         COMPANY_CREATED = 'company_created', 'Company Created'
         CLIENT_ADDED = 'client_added', 'Client Added'
         ADMIN_ADDED = 'admin_added', 'Admin Added'
+        SOCIAL_TOKEN_EXPIRED = 'social_token_expired', 'Social Token Expired'
 
     recipient = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='notifications')
     company = models.ForeignKey(

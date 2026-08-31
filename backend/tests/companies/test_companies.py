@@ -1,9 +1,14 @@
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
 from apps.authentication.models import User
+from apps.brand.models import BrandAsset
 from apps.companies.models import ClientProfile, Company
+from apps.content_calendar.models import ContentCalendarItem
+from apps.creative_generation.models import GenerationRequest, GenerationVariation
+from apps.video_generation.models import VideoGenerationRequest
 
 
 class BaseCompanyTestCase(APITestCase):
@@ -215,3 +220,81 @@ class ClientAssignmentTests(BaseCompanyTestCase):
         self.assertFalse(ClientProfile.objects.filter(pk=self.company_profile.pk).exists())
         # The underlying login should still exist, just unlinked from the company.
         self.assertTrue(User.objects.filter(pk=self.company_user.pk).exists())
+
+
+class AdminDashboardStatsTests(BaseCompanyTestCase):
+    def test_admin_can_view_stats(self):
+        ContentCalendarItem.objects.create(
+            company=self.company, topic='Pending item', content_type='Static Post', platforms=['instagram'],
+            scheduled_date='2026-09-01', status=ContentCalendarItem.Status.PENDING_APPROVAL,
+        )
+        GenerationRequest.objects.create(
+            company=self.company, creative_type=GenerationRequest.CreativeType.INSTAGRAM_POST,
+            status=GenerationRequest.Status.SUCCEEDED,
+        )
+        GenerationRequest.objects.create(
+            company=self.company, creative_type=GenerationRequest.CreativeType.INSTAGRAM_POST,
+            status=GenerationRequest.Status.FAILED,
+        )
+
+        self.authenticate_as('admin@example.com', 'StrongPass123!')
+        response = self.client.get(reverse('companies:dashboard-stats'))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['total_companies'], 1)
+        self.assertEqual(response.data['pending_approvals'], 1)
+        self.assertEqual(response.data['content_generated'], 1)
+        self.assertEqual(response.data['failed_generations'], 1)
+        self.assertIn('ai_usage', response.data)
+
+    def test_client_cannot_view_stats(self):
+        self.authenticate_as('acmeclient@example.com', 'StrongPass123!')
+        response = self.client.get(reverse('companies:dashboard-stats'))
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+
+class MediaLibraryTests(BaseCompanyTestCase):
+    def media_library_url(self, company_id=None):
+        return reverse('companies:media-library', kwargs={'company_id': company_id or self.company.pk})
+
+    def test_aggregates_brand_assets_creatives_and_videos(self):
+        BrandAsset.objects.create(
+            company=self.company, category=BrandAsset.Category.LOGO_UPLOAD, name='Main logo',
+            file=SimpleUploadedFile('logo.png', b'fake-image-bytes', content_type='image/png'),
+            uploaded_by=self.admin,
+        )
+        generation_request = GenerationRequest.objects.create(
+            company=self.company, creative_type=GenerationRequest.CreativeType.INSTAGRAM_POST,
+            status=GenerationRequest.Status.SUCCEEDED,
+        )
+        GenerationVariation.objects.create(
+            generation_request=generation_request, variation_number=1, headline='Great headline',
+            image=SimpleUploadedFile('var1.png', b'fake-image-bytes', content_type='image/png'),
+        )
+        VideoGenerationRequest.objects.create(
+            company=self.company, video_type=VideoGenerationRequest.VideoType.INSTAGRAM_REEL,
+            status=VideoGenerationRequest.Status.SUCCEEDED,
+            video_file=SimpleUploadedFile('video.mp4', b'fake-video-bytes', content_type='video/mp4'),
+        )
+
+        self.authenticate_as('admin@example.com', 'StrongPass123!')
+        response = self.client.get(self.media_library_url())
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['count'], 3)
+        sources = {item['source'] for item in response.data['results']}
+        self.assertEqual(sources, {'brand_asset', 'creative_variation', 'video'})
+
+    def test_type_filter(self):
+        BrandAsset.objects.create(
+            company=self.company, category=BrandAsset.Category.DOCUMENT, name='Contract',
+            file=SimpleUploadedFile('contract.pdf', b'fake-pdf-bytes', content_type='application/pdf'),
+        )
+        self.authenticate_as('admin@example.com', 'StrongPass123!')
+        response = self.client.get(self.media_library_url(), {'type': 'video'})
+        self.assertEqual(response.data['count'], 0)
+
+    def test_client_cannot_access_media_library(self):
+        self.authenticate_as('acmeclient@example.com', 'StrongPass123!')
+        response = self.client.get(self.media_library_url())
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
