@@ -95,7 +95,18 @@ class MyCompanyView(generics.RetrieveAPIView):
             raise NotFound('No company is associated with this account.')
         if not self.request.user.is_admin and not profile.can_access(ClientProfile.Page.DASHBOARD):
             raise NotFound('No company is associated with this account.')
+        self._client_profile = profile
         return profile.company
+
+    def retrieve(self, request, *args, **kwargs):
+        """Adds `page_permissions` alongside the company data - the client dashboard
+        (Epic 01: Access Control) needs to know which of its own pages it can reach,
+        to only ever link to pages it's actually been granted, matching what an
+        admin configured on the Access Control page one-for-one.
+        """
+        response = super().retrieve(request, *args, **kwargs)
+        response.data['page_permissions'] = list(self._client_profile.page_permissions or [])
+        return response
 
 
 class CompanyStatusView(APIView):

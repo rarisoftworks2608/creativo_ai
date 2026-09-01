@@ -8,6 +8,37 @@ import Modal from '../components/Modal'
 import VariationGrid from '../components/VariationGrid'
 import ICONS from '../components/DashboardIcons'
 
+// Mirrors ClientProfile.Page on the backend (companies app) - only ever shows a
+// card for a page the admin actually granted on the Access Control page, so the
+// two stay in lockstep instead of this dashboard hardcoding its own subset.
+const QUICK_LINKS = [
+  {
+    key: 'brand', icon: 'image', title: 'Brand',
+    description: 'Your logo, colors, guidelines and marketing information.',
+    path: (id) => `/companies/${id}/brand`,
+  },
+  {
+    key: 'calendar', icon: 'calendar', title: 'Content calendar',
+    description: 'Everything planned for this month.',
+    path: (id) => `/companies/${id}/calendar`,
+  },
+  {
+    key: 'ai_strategy', icon: 'sparkle', title: 'AI strategy',
+    description: 'Brand context, content planning and strategy generated for you.',
+    path: (id) => `/companies/${id}/ai-strategy`,
+  },
+  {
+    key: 'creative_generation', icon: 'wand', title: 'Creative generation',
+    description: 'Review the AI-generated image creatives made for your brand.',
+    path: (id) => `/companies/${id}/creative-generation`,
+  },
+  {
+    key: 'video_generation', icon: 'video', title: 'Video generation',
+    description: 'Review the AI-generated videos and reels made for your brand.',
+    path: (id) => `/companies/${id}/video-generation`,
+  },
+]
+
 export default function ClientDashboardPage() {
   const [company, setCompany] = useState(null)
   const [pendingItems, setPendingItems] = useState([])
@@ -26,9 +57,16 @@ export default function ClientDashboardPage() {
     setLoadError('')
     try {
       const companyData = await getMyCompany()
-      const itemsData = await listCalendarItems(companyData.id, { status: 'pending_approval' })
       setCompany(companyData)
-      setPendingItems(itemsData.results)
+      // Only fetch pending approvals if the client actually has Calendar access -
+      // without it the backend 404s this call, which would otherwise take down
+      // the whole dashboard load over one missing permission.
+      if ((companyData.page_permissions || []).includes('calendar')) {
+        const itemsData = await listCalendarItems(companyData.id, { status: 'pending_approval' })
+        setPendingItems(itemsData.results)
+      } else {
+        setPendingItems([])
+      }
     } catch (err) {
       setLoadError(extractErrorMessage(err, 'Could not load your dashboard.'))
     } finally {
@@ -92,6 +130,7 @@ export default function ClientDashboardPage() {
   if (!company) return null
 
   const today = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })
+  const visibleLinks = QUICK_LINKS.filter((link) => (company.page_permissions || []).includes(link.key))
 
   return (
     <div>
@@ -120,32 +159,26 @@ export default function ClientDashboardPage() {
       )}
 
       <h2 className="dashboard-section-title">Quick links</h2>
-      <div className="quick-link-grid">
-        <div className="quick-link-card">
-          <div className="quick-link-icon">{ICONS.image}</div>
-          <h2>Brand</h2>
-          <p>Your logo, colors, guidelines and marketing information.</p>
-          <Link to={`/companies/${company.id}/brand`} className="btn btn-primary">
-            View brand
-          </Link>
+      {visibleLinks.length === 0 ? (
+        <div className="card">
+          <div className="empty-state">
+            <p>No pages have been enabled for your account yet - ask your account manager for access.</p>
+          </div>
         </div>
-        <div className="quick-link-card">
-          <div className="quick-link-icon">{ICONS.calendar}</div>
-          <h2>Content calendar</h2>
-          <p>Everything planned for this month.</p>
-          <Link to={`/companies/${company.id}/calendar`} className="btn btn-primary">
-            View calendar
-          </Link>
+      ) : (
+        <div className="quick-link-grid">
+          {visibleLinks.map((link) => (
+            <div className="quick-link-card" key={link.key}>
+              <div className="quick-link-icon">{ICONS[link.icon]}</div>
+              <h2>{link.title}</h2>
+              <p>{link.description}</p>
+              <Link to={link.path(company.id)} className="btn btn-primary">
+                View {link.title.toLowerCase()}
+              </Link>
+            </div>
+          ))}
         </div>
-        <div className="quick-link-card">
-          <div className="quick-link-icon">{ICONS.sparkle}</div>
-          <h2>AI strategy</h2>
-          <p>Brand context, content planning and strategy generated for you.</p>
-          <Link to={`/companies/${company.id}/ai-strategy`} className="btn btn-primary">
-            View AI strategy
-          </Link>
-        </div>
-      </div>
+      )}
 
       <div className="card" style={{ marginTop: 28 }}>
         <div className="card-header">

@@ -62,6 +62,19 @@ const ICONS = {
       <path d="M6 11.5h1.5M9.25 11.5h1.5M12.5 11.5H14M6 14.5h1.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
     </svg>
   ),
+  wand: (
+    <svg viewBox="0 0 20 20" fill="none">
+      <path d="M4 16 14 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      <path d="M12.5 4.5 14 3l1.5 1.5L14 6Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+      <path d="M3.5 4.5v2M2.5 5.5h2M15.5 12.5v2.5M14.25 13.75h2.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+    </svg>
+  ),
+  video: (
+    <svg viewBox="0 0 20 20" fill="none">
+      <rect x="2.5" y="5" width="10.5" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M13 8.3 17.5 6v8l-4.5-2.3" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+    </svg>
+  ),
 }
 
 export default ICONS

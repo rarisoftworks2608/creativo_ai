@@ -60,17 +60,17 @@ export default function VideoGenerationPage() {
   const pollRef = useRef(null)
 
   const load = useCallback(async () => {
-    if (!isAdmin) {
-      setLoading(false)
-      return
-    }
     setLoading(true)
     setLoadError('')
     try {
+      // Calendar item linkage and the queue are admin-only concerns (Access
+      // Control page's Calendar permission is separate from Video Generation) -
+      // skip that fetch for a client so a missing Calendar grant can't take down
+      // a page they otherwise do have access to.
       const [companyData, requestsData, calendarData] = await Promise.all([
         getCompany(companyId),
         listVideoRequests(companyId),
-        listCalendarItems(companyId),
+        isAdmin ? listCalendarItems(companyId) : Promise.resolve({ results: [] }),
       ])
       setCompany(companyData)
       setRequests(requestsData.results)
@@ -157,9 +157,6 @@ export default function VideoGenerationPage() {
     }
   }
 
-  if (!isAdmin) {
-    return <div className="alert alert-error">AI Video Generation is only available to admins.</div>
-  }
   if (loading) return <div className="page-loading">Loading…</div>
   if (loadError && !company) return <div className="alert alert-error">{loadError}</div>
   if (!company) return null
@@ -175,19 +172,23 @@ export default function VideoGenerationPage() {
           <h1>AI Video Generation</h1>
           <p className="page-subtitle">{company.name}</p>
         </div>
-        <button type="button" className="btn btn-primary" onClick={() => setShowCreate(true)}>
-          + New video
-        </button>
+        {isAdmin && (
+          <button type="button" className="btn btn-primary" onClick={() => setShowCreate(true)}>
+            + New video
+          </button>
+        )}
       </div>
 
       {loadError && <div className="alert alert-error">{loadError}</div>}
 
-      <ContentQueue
-        items={calendarItems.filter((item) => isVideoContentType(item.content_type))}
-        onGenerateNow={handleGenerateNow}
-        generatingId={generatingItemId}
-        emptyMessage="Nothing waiting in the calendar - planned reels/videos will appear here until they're generated."
-      />
+      {isAdmin && (
+        <ContentQueue
+          items={calendarItems.filter((item) => isVideoContentType(item.content_type))}
+          onGenerateNow={handleGenerateNow}
+          generatingId={generatingItemId}
+          emptyMessage="Nothing waiting in the calendar - planned reels/videos will appear here until they're generated."
+        />
+      )}
 
       {requests.length === 0 ? (
         <div className="card">
@@ -198,12 +199,12 @@ export default function VideoGenerationPage() {
       ) : (
         <div className="request-list">
           {requests.map((request) => (
-            <VideoRequestCard key={request.id} request={request} onRetry={() => handleRetry(request.id)} />
+            <VideoRequestCard key={request.id} request={request} canRetry={isAdmin} onRetry={() => handleRetry(request.id)} />
           ))}
         </div>
       )}
 
-      {showCreate && (
+      {isAdmin && showCreate && (
         <Modal title="New video generation" onClose={() => setShowCreate(false)} width={640}>
           <form onSubmit={handleCreate}>
             {createError && <div className="alert alert-error">{createError}</div>}
@@ -342,7 +343,7 @@ const IN_PROGRESS_MESSAGES = {
   rendering: 'Rendering the final video with FFmpeg…',
 }
 
-function VideoRequestCard({ request, onRetry }) {
+function VideoRequestCard({ request, canRetry, onRetry }) {
   const typeLabel = VIDEO_TYPES.find((t) => t.value === request.video_type)?.label || request.video_type
   const inProgress = IN_PROGRESS_STATUSES.includes(request.status)
 
@@ -371,9 +372,11 @@ function VideoRequestCard({ request, onRetry }) {
       {request.status === 'failed' && (
         <>
           <div className="alert alert-error">{request.error_message}</div>
-          <button type="button" className="btn btn-ghost" onClick={onRetry}>
-            Retry
-          </button>
+          {canRetry && (
+            <button type="button" className="btn btn-ghost" onClick={onRetry}>
+              Retry
+            </button>
+          )}
         </>
       )}
 

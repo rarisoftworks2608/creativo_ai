@@ -123,6 +123,18 @@ class MyCompanyTests(BaseCompanyTestCase):
         response = self.client.get(reverse('companies:my-company'))
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
+    def test_response_includes_the_clients_own_page_permissions(self):
+        self.company_profile.page_permissions = ['dashboard', 'calendar', 'video_generation']
+        self.company_profile.save(update_fields=['page_permissions'])
+
+        self.authenticate_as('acmeclient@example.com', 'StrongPass123!')
+        response = self.client.get(reverse('companies:my-company'))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            sorted(response.data['page_permissions']), ['calendar', 'dashboard', 'video_generation'],
+        )
+
 
 class OnboardingTests(BaseCompanyTestCase):
     def test_onboarding_incomplete_for_bare_company(self):
