@@ -10,6 +10,7 @@ from apps.content_calendar.models import ContentCalendarItem
 from apps.content_calendar.tasks import (
     _build_prompt_brief,
     _pick_creative_type,
+    _pick_platform,
     _pick_video_type,
     auto_generate_due_content,
 )
@@ -136,13 +137,37 @@ class CreativeTypeMappingTests(TestCase):
         item = make_item(self.company, content_type='Festival Creative', platforms=['facebook'])
         self.assertEqual(_pick_creative_type(item), GenerationRequest.CreativeType.FESTIVAL_CREATIVE)
 
-    def test_falls_back_to_linkedin_post_for_linkedin_platform(self):
+    def test_falls_back_to_generic_post_with_no_keyword_match(self):
         item = make_item(self.company, content_type='Static Post', platforms=['linkedin'])
-        self.assertEqual(_pick_creative_type(item), GenerationRequest.CreativeType.LINKEDIN_POST)
+        self.assertEqual(_pick_creative_type(item), GenerationRequest.CreativeType.POST)
 
-    def test_falls_back_to_instagram_post_by_default(self):
-        item = make_item(self.company, content_type='Static Post', platforms=[])
-        self.assertEqual(_pick_creative_type(item), GenerationRequest.CreativeType.INSTAGRAM_POST)
+    def test_pick_platform_prefers_linkedin(self):
+        item = make_item(self.company, platforms=['instagram', 'linkedin'])
+        self.assertEqual(_pick_platform(item), GenerationRequest.Platform.LINKEDIN)
+
+    def test_pick_platform_prefers_facebook_over_instagram(self):
+        item = make_item(self.company, platforms=['instagram', 'facebook'])
+        self.assertEqual(_pick_platform(item), GenerationRequest.Platform.FACEBOOK)
+
+    def test_pick_platform_instagram(self):
+        item = make_item(self.company, platforms=['instagram'])
+        self.assertEqual(_pick_platform(item), GenerationRequest.Platform.INSTAGRAM)
+
+    def test_pick_platform_falls_back_to_general(self):
+        item = make_item(self.company, platforms=[])
+        self.assertEqual(_pick_platform(item), GenerationRequest.Platform.GENERAL)
+
+    def test_educational_keyword_match(self):
+        item = make_item(self.company, content_type='Educational Post', platforms=['instagram'])
+        self.assertEqual(_pick_creative_type(item), GenerationRequest.CreativeType.EDUCATIONAL_CREATIVE)
+
+    def test_event_keyword_match(self):
+        item = make_item(self.company, content_type='Event Announcement', platforms=['instagram'])
+        self.assertEqual(_pick_creative_type(item), GenerationRequest.CreativeType.EVENT_CREATIVE)
+
+    def test_testimonial_keyword_match(self):
+        item = make_item(self.company, content_type='Testimonial Post', platforms=['instagram'])
+        self.assertEqual(_pick_creative_type(item), GenerationRequest.CreativeType.TESTIMONIAL_CREATIVE)
 
     def test_video_type_keyword_match(self):
         item = make_item(self.company, content_type='Short educational video', platforms=['instagram'])

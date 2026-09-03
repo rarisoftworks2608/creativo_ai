@@ -131,6 +131,29 @@ class GenerationRequestCreateTests(BaseCreativeGenerationTestCase):
         self.calendar_item.refresh_from_db()
         self.assertEqual(self.calendar_item.status, ContentCalendarItem.Status.PENDING_APPROVAL)
 
+    @patch('apps.creative_generation.tasks.get_text_provider')
+    @patch('apps.creative_generation.tasks.get_image_provider')
+    def test_platform_is_independent_of_creative_type(self, mock_get_image, mock_get_text):
+        mock_get_image.return_value = FakeImageProvider()
+        mock_get_text.return_value = FakeTextProvider()
+
+        response = self.create_request(creative_type=GenerationRequest.CreativeType.FESTIVAL_CREATIVE, platform='linkedin')
+
+        self.assertEqual(response.status_code, status.HTTP_202_ACCEPTED)
+        self.assertEqual(response.data['platform'], 'linkedin')
+        self.assertEqual(response.data['creative_type'], 'festival_creative')
+        request_obj = GenerationRequest.objects.get(pk=response.data['id'])
+        self.assertEqual(request_obj.platform, 'linkedin')
+
+    @patch('apps.creative_generation.tasks.get_text_provider')
+    @patch('apps.creative_generation.tasks.get_image_provider')
+    def test_platform_defaults_to_general_when_omitted(self, mock_get_image, mock_get_text):
+        mock_get_image.return_value = FakeImageProvider()
+        mock_get_text.return_value = FakeTextProvider()
+
+        response = self.create_request()
+        self.assertEqual(response.data['platform'], 'general')
+
     @override_settings(AI_IMAGE_COST_PER_IMAGE_USD='0.05')
     @patch('apps.creative_generation.tasks.get_text_provider')
     @patch('apps.creative_generation.tasks.get_image_provider')

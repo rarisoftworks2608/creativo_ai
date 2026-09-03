@@ -17,14 +17,28 @@ class GenerationRequest(TimeStampedModel):
     """A single request to generate creative variations (Epic 06: Generation Management)."""
 
     class CreativeType(models.TextChoices):
+        # Legacy: these three used to bundle a platform + generic "post" format
+        # together. Kept only so existing rows still display/validate correctly -
+        # new generations use POST + the separate `platform` field below instead.
         INSTAGRAM_POST = 'instagram_post', 'Instagram Post'
         FACEBOOK_POST = 'facebook_post', 'Facebook Post'
         LINKEDIN_POST = 'linkedin_post', 'LinkedIn Post'
+        POST = 'post', 'Post'
         CAROUSEL = 'carousel', 'Carousel'
         STORY = 'story', 'Story'
         PROMOTIONAL_CREATIVE = 'promotional_creative', 'Promotional Creative'
         FESTIVAL_CREATIVE = 'festival_creative', 'Festival Creative'
         PRODUCT_CREATIVE = 'product_creative', 'Product Creative'
+        EDUCATIONAL_CREATIVE = 'educational_creative', 'Educational Creative'
+        EVENT_CREATIVE = 'event_creative', 'Event Creative'
+        ANNOUNCEMENT_CREATIVE = 'announcement_creative', 'Announcement Creative'
+        TESTIMONIAL_CREATIVE = 'testimonial_creative', 'Testimonial Creative'
+
+    class Platform(models.TextChoices):
+        INSTAGRAM = 'instagram', 'Instagram'
+        FACEBOOK = 'facebook', 'Facebook'
+        LINKEDIN = 'linkedin', 'LinkedIn'
+        GENERAL = 'general', 'General / Multi-platform'
 
     class Status(models.TextChoices):
         PENDING = 'pending', 'Pending'
@@ -39,6 +53,11 @@ class GenerationRequest(TimeStampedModel):
     )
 
     creative_type = models.CharField(max_length=30, choices=CreativeType.choices)
+    platform = models.CharField(
+        max_length=15, choices=Platform.choices, default=Platform.GENERAL,
+        help_text='Which platform this creative is being made for - independent of creative_type '
+                  '(a Festival Creative can be for Instagram, Facebook, or LinkedIn).',
+    )
     prompt_brief = models.TextField(blank=True, help_text='Visual brief / instructions for this generation.')
     product_info = models.TextField(blank=True, help_text='Product information to ground the generation.')
 

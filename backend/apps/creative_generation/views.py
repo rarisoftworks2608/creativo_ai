@@ -13,15 +13,6 @@ from .models import GenerationRequest, GenerationVariation
 from .serializers import GenerationRequestCreateSerializer, GenerationRequestSerializer
 from .tasks import generate_creative_variations
 
-# Best-guess platform for an ad-hoc generation's auto-created calendar item
-# (see _link_adhoc_calendar_item) - only used for the item's `platforms` list,
-# it has no effect on which provider/prompt actually generates the creative.
-PLATFORM_BY_CREATIVE_TYPE = {
-    GenerationRequest.CreativeType.FACEBOOK_POST: 'facebook',
-    GenerationRequest.CreativeType.LINKEDIN_POST: 'linkedin',
-}
-
-
 def _link_adhoc_calendar_item(generation_request, user):
     """A generation started without picking a content calendar item (the
     CreativeGenerationPage "None (ad-hoc generation)" option) still needs a
@@ -32,7 +23,14 @@ def _link_adhoc_calendar_item(generation_request, user):
     """
     from apps.content_calendar.models import ContentCalendarItem
 
-    platform = PLATFORM_BY_CREATIVE_TYPE.get(generation_request.creative_type, 'instagram')
+    # The calendar item's own `platforms` list is separate from the generation's
+    # `platform` field, but for an auto-created item they should agree - "general"
+    # (multi-platform) maps to Instagram as the calendar's default.
+    platform = (
+        generation_request.platform
+        if generation_request.platform != GenerationRequest.Platform.GENERAL
+        else ContentCalendarItem.Platform.INSTAGRAM
+    )
     topic = generation_request.prompt_brief.strip()[:255] or generation_request.get_creative_type_display()
 
     calendar_item = ContentCalendarItem.objects.create(

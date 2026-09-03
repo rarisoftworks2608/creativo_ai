@@ -15,20 +15,36 @@ import VariationGrid from '../components/VariationGrid'
 import ContentQueue from '../components/ContentQueue'
 import { isVideoContentType } from '../utils/contentType'
 
+// Legacy platform-bundled types (instagram_post/facebook_post/linkedin_post) are
+// deliberately not offered here anymore - platform is now its own field (PLATFORMS
+// below) so it can be combined with any creative type, e.g. an Instagram Festival
+// Creative or a LinkedIn Announcement Creative. Old requests still display fine
+// via the backend's legacy CreativeType choices.
 const CREATIVE_TYPES = [
-  { value: 'instagram_post', label: 'Instagram Post' },
-  { value: 'facebook_post', label: 'Facebook Post' },
-  { value: 'linkedin_post', label: 'LinkedIn Post' },
+  { value: 'post', label: 'Post' },
   { value: 'carousel', label: 'Carousel' },
   { value: 'story', label: 'Story' },
   { value: 'promotional_creative', label: 'Promotional Creative' },
   { value: 'festival_creative', label: 'Festival Creative' },
   { value: 'product_creative', label: 'Product Creative' },
+  { value: 'educational_creative', label: 'Educational Creative' },
+  { value: 'event_creative', label: 'Event Creative' },
+  { value: 'announcement_creative', label: 'Announcement Creative' },
+  { value: 'testimonial_creative', label: 'Testimonial Creative' },
+]
+
+const PLATFORMS = [
+  { value: 'instagram', label: 'Instagram' },
+  { value: 'facebook', label: 'Facebook' },
+  { value: 'linkedin', label: 'LinkedIn' },
+  { value: 'general', label: 'General / Multi-platform' },
 ]
 
 const IN_PROGRESS_STATUSES = ['pending', 'queued', 'processing']
 
-const EMPTY_FORM = { creative_type: 'instagram_post', content_calendar_item: '', prompt_brief: '', product_info: '' }
+const EMPTY_FORM = {
+  creative_type: 'post', platform: 'instagram', content_calendar_item: '', prompt_brief: '', product_info: '',
+}
 
 export default function CreativeGenerationPage() {
   const { id: companyId } = useParams()
@@ -209,20 +225,36 @@ export default function CreativeGenerationPage() {
         <Modal title="New creative generation" onClose={() => setShowCreate(false)}>
           <form onSubmit={handleCreate}>
             {createError && <div className="alert alert-error">{createError}</div>}
-            <label className="field">
-              <span>Creative type *</span>
-              <select
-                value={form.creative_type}
-                onChange={(e) => setForm((p) => ({ ...p, creative_type: e.target.value }))}
-                required
-              >
-                {CREATIVE_TYPES.map((t) => (
-                  <option key={t.value} value={t.value}>
-                    {t.label}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <div className="field-row">
+              <label className="field">
+                <span>Platform *</span>
+                <select
+                  value={form.platform}
+                  onChange={(e) => setForm((p) => ({ ...p, platform: e.target.value }))}
+                  required
+                >
+                  {PLATFORMS.map((p) => (
+                    <option key={p.value} value={p.value}>
+                      {p.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                <span>Creative type *</span>
+                <select
+                  value={form.creative_type}
+                  onChange={(e) => setForm((p) => ({ ...p, creative_type: e.target.value }))}
+                  required
+                >
+                  {CREATIVE_TYPES.map((t) => (
+                    <option key={t.value} value={t.value}>
+                      {t.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
             <label className="field">
               <span>Content calendar item</span>
               <select
@@ -280,14 +312,18 @@ const STATUS_LABELS = {
 }
 
 function RequestCard({ request, canRetry, onRetry, onSelectVariation }) {
-  const typeLabel = CREATIVE_TYPES.find((t) => t.value === request.creative_type)?.label || request.creative_type
+  const typeLabel = request.creative_type_display
+    || CREATIVE_TYPES.find((t) => t.value === request.creative_type)?.label
+    || request.creative_type
+  const platformLabel = request.platform_display
+    || PLATFORMS.find((p) => p.value === request.platform)?.label
   const inProgress = IN_PROGRESS_STATUSES.includes(request.status)
 
   return (
     <div className="card request-card">
       <div className="card-header">
         <div>
-          <h2>{typeLabel}</h2>
+          <h2>{platformLabel ? `${platformLabel} · ${typeLabel}` : typeLabel}</h2>
           <p className="page-subtitle">
             {new Date(request.created_at).toLocaleString()}
             {request.retry_count > 0 ? ` · retried ${request.retry_count}×` : ''}

@@ -79,11 +79,12 @@ def generate_creative_variations(self, generation_request_id):
     image_count = 0
     for variation_number in range(1, VARIATIONS_PER_REQUEST + 1):
         image_prompt = prompts.build_image_prompt(
-            company, brand_profile, request.creative_type, request.prompt_brief, request.product_info,
-            variation_number,
+            company, brand_profile, request.creative_type, request.platform, request.prompt_brief,
+            request.product_info, variation_number,
         )
         copy_prompt = prompts.build_copy_prompt(
-            company, brand_profile, brand_context, request.creative_type, request.prompt_brief, request.product_info,
+            company, brand_profile, brand_context, request.creative_type, request.platform,
+            request.prompt_brief, request.product_info,
         )
 
         try:

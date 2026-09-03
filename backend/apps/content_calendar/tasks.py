@@ -28,6 +28,11 @@ CREATIVE_TYPE_KEYWORDS = [
     ('festival', GenerationRequest.CreativeType.FESTIVAL_CREATIVE),
     ('product', GenerationRequest.CreativeType.PRODUCT_CREATIVE),
     ('promo', GenerationRequest.CreativeType.PROMOTIONAL_CREATIVE),
+    ('educational', GenerationRequest.CreativeType.EDUCATIONAL_CREATIVE),
+    ('how-to', GenerationRequest.CreativeType.EDUCATIONAL_CREATIVE),
+    ('event', GenerationRequest.CreativeType.EVENT_CREATIVE),
+    ('announcement', GenerationRequest.CreativeType.ANNOUNCEMENT_CREATIVE),
+    ('testimonial', GenerationRequest.CreativeType.TESTIMONIAL_CREATIVE),
 ]
 
 VIDEO_TYPE_KEYWORDS = [
@@ -45,15 +50,23 @@ def _is_video(content_type):
 
 
 def _pick_creative_type(item):
+    """Format/content-category only - platform is a separate GenerationRequest field
+    now (see _pick_platform), not bundled into the type itself."""
     normalized = (item.content_type or '').lower()
     for keyword, creative_type in CREATIVE_TYPE_KEYWORDS:
         if keyword in normalized:
             return creative_type
+    return GenerationRequest.CreativeType.POST
+
+
+def _pick_platform(item):
     if 'linkedin' in item.platforms:
-        return GenerationRequest.CreativeType.LINKEDIN_POST
+        return GenerationRequest.Platform.LINKEDIN
     if 'facebook' in item.platforms:
-        return GenerationRequest.CreativeType.FACEBOOK_POST
-    return GenerationRequest.CreativeType.INSTAGRAM_POST
+        return GenerationRequest.Platform.FACEBOOK
+    if 'instagram' in item.platforms:
+        return GenerationRequest.Platform.INSTAGRAM
+    return GenerationRequest.Platform.GENERAL
 
 
 def _pick_video_type(item):
@@ -95,7 +108,7 @@ def generate_now(item):
     else:
         generation_request = GenerationRequest.objects.create(
             company=item.company, content_calendar_item=item,
-            creative_type=_pick_creative_type(item), prompt_brief=prompt_brief,
+            creative_type=_pick_creative_type(item), platform=_pick_platform(item), prompt_brief=prompt_brief,
         )
         _enqueue_creative(generation_request)
 
