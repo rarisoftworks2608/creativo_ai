@@ -133,6 +133,36 @@ class GenerationRequestCreateTests(BaseCreativeGenerationTestCase):
 
     @patch('apps.creative_generation.tasks.get_text_provider')
     @patch('apps.creative_generation.tasks.get_image_provider')
+    def test_variation_count_controls_how_many_get_generated(self, mock_get_image, mock_get_text):
+        mock_get_image.return_value = FakeImageProvider()
+        mock_get_text.return_value = FakeTextProvider()
+
+        response = self.create_request(variation_count=1)
+
+        self.assertEqual(response.status_code, status.HTTP_202_ACCEPTED)
+        self.assertEqual(response.data['variation_count'], 1)
+        request_obj = GenerationRequest.objects.get(pk=response.data['id'])
+        self.assertEqual(request_obj.variations.count(), 1)
+        self.assertEqual(request_obj.usage['images_generated'], 1)
+
+    @patch('apps.creative_generation.tasks.get_text_provider')
+    @patch('apps.creative_generation.tasks.get_image_provider')
+    def test_variation_count_defaults_to_three(self, mock_get_image, mock_get_text):
+        mock_get_image.return_value = FakeImageProvider()
+        mock_get_text.return_value = FakeTextProvider()
+
+        response = self.create_request()
+        self.assertEqual(response.data['variation_count'], 3)
+
+    def test_variation_count_out_of_range_is_rejected(self):
+        response = self.create_request(variation_count=5)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+        response = self.create_request(variation_count=0)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    @patch('apps.creative_generation.tasks.get_text_provider')
+    @patch('apps.creative_generation.tasks.get_image_provider')
     def test_platform_is_independent_of_creative_type(self, mock_get_image, mock_get_text):
         mock_get_image.return_value = FakeImageProvider()
         mock_get_text.return_value = FakeTextProvider()

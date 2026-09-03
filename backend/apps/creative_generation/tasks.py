@@ -20,8 +20,6 @@ from .schemas import COPY_SCHEMA
 
 MIME_EXTENSIONS = {'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp'}
 
-VARIATIONS_PER_REQUEST = 3
-
 
 def _fail(request, message):
     request.status = GenerationRequest.Status.FAILED
@@ -35,7 +33,9 @@ def _fail(request, message):
 
 @shared_task(bind=True)
 def generate_creative_variations(self, generation_request_id):
-    """Generates 3 image + copy variations for a GenerationRequest (Epic 06: Generation Management)."""
+    """Generates `request.variation_count` image + copy variations for a GenerationRequest
+    (Epic 06: Generation Management) - 1-3, admin-selectable to save AI credits while testing.
+    """
     try:
         request = GenerationRequest.objects.select_related('company', 'content_calendar_item').get(
             pk=generation_request_id,
@@ -77,10 +77,10 @@ def generate_creative_variations(self, generation_request_id):
     request.variations.all().delete()
 
     image_count = 0
-    for variation_number in range(1, VARIATIONS_PER_REQUEST + 1):
+    for variation_number in range(1, request.variation_count + 1):
         image_prompt = prompts.build_image_prompt(
             company, brand_profile, request.creative_type, request.platform, request.prompt_brief,
-            request.product_info, variation_number,
+            request.product_info, variation_number, request.variation_count,
         )
         copy_prompt = prompts.build_copy_prompt(
             company, brand_profile, brand_context, request.creative_type, request.platform,

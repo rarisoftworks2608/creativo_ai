@@ -50,9 +50,17 @@ def _brand_lines(brand_profile):
     ]
 
 
-def build_image_prompt(company, brand_profile, creative_type, platform, prompt_brief, product_info, variation_number):
+def build_image_prompt(
+    company, brand_profile, creative_type, platform, prompt_brief, product_info, variation_number, variation_count=3,
+):
     format_guidance = CREATIVE_TYPE_GUIDANCE.get(creative_type, 'A social media creative.')
     platform_guidance = PLATFORM_GUIDANCE.get(platform, PLATFORM_GUIDANCE['general'])
+    variation_note = (
+        f'This is variation {variation_number} of {variation_count} - make it visually distinct from the '
+        'other variations while staying on-brand.'
+        if variation_count > 1 else
+        'Make this the single best possible on-brand variation.'
+    )
     lines = [
         f'Create a polished, on-brand marketing creative for "{company.name}" ({company.industry or "general business"}).',
         # Stated early (models weight earlier instructions more heavily, especially
@@ -62,18 +70,23 @@ def build_image_prompt(company, brand_profile, creative_type, platform, prompt_b
         # prompt for suppressing hallucinated logos/watermarks/brand text, which is
         # otherwise the most common failure mode of cheaper image models.
         'CRITICAL: Do not render any words, letters, numbers, logos, watermarks, brand marks, '
-        'emblems, or badges anywhere in the image - no signage, no packaging text, no clothing '
-        'text, no invented company names, in any language or script. Produce a clean photographic '
-        'visual only. The real headline, CTA text, and real brand logo are composited on '
-        'afterward from separately-generated, guaranteed-accurate assets, so anything you render '
-        'yourself here would only ever be redundant or, worse, misspelled/fake.',
+        'emblems, or badges anywhere in the image, in any language or script. This includes '
+        'background/environmental text, not just foreground branding - no banners, hoardings, '
+        'posters, flex boards, shop signs, street signs, flags with text, or writing on clothing '
+        'anywhere in the scene, even blurred or far in the background. A real event photo is full '
+        'of exactly this kind of signage, so actively simplify the environment instead of '
+        'reproducing it: use a plain wall, open sky, soft bokeh crowd, or fabric/decoration '
+        'backdrop with no printed text on it, rather than a realistic cluttered street backdrop. '
+        'Produce a clean photographic visual only. The real headline, CTA text, and real brand '
+        'logo are composited on afterward from separately-generated, guaranteed-accurate assets, '
+        'so anything you render yourself here would only ever be redundant or, worse, '
+        'misspelled/fake.',
         format_guidance,
         platform_guidance,
         f'Creative brief: {prompt_brief or "Use your best judgement based on the brand context below."}',
         f'Product information: {product_info or _joined(company.products, empty="not specified")}',
         *_brand_lines(brand_profile),
-        f'This is variation {variation_number} of 3 - make it visually distinct from the other variations '
-        'while staying on-brand.',
+        variation_note,
         'Photorealistic, shot on a professional camera - natural skin texture, realistic fabric '
         'and lighting, shallow depth of field, no illustration/cartoon/painterly/3D-render look.',
         'Compose the shot so the bottom of the frame (roughly the lower third) is naturally '

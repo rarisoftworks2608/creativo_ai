@@ -177,7 +177,7 @@ def _trigger_regeneration(item):
     elif last_creative is not None:
         generation_request = GenerationRequest.objects.create(
             company=item.company, content_calendar_item=item, creative_type=last_creative.creative_type,
-            platform=last_creative.platform,
+            platform=last_creative.platform, variation_count=last_creative.variation_count,
             prompt_brief=f'{last_creative.prompt_brief}\n\n{feedback_note}'.strip(),
             product_info=last_creative.product_info,
         )

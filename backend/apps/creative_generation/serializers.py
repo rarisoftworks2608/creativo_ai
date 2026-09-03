@@ -22,8 +22,9 @@ class GenerationRequestSerializer(serializers.ModelSerializer):
         model = GenerationRequest
         fields = [
             'id', 'company', 'content_calendar_item', 'creative_type', 'creative_type_display',
-            'platform', 'platform_display', 'prompt_brief', 'product_info', 'status', 'error_message',
-            'retry_count', 'model_used', 'usage', 'cost_usd', 'created_by', 'created_at', 'updated_at', 'variations',
+            'platform', 'platform_display', 'variation_count', 'prompt_brief', 'product_info', 'status',
+            'error_message', 'retry_count', 'model_used', 'usage', 'cost_usd', 'created_by', 'created_at',
+            'updated_at', 'variations',
         ]
         read_only_fields = fields
 
@@ -31,7 +32,10 @@ class GenerationRequestSerializer(serializers.ModelSerializer):
 class GenerationRequestCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = GenerationRequest
-        fields = ['id', 'content_calendar_item', 'creative_type', 'platform', 'prompt_brief', 'product_info']
+        fields = [
+            'id', 'content_calendar_item', 'creative_type', 'platform', 'variation_count',
+            'prompt_brief', 'product_info',
+        ]
         read_only_fields = ['id']
 
     def validate_content_calendar_item(self, item):
@@ -39,3 +43,8 @@ class GenerationRequestCreateSerializer(serializers.ModelSerializer):
         if item is not None and item.company_id != company.id:
             raise serializers.ValidationError('This content calendar item does not belong to this company.')
         return item
+
+    def validate_variation_count(self, value):
+        if not 1 <= value <= 3:
+            raise serializers.ValidationError('variation_count must be between 1 and 3.')
+        return value

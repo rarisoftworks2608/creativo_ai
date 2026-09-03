@@ -60,6 +60,9 @@ class GenerationRequest(TimeStampedModel):
     )
     prompt_brief = models.TextField(blank=True, help_text='Visual brief / instructions for this generation.')
     product_info = models.TextField(blank=True, help_text='Product information to ground the generation.')
+    variation_count = models.PositiveSmallIntegerField(
+        default=3, help_text='How many variations to generate (1-3) - lower it while testing to save AI credits.',
+    )
 
     status = models.CharField(max_length=15, choices=Status.choices, default=Status.PENDING)
     error_message = models.TextField(blank=True)

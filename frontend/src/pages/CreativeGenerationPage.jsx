@@ -40,10 +40,16 @@ const PLATFORMS = [
   { value: 'general', label: 'General / Multi-platform' },
 ]
 
+const VARIATION_COUNTS = [1, 2, 3]
+
 const IN_PROGRESS_STATUSES = ['pending', 'queued', 'processing']
 
+// Defaults to 1 rather than the max of 3 - each variation burns a real AI image
+// credit, so testing/iterating on a brief shouldn't cost 3x by default. Bump it
+// back up to 3 once a brief is confirmed and ready to go live.
 const EMPTY_FORM = {
-  creative_type: 'post', platform: 'instagram', content_calendar_item: '', prompt_brief: '', product_info: '',
+  creative_type: 'post', platform: 'instagram', variation_count: 1,
+  content_calendar_item: '', prompt_brief: '', product_info: '',
 }
 
 export default function CreativeGenerationPage() {
@@ -256,6 +262,23 @@ export default function CreativeGenerationPage() {
               </label>
             </div>
             <label className="field">
+              <span>Number of variations *</span>
+              <select
+                value={form.variation_count}
+                onChange={(e) => setForm((p) => ({ ...p, variation_count: Number(e.target.value) }))}
+                required
+              >
+                {VARIATION_COUNTS.map((n) => (
+                  <option key={n} value={n}>
+                    {n} {n === 1 ? 'variation' : 'variations'}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <p className="modal-hint">
+              Each variation is a separate AI image credit - use 1 while testing a brief, 3 once it's ready to go live.
+            </p>
+            <label className="field">
               <span>Content calendar item</span>
               <select
                 value={form.content_calendar_item}
@@ -287,7 +310,9 @@ export default function CreativeGenerationPage() {
                 placeholder="Defaults to the company's product list"
               />
             </label>
-            <p className="modal-hint">Generates 3 brand-aware variations (image + copy). This runs in the background.</p>
+            <p className="modal-hint">
+              Generates {form.variation_count} brand-aware {form.variation_count === 1 ? 'variation' : 'variations'} (image + copy). This runs in the background.
+            </p>
             <div className="modal-actions">
               <button type="button" className="btn btn-ghost" onClick={() => setShowCreate(false)}>
                 Cancel
@@ -336,7 +361,9 @@ function RequestCard({ request, canRetry, onRetry, onSelectVariation }) {
 
       {inProgress && (
         <div className="empty-state">
-          <p>Generating 3 variations… this can take a moment.</p>
+          <p>
+            Generating {request.variation_count} {request.variation_count === 1 ? 'variation' : 'variations'}… this can take a moment.
+          </p>
         </div>
       )}
 

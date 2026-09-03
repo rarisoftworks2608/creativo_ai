@@ -2002,7 +2002,9 @@ textarea {
 
 .variation-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  /* Capped at 280px (not 1fr) so a single variation renders at the same card
+     size it would if there were 2 or 3 - not stretched to fill the whole row. */
+  grid-template-columns: repeat(auto-fit, minmax(240px, 280px));
   gap: 16px;
   margin-top: 12px;
 }
