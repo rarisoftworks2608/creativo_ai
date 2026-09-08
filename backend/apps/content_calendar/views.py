@@ -178,6 +178,7 @@ def _trigger_regeneration(item):
         generation_request = GenerationRequest.objects.create(
             company=item.company, content_calendar_item=item, creative_type=last_creative.creative_type,
             platform=last_creative.platform, variation_count=last_creative.variation_count,
+            include_text_overlay=last_creative.include_text_overlay,
             prompt_brief=f'{last_creative.prompt_brief}\n\n{feedback_note}'.strip(),
             product_info=last_creative.product_info,
         )

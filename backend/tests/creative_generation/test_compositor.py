@@ -48,6 +48,39 @@ class ComposeCreativeTests(SimpleTestCase):
         composed.verify()
         self.assertEqual(composed.format, 'JPEG')
 
+    def test_eyebrow_only_produces_a_valid_image(self):
+        original = fake_image_bytes()
+
+        result_bytes, _ = compose_creative(original, 'image/jpeg', eyebrow='THE')
+
+        composed = Image.open(io.BytesIO(result_bytes))
+        composed.verify()
+
+    def test_description_only_produces_a_valid_image(self):
+        original = fake_image_bytes()
+
+        result_bytes, _ = compose_creative(
+            original, 'image/jpeg', description='A premium home begins with decisions made long before the first brick.',
+        )
+
+        composed = Image.open(io.BytesIO(result_bytes))
+        composed.verify()
+
+    def test_full_layout_with_every_field_produces_a_valid_image(self):
+        original = fake_image_bytes(size=(896, 1120))
+        logo_bytes = fake_image_bytes(size=(200, 80), color='red', fmt='PNG')
+
+        result_bytes, _ = compose_creative(
+            original, 'image/jpeg',
+            eyebrow='THE', headline='Majestique Standard',
+            description='Luxury is not what you add. It is what you refuse to compromise.',
+            cta='Live Majestique', logo_bytes=logo_bytes,
+        )
+
+        composed = Image.open(io.BytesIO(result_bytes))
+        composed.verify()
+        self.assertEqual(Image.open(io.BytesIO(result_bytes)).size, (896, 1120))
+
     def test_logo_only_produces_a_valid_image(self):
         original = fake_image_bytes()
         logo_bytes = fake_image_bytes(size=(200, 80), color='red', fmt='PNG')

@@ -7,7 +7,7 @@ class GenerationVariationSerializer(serializers.ModelSerializer):
     class Meta:
         model = GenerationVariation
         fields = [
-            'id', 'variation_number', 'image', 'caption', 'headline', 'description',
+            'id', 'variation_number', 'image', 'caption', 'eyebrow', 'headline', 'description',
             'cta', 'hashtags', 'keywords', 'is_selected', 'created_at',
         ]
         read_only_fields = fields
@@ -22,9 +22,9 @@ class GenerationRequestSerializer(serializers.ModelSerializer):
         model = GenerationRequest
         fields = [
             'id', 'company', 'content_calendar_item', 'creative_type', 'creative_type_display',
-            'platform', 'platform_display', 'variation_count', 'prompt_brief', 'product_info', 'status',
-            'error_message', 'retry_count', 'model_used', 'usage', 'cost_usd', 'created_by', 'created_at',
-            'updated_at', 'variations',
+            'platform', 'platform_display', 'variation_count', 'include_text_overlay', 'prompt_brief',
+            'product_info', 'status', 'error_message', 'retry_count', 'model_used', 'usage', 'cost_usd',
+            'created_by', 'created_at', 'updated_at', 'variations',
         ]
         read_only_fields = fields
 
@@ -34,7 +34,7 @@ class GenerationRequestCreateSerializer(serializers.ModelSerializer):
         model = GenerationRequest
         fields = [
             'id', 'content_calendar_item', 'creative_type', 'platform', 'variation_count',
-            'prompt_brief', 'product_info',
+            'include_text_overlay', 'prompt_brief', 'product_info',
         ]
         read_only_fields = ['id']
 

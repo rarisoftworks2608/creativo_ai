@@ -161,6 +161,41 @@ class GenerationRequestCreateTests(BaseCreativeGenerationTestCase):
         response = self.create_request(variation_count=0)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
+    @patch('apps.creative_generation.tasks.compose_creative')
+    @patch('apps.creative_generation.tasks.get_text_provider')
+    @patch('apps.creative_generation.tasks.get_image_provider')
+    def test_text_overlay_off_by_default_keeps_image_plain(self, mock_get_image, mock_get_text, mock_compose):
+        mock_get_image.return_value = FakeImageProvider()
+        mock_get_text.return_value = FakeTextProvider()
+        mock_compose.return_value = (fake_png_bytes(), 'image/png')
+
+        response = self.create_request(variation_count=1)
+
+        self.assertEqual(response.data['include_text_overlay'], False)
+        mock_compose.assert_called_once()
+        self.assertEqual(mock_compose.call_args.kwargs['headline'], '')
+        self.assertEqual(mock_compose.call_args.kwargs['cta'], '')
+
+        # The real copy is still generated and stored - only the image itself stays clean.
+        variation = GenerationVariation.objects.get(generation_request_id=response.data['id'])
+        self.assertEqual(variation.headline, COPY_RESULT['headline'])
+        self.assertEqual(variation.cta, COPY_RESULT['cta'])
+
+    @patch('apps.creative_generation.tasks.compose_creative')
+    @patch('apps.creative_generation.tasks.get_text_provider')
+    @patch('apps.creative_generation.tasks.get_image_provider')
+    def test_text_overlay_enabled_bakes_headline_and_cta_into_image(self, mock_get_image, mock_get_text, mock_compose):
+        mock_get_image.return_value = FakeImageProvider()
+        mock_get_text.return_value = FakeTextProvider()
+        mock_compose.return_value = (fake_png_bytes(), 'image/png')
+
+        response = self.create_request(variation_count=1, include_text_overlay=True)
+
+        self.assertEqual(response.data['include_text_overlay'], True)
+        mock_compose.assert_called_once()
+        self.assertEqual(mock_compose.call_args.kwargs['headline'], COPY_RESULT['headline'])
+        self.assertEqual(mock_compose.call_args.kwargs['cta'], COPY_RESULT['cta'])
+
     @patch('apps.creative_generation.tasks.get_text_provider')
     @patch('apps.creative_generation.tasks.get_image_provider')
     def test_platform_is_independent_of_creative_type(self, mock_get_image, mock_get_text):

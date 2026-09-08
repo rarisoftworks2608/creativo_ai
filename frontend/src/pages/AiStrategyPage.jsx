@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
   deleteStrategyOutput,
   generateBrandContext,
@@ -68,6 +68,62 @@ function StrategyResultView({ result }) {
         <div key={key} className="strategy-result-section">
           <h4>{humanize(key)}</h4>
           <ResultValue value={value} />
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// Content ideas are the one AI Strategy output shaped exactly like a calendar item
+// (title/description/content_type) - "Add to calendar" pre-fills the Calendar's own
+// create form with it rather than duplicating calendar-item creation here; the admin
+// still picks the date and can edit anything before saving, same as adding any item.
+function ContentIdeaList({ items, companyId }) {
+  const navigate = useNavigate()
+
+  function handleAddToCalendar(idea) {
+    navigate(`/companies/${companyId}/calendar`, {
+      state: {
+        prefillItem: {
+          topic: idea.title || '',
+          content_type: idea.content_type || '',
+          creative_requirements: idea.description || '',
+          caption_requirements: idea.rationale ? `Why this fits: ${idea.rationale}` : '',
+        },
+      },
+    })
+  }
+
+  if (!items || items.length === 0) return <p className="muted">None</p>
+
+  return (
+    <div className="result-card-grid">
+      {items.map((idea, i) => (
+        <div className="result-card" key={i}>
+          <div className="result-card-row">
+            <span className="result-card-label">Title</span>
+            <span>{idea.title}</span>
+          </div>
+          <div className="result-card-row">
+            <span className="result-card-label">Description</span>
+            <span>{idea.description}</span>
+          </div>
+          <div className="result-card-row">
+            <span className="result-card-label">Content Type</span>
+            <span>{idea.content_type}</span>
+          </div>
+          <div className="result-card-row">
+            <span className="result-card-label">Rationale</span>
+            <span>{idea.rationale}</span>
+          </div>
+          <button
+            type="button"
+            className="btn btn-ghost btn-block"
+            style={{ marginTop: 8 }}
+            onClick={() => handleAddToCalendar(idea)}
+          >
+            + Add to calendar
+          </button>
         </div>
       ))}
     </div>
@@ -305,7 +361,11 @@ function StrategyKindCard({ companyId, spec, enabled, canGenerate }) {
                   </button>
                 )}
               </p>
-              <StrategyResultView result={latest.result} />
+              {spec.kind === 'content_ideas' ? (
+                <ContentIdeaList items={latest.result.items} companyId={companyId} />
+              ) : (
+                <StrategyResultView result={latest.result} />
+              )}
               {history.length > 1 && (
                 <button type="button" className="btn-link" onClick={() => setHistoryExpanded((v) => !v)}>
                   {historyExpanded ? 'Hide history' : `View history (${history.length})`}

@@ -48,7 +48,7 @@ const IN_PROGRESS_STATUSES = ['pending', 'queued', 'processing']
 // credit, so testing/iterating on a brief shouldn't cost 3x by default. Bump it
 // back up to 3 once a brief is confirmed and ready to go live.
 const EMPTY_FORM = {
-  creative_type: 'post', platform: 'instagram', variation_count: 1,
+  creative_type: 'post', platform: 'instagram', variation_count: 1, include_text_overlay: false,
   content_calendar_item: '', prompt_brief: '', product_info: '',
 }
 
@@ -277,6 +277,18 @@ export default function CreativeGenerationPage() {
             </label>
             <p className="modal-hint">
               Each variation is a separate AI image credit - use 1 while testing a brief, 3 once it's ready to go live.
+            </p>
+            <label className="field-checkbox">
+              <input
+                type="checkbox"
+                checked={form.include_text_overlay}
+                onChange={(e) => setForm((p) => ({ ...p, include_text_overlay: e.target.checked }))}
+              />
+              <span>Overlay a headline &amp; CTA button onto the image</span>
+            </label>
+            <p className="modal-hint">
+              Off by default - a clean photo only. The headline/caption/CTA copy is generated and shown alongside
+              the image either way; this only controls whether it's also baked into the image itself.
             </p>
             <label className="field">
               <span>Content calendar item</span>

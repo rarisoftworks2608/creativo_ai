@@ -63,6 +63,13 @@ class GenerationRequest(TimeStampedModel):
     variation_count = models.PositiveSmallIntegerField(
         default=3, help_text='How many variations to generate (1-3) - lower it while testing to save AI credits.',
     )
+    include_text_overlay = models.BooleanField(
+        default=False,
+        help_text='Composite an AI-written headline banner and CTA button onto the image itself. Off by '
+                  'default - a plain clean photo is usually the better result; the headline/caption/CTA '
+                  'copy is still generated and stored either way, just not baked into the image pixels '
+                  'unless this is explicitly turned on.',
+    )
 
     status = models.CharField(max_length=15, choices=Status.choices, default=Status.PENDING)
     error_message = models.TextField(blank=True)
@@ -96,6 +103,10 @@ class GenerationVariation(TimeStampedModel):
     image = models.ImageField(upload_to=variation_image_upload_path)
 
     caption = models.TextField(blank=True)
+    eyebrow = models.CharField(
+        max_length=60, blank=True,
+        help_text='Small kicker/label shown above the headline in the composited layout, e.g. "THE" or a category label.',
+    )
     headline = models.CharField(max_length=255, blank=True)
     description = models.TextField(blank=True)
     cta = models.CharField(max_length=255, blank=True, verbose_name='CTA')

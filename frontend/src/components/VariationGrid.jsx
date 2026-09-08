@@ -9,7 +9,9 @@ export default function VariationGrid({ variations, onSelect, selecting }) {
               Variation {variation.variation_number}
               {variation.is_selected && <span className="variation-selected-tag">Selected</span>}
             </div>
+            {variation.eyebrow && <div className="variation-eyebrow">{variation.eyebrow}</div>}
             {variation.headline && <div className="variation-headline">{variation.headline}</div>}
+            {variation.description && <p className="variation-caption">{variation.description}</p>}
             {variation.caption && <p className="variation-caption">{variation.caption}</p>}
             {variation.cta && (
               <p className="variation-caption">

@@ -25,10 +25,10 @@ CREATIVE_TYPE_GUIDANCE = {
 }
 
 PLATFORM_GUIDANCE = {
-    'instagram': 'For Instagram: square (1:1) aspect ratio unless the format above dictates otherwise.',
-    'facebook': 'For Facebook: landscape (1.91:1) aspect ratio unless the format above dictates otherwise.',
-    'linkedin': 'For LinkedIn: a professional tone, landscape aspect ratio unless the format above dictates otherwise.',
-    'general': 'Square (1:1) aspect ratio, suitable for posting across multiple platforms.',
+    'instagram': 'For Instagram.',
+    'facebook': 'For Facebook.',
+    'linkedin': 'For LinkedIn - a more professional tone than the other platforms, same layout system.',
+    'general': 'Suitable for posting across multiple platforms.',
 }
 
 
@@ -53,6 +53,17 @@ def _brand_lines(brand_profile):
 def build_image_prompt(
     company, brand_profile, creative_type, platform, prompt_brief, product_info, variation_number, variation_count=3,
 ):
+    """Structured as labeled sections (COMPOSITION / VISUAL STYLE / BACKGROUND /
+    BRAND SAFETY) rather than one flat paragraph - explicit section headers
+    measurably improve instruction-following on faster/distilled image models, the
+    same way a real creative brief separates concerns instead of burying them in
+    prose. The compositional target - RIGHT 55-60% hero subject, LEFT 40-45% calm
+    zone, TOP-RIGHT logo-safe corner, vertical 4:5 - is the platform's fixed
+    creative layout system (see project_plan.md's "creative plan" section) and
+    matches exactly what compose_creative draws afterward - see
+    compositor.py's _draw_left_content_zone/_place_logo_top_right - so the
+    reserved space and the real overlay always agree.
+    """
     format_guidance = CREATIVE_TYPE_GUIDANCE.get(creative_type, 'A social media creative.')
     platform_guidance = PLATFORM_GUIDANCE.get(platform, PLATFORM_GUIDANCE['general'])
     variation_note = (
@@ -62,44 +73,58 @@ def build_image_prompt(
         'Make this the single best possible on-brand variation.'
     )
     lines = [
-        f'Create a polished, on-brand marketing creative for "{company.name}" ({company.industry or "general business"}).',
-        # Stated early (models weight earlier instructions more heavily, especially
-        # faster/distilled ones with weaker instruction-following) and worded
-        # concretely rather than abstractly ("no words/letters/numbers" rather than
-        # just "no typography") - this is the single highest-value line in the whole
-        # prompt for suppressing hallucinated logos/watermarks/brand text, which is
-        # otherwise the most common failure mode of cheaper image models.
-        'CRITICAL: Do not render any words, letters, numbers, logos, watermarks, brand marks, '
-        'emblems, or badges anywhere in the image, in any language or script. This includes '
-        'background/environmental text, not just foreground branding - no banners, hoardings, '
-        'posters, flex boards, shop signs, street signs, flags with text, or writing on clothing '
-        'anywhere in the scene, even blurred or far in the background. A real event photo is full '
-        'of exactly this kind of signage, so actively simplify the environment instead of '
-        'reproducing it: use a plain wall, open sky, soft bokeh crowd, or fabric/decoration '
-        'backdrop with no printed text on it, rather than a realistic cluttered street backdrop. '
-        'Produce a clean photographic visual only. The real headline, CTA text, and real brand '
-        'logo are composited on afterward from separately-generated, guaranteed-accurate assets, '
-        'so anything you render yourself here would only ever be redundant or, worse, '
-        'misspelled/fake.',
-        format_guidance,
-        platform_guidance,
+        f'Generate a premium marketing creative background image for "{company.name}" '
+        f'({company.industry or "general business"}), in a sophisticated editorial advertising style - '
+        'art-directed and intentional, not a generic AI-generated stock photo.',
+
+        'COMPOSITION (fixed layout system - follow exactly):',
+        f'- {format_guidance} {platform_guidance}',
+        '- Vertical 4:5 portrait canvas.',
+        '- RIGHT 55-60% of the frame: the main subject/hero visual, the clear photographic focal point, '
+        'composed with intent rather than centered by default. Preserve the subject clearly and let it '
+        'extend naturally toward the right and bottom edges of the canvas.',
+        '- LEFT 40-45% of the frame: keep this a calm, spacious, visually quiet zone - soft environmental '
+        'texture, a gradient, blur, open sky, or shadow only, with no important visual detail. A headline '
+        'and supporting copy are composited there afterward and must never have to fight busy detail for '
+        'attention.',
+        '- TOP-RIGHT corner: keep clean and uncluttered too - the real brand logo is placed there '
+        'afterward, and important detail directly behind it will get covered.',
+        '- The composition should feel spacious and premium, with generous breathing room - do not fill '
+        'every available area.',
+
+        'VISUAL STYLE:',
+        '- Photorealistic, shot on a professional camera - natural skin texture, realistic fabric, '
+        'materials and reflections, shallow depth of field, cinematic but believable lighting.',
+        '- No illustration, cartoon, painterly, or 3D-render look. No fantasy/surreal elements unless the '
+        'brief explicitly calls for them. Avoid excessive HDR, oversaturation, or artificial glow.',
+
+        'BACKGROUND:',
+        '- Keep the environment soft and uncluttered, especially behind the LEFT calm zone and the '
+        'TOP-RIGHT logo-safe corner - simplify rather than fill the frame with detail.',
+        '- A real event/street photo is often covered in signage; deliberately avoid reproducing that '
+        'here - use a plain wall, open sky, soft bokeh crowd, or plain fabric/decoration backdrop instead '
+        'of a busy, sign-covered backdrop.',
+
+        'BRAND SAFETY (critical):',
+        '- Do not render any words, letters, numbers, logos, watermarks, brand marks, emblems, or badges '
+        'anywhere in the image, in any language or script - this includes background/environmental text '
+        '(banners, hoardings, posters, shop signs, street signs, flags, writing on clothing), not just '
+        'foreground branding, even blurred or far in the background.',
+        '- Do not invent a fake company logo or name anywhere in the scene.',
+        '- The real headline, CTA text, and real brand logo are composited on afterward from '
+        'separately-generated, guaranteed-accurate assets - anything rendered here would only ever be '
+        'redundant or, worse, misspelled/fake.',
+
         f'Creative brief: {prompt_brief or "Use your best judgement based on the brand context below."}',
         f'Product information: {product_info or _joined(company.products, empty="not specified")}',
         *_brand_lines(brand_profile),
         variation_note,
-        'Photorealistic, shot on a professional camera - natural skin texture, realistic fabric '
-        'and lighting, shallow depth of field, no illustration/cartoon/painterly/3D-render look.',
-        'Compose the shot so the bottom of the frame (roughly the lower third) is naturally '
-        'darker, softly blurred, or otherwise visually calm - like a shaded background, an '
-        'out-of-focus foreground element, or open ground/sky - so a headline can be overlaid '
-        'there afterward without fighting for attention against busy detail. The main subject '
-        'should stay in the upper two-thirds of the frame.',
     ]
     return '\n'.join(lines)
 
 
 COPY_SYSTEM_PROMPT = (
-    'You are a senior social media copywriter for a digital marketing agency. '
+    'You are a senior copywriter for a premium editorial advertising agency. '
     'Write copy that matches the brand voice/tone exactly and never uses restricted words. '
     'Always respond with only the requested JSON output - never ask clarifying questions or add '
     'commentary. Where the brief or brand details are sparse, make reasonable, on-brand assumptions '
@@ -113,6 +138,16 @@ def build_copy_prompt(company, brand_profile, brand_context, creative_type, plat
     lines = [
         f'Write the copy for {format_guidance} for "{company.name}".',
         platform_guidance,
+        # Matches the fixed layout system's typography hierarchy (see build_image_prompt) -
+        # eyebrow/headline/description/cta are composited top-to-bottom in the LEFT content
+        # zone, in exactly this order, so each one has a distinct, non-overlapping job.
+        'This copy fills a premium editorial layout with a strict typographic hierarchy - write '
+        'each field to match its exact role, not just a variation of the same sentence:',
+        '- eyebrow: a very short (1-4 word) small-caps kicker/label above the headline, e.g. "THE" '
+        'or a short category/campaign label.',
+        '- headline: the single large, high-impact statement - short, punchy, the main hook.',
+        '- description: 1-2 short sentences of supporting copy beneath the headline.',
+        '- cta: a short, understated call to action (2-4 words).',
         f'Creative brief: {prompt_brief or "Use your best judgement."}',
         f'Product information: {product_info or _joined(company.products, empty="not specified")}',
     ]

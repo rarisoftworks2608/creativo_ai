@@ -1,6 +1,226 @@
 AI Marketing Automation Platform — Product Development Plan
 
 
+creative plan 
+
+*2. Instagram Post Generation Prompt — Complete Creative*
+
+This is the more important prompt for your Instagram post generator.
+
+Create a premium luxury real-estate Instagram post using the supplied background/property image and the provided brand assets and content.
+
+FORMAT:
+- Instagram portrait post.
+- 4:5 aspect ratio.
+- Premium editorial advertising layout.
+- The design must feel professionally art-directed and manually designed rather than AI-generated.
+
+CORE LAYOUT:
+The composition must follow this fixed structure:
+
+1. RIGHT SIDE — HERO VISUAL
+- The main property, architecture, lifestyle image or campaign visual must occupy the RIGHT side of the composition.
+- This is the primary visual focal point.
+- Preserve the architectural subject clearly and prominently.
+- Do not crop or cover important architectural features with text.
+- Allow the image to extend naturally toward the edges of the canvas.
+
+2. LEFT SIDE — CONTENT / TYPOGRAPHY
+- The LEFT side must contain the primary communication and marketing copy.
+- Use the left side as the main typography zone.
+- Maintain generous negative space around the copy.
+- Text should be aligned cleanly and intentionally.
+- Do not overcrowd the left section.
+- Use a clear hierarchy:
+  small eyebrow/kicker → large headline → supporting copy → CTA/tagline.
+
+3. TOP RIGHT — BRAND LOGO
+- Place the supplied official brand logo in the TOP RIGHT corner.
+- Keep the logo clearly visible and proportionally sized.
+- Maintain comfortable padding from the top and right edges.
+- Never recreate, redraw, distort, recolor or modify the supplied logo.
+- Do not place the logo over a visually busy area if a cleaner placement is possible.
+
+4. VISUAL BALANCE
+- The detailed visual weight should remain on the RIGHT.
+- The typography should balance the visual weight from the LEFT.
+- The overall composition should feel spacious, premium and symmetrical in visual weight without being literally symmetrical.
+- Maintain intentional breathing room.
+- Do not fill every available area.
+
+TYPOGRAPHY:
+- Use sophisticated luxury/editorial typography.
+- Headlines should use an elegant high-contrast serif or premium display typeface.
+- Supporting copy should use a clean modern sans-serif.
+- Create strong contrast between headline and body copy.
+- Use uppercase typography selectively for premium emphasis.
+- Avoid playful, cartoonish, generic or overly decorative fonts.
+- Typography must be crisp, refined and highly legible.
+
+COLOUR SYSTEM:
+- Follow the supplied brand identity.
+- Prefer sophisticated combinations such as deep navy, forest/deep green, warm white/ivory and restrained champagne/gold accents where appropriate.
+- Use gold only as a subtle premium accent.
+- Do not use excessive gradients or unnecessary colours.
+- Ensure sufficient contrast between typography and background.
+
+GRAPHIC DETAILS:
+- Use minimal premium graphic elements such as:
+  thin divider lines,
+  subtle gold rules,
+  small geometric separators,
+  understated decorative marks,
+  restrained architectural/editorial details.
+- These elements should support the design rather than become the focus.
+- Avoid excessive boxes, badges, stickers, icons, shadows or decorative elements.
+
+CONTENT:
+Use the supplied content exactly.
+Do not invent facts, prices, amenities, locations, specifications or claims.
+Do not change important numbers, names, dates or contact information.
+Do not add unnecessary text.
+
+CONTENT HIERARCHY:
+- Brand/eyebrow: small and refined.
+- Main headline: largest and strongest element.
+- Supporting message: readable and concise.
+- CTA/tagline: clearly visible but understated.
+- Contact information, if provided, should be incorporated naturally.
+
+IMAGE TREATMENT:
+- Keep the property realistic and premium.
+- Preserve the original architectural proportions.
+- Do not introduce unrealistic buildings or architectural elements.
+- Do not distort windows, doors, balconies, floors or structures.
+- Maintain realistic lighting and material textures.
+- Apply subtle cinematic colour grading where appropriate.
+
+DESIGN CHARACTER:
+The final creative should communicate:
+- luxury
+- exclusivity
+- architectural sophistication
+- confidence
+- premium lifestyle
+- understated elegance
+
+REFERENCE COMPOSITION:
+Use the supplied reference creative as a layout reference, particularly:
+- hero image concentrated on the RIGHT
+- typography/content concentrated on the LEFT
+- logo at TOP RIGHT
+- generous negative space
+- premium editorial typography
+- restrained gold detailing
+- sophisticated dark navy/deep green brand tones
+- clean luxury-real-estate advertising aesthetic
+
+IMPORTANT:
+Do not copy the reference image's exact text, property, architecture or artwork.
+Replicate the DESIGN SYSTEM and COMPOSITION LOGIC only.
+
+The result should look like a professionally designed luxury real-estate campaign creative ready for Instagram publication.
+
+
+*3. Better Version for Your Tool — Dynamic Template*
+
+If you're actually building a generation tool, I'd recommend making the prompt variable-based rather than hardcoding the content.
+
+Create a premium luxury real-estate Instagram creative.
+
+BRAND:
+[BRAND NAME]
+
+BRAND LOGO:
+[SUPPLIED LOGO]
+
+POST OBJECTIVE:
+[POST OBJECTIVE]
+
+HEADLINE:
+[HEADLINE]
+
+SUPPORTING COPY:
+[SUPPORTING COPY]
+
+CTA:
+[CTA]
+
+CONTACT:
+[CONTACT DETAILS]
+
+PROPERTY / VISUAL:
+[PROPERTY IMAGE OR IMAGE DESCRIPTION]
+
+BRAND COLOURS:
+[BRAND COLOURS]
+
+FIXED DESIGN SYSTEM:
+
+CANVAS:
+- Instagram portrait 4:5.
+- Premium editorial real-estate advertising aesthetic.
+
+COMPOSITION:
+- RIGHT 55–60%: primary hero/property visual.
+- LEFT 40–45%: typography and content zone.
+- TOP RIGHT: official brand logo.
+- LEFT side must retain sufficient negative space for readable copy.
+- Do not allow the hero visual to compete with or overlap the main text.
+- Maintain strong visual balance between the detailed right side and quieter left side.
+
+TYPOGRAPHY:
+- Luxury editorial serif for major headlines.
+- Clean contemporary sans-serif for supporting copy.
+- Strong typographic hierarchy.
+- Generous line spacing.
+- Refined alignment and spacing.
+- Avoid excessive text.
+
+COLOUR:
+- Use brand colours.
+- Deep, sophisticated tones with restrained premium accents.
+- Gold/champagne accents may be used sparingly.
+- Maintain excellent readability.
+
+GRAPHIC LANGUAGE:
+- Minimal divider lines.
+- Subtle gold accents.
+- Elegant geometric or architectural details.
+- No unnecessary badges, stickers, boxes or decorative clutter.
+
+LOGO:
+- Use the supplied logo exactly.
+- Position at top right.
+- Preserve proportions and colours.
+- Do not recreate or alter the logo.
+
+IMAGE:
+- Photorealistic.
+- Premium architectural photography.
+- Natural materials and lighting.
+- No distortion.
+- No artificial architecture.
+- No random people, signs, text or logos.
+
+CONTENT RULES:
+- Use only the supplied information.
+- Never invent facts.
+- Never modify names, prices, dates, locations, numbers or contact details.
+- Ensure all text is spelled correctly.
+- Keep copy concise and visually digestible.
+
+DESIGN GOAL:
+Create a sophisticated, minimal, premium luxury real-estate Instagram post that feels individually art-directed while maintaining this consistent layout system:
+
+RIGHT = HERO IMAGE
+LEFT = CONTENT
+TOP RIGHT = LOGO
+OVERALL = PREMIUM + MINIMAL + EDITORIAL + ARCHITECTURAL
+
+
+
+
 to run this project
 
 # terminal 1

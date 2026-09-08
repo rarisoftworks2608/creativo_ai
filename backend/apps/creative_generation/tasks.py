@@ -99,9 +99,16 @@ def generate_creative_variations(self, generation_request_id):
             _fail(request, f'Unexpected error on variation {variation_number}: {exc}')
             return
 
+        # The full copy is always generated and saved on the variation below regardless
+        # (it's the real caption/eyebrow/headline/description/CTA text used when
+        # publishing) - this only controls whether it's *also* baked into the image
+        # pixels via the LEFT content zone/TOP-RIGHT logo layout.
         image_bytes, mime_type = compose_creative(
             image_bytes, mime_type,
-            headline=copy_data.get('headline', ''), cta=copy_data.get('cta', ''),
+            eyebrow=copy_data.get('eyebrow', '') if request.include_text_overlay else '',
+            headline=copy_data.get('headline', '') if request.include_text_overlay else '',
+            description=copy_data.get('description', '') if request.include_text_overlay else '',
+            cta=copy_data.get('cta', '') if request.include_text_overlay else '',
             logo_bytes=logo_bytes, symbol_bytes=symbol_bytes, brand_profile=brand_profile,
         )
         ext = MIME_EXTENSIONS.get(mime_type, 'png')
@@ -109,6 +116,7 @@ def generate_creative_variations(self, generation_request_id):
             generation_request=request,
             variation_number=variation_number,
             caption=copy_data.get('caption', ''),
+            eyebrow=copy_data.get('eyebrow', ''),
             headline=copy_data.get('headline', ''),
             description=copy_data.get('description', ''),
             cta=copy_data.get('cta', ''),

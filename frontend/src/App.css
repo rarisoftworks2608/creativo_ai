@@ -686,14 +686,23 @@
 }
 
 .back-link {
-  display: inline-block;
-  color: var(--text);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-h);
   text-decoration: none;
-  font-size: 14px;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 7px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
   margin-bottom: 16px;
+  transition: background-color 0.15s, border-color 0.15s;
 }
 .back-link:hover {
-  color: var(--text-h);
+  background: var(--surface-2);
+  border-color: var(--accent-border);
 }
 
 .toolbar {
@@ -2024,7 +2033,9 @@ textarea {
 
 .variation-image {
   width: 100%;
-  aspect-ratio: 1 / 1;
+  /* Vertical 4:5 - matches the platform's fixed creative layout system
+     (project_plan.md's "creative plan"); the generated image itself is 4:5. */
+  aspect-ratio: 4 / 5;
   object-fit: cover;
   background: var(--surface-2);
 }
@@ -2052,6 +2063,14 @@ textarea {
   background: var(--accent-bg);
   padding: 2px 8px;
   border-radius: 999px;
+}
+
+.variation-eyebrow {
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
 }
 
 .variation-headline {

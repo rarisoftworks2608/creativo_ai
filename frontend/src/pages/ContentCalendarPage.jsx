@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { getCompany } from '../api/companies'
 import {
   commitCalendarImport,
@@ -51,6 +51,8 @@ const EMPTY_ITEM_FORM = {
 export default function ContentCalendarPage() {
   const { id: companyId } = useParams()
   const { isAdmin } = useAuth()
+  const location = useLocation()
+  const navigate = useNavigate()
   const fileInputRef = useRef(null)
 
   const [company, setCompany] = useState(null)
@@ -136,13 +138,27 @@ export default function ContentCalendarPage() {
     setVisibleMonth(d)
   }
 
-  function openCreateForm(date) {
+  function openCreateForm(date, overrides) {
     setEditingItem(null)
-    setItemForm(date instanceof Date ? { ...EMPTY_ITEM_FORM, scheduled_date: toDateKey(date) } : EMPTY_ITEM_FORM)
+    setItemForm({
+      ...EMPTY_ITEM_FORM,
+      ...(date instanceof Date ? { scheduled_date: toDateKey(date) } : null),
+      ...overrides,
+    })
     setItemFormError('')
     setShowChoice(false)
     setShowItemForm(true)
   }
+
+  // Arriving from AI Strategy's "Add to calendar" on a content idea - open the create
+  // form pre-filled with it (topic/format/brief), same modal as adding any item by
+  // hand, so the admin still picks the date and can edit anything before saving.
+  useEffect(() => {
+    if (!location.state?.prefillItem) return
+    openCreateForm(undefined, location.state.prefillItem)
+    navigate(location.pathname, { replace: true, state: null })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state])
 
   function openEditForm(item) {
     setEditingItem(item)
