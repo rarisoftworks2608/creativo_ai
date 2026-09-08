@@ -219,6 +219,32 @@ TOP RIGHT = LOGO
 OVERALL = PREMIUM + MINIMAL + EDITORIAL + ARCHITECTURAL
 
 
+*FINAL PROMPT — this is the one prompt to use (already implemented in prompts.py / compositor.py):*
+
+Create a premium luxury real-estate Instagram creative for [BRAND NAME] using the supplied property/lifestyle image, brand logo and content.
+
+FORMAT: Instagram portrait, 4:5 aspect ratio. The result must look professionally art-directed, never AI-generated.
+
+LAYOUT (fixed, always follow):
+- RIGHT 55–60%: hero photo (property/architecture/lifestyle) as the visual focal point. Do not crop key architectural features. Let it bleed naturally to the edges.
+- LEFT 40–45%: all typography/content, generous negative space, clean hierarchy — small eyebrow → large serif headline → short supporting copy → understated CTA.
+- TOP RIGHT: the exact supplied brand logo, never redrawn/recolored/distorted, with comfortable padding.
+- Visual weight stays on the right; typography balances it on the left. Composition should feel spacious and premium, never cluttered.
+
+TYPOGRAPHY: elegant high-contrast serif for the headline, clean modern sans-serif for supporting copy. Strong contrast between the two. Crisp and legible — no playful/cartoonish fonts.
+
+COLOUR: follow the brand's own colours; when unspecified use deep navy/forest green + warm ivory + a restrained gold/champagne accent used sparingly. Always keep strong contrast between text and background.
+
+GRAPHIC DETAIL: only minimal premium touches — a thin divider line, a subtle gold rule, understated geometric marks. No badges, stickers, boxes, heavy shadows or clutter.
+
+IMAGE TREATMENT: photorealistic, realistic proportions and lighting, no invented architecture, no distortion, no random people/signs/text/logos baked into the photo itself. Subtle cinematic colour grading is fine.
+
+CONTENT RULES: use only the supplied headline/copy/CTA/contact info exactly as given — never invent facts, prices, names, dates or numbers. Keep copy short and legible.
+
+DESIGN CHARACTER: the result must read as luxurious, exclusive, architecturally sophisticated, confident and understated — never loud, generic, or cluttered.
+
+Use the reference creative only for its composition (right-hero / left-copy / top-right-logo / negative space / gold detailing) — never copy its exact text, property or artwork.
+
 
 
 to run this project
