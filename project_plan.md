@@ -1,7 +1,7 @@
 AI Marketing Automation Platform — Product Development Plan
 
 
-*STATUS (as of 2026-09-08)*
+*STATUS (as of 2026-09-16)*
 
 Done:
 - Epic 01 — Authentication & User Management
@@ -16,7 +16,7 @@ Done:
 - Epic 10 — Social Media Account Management
 - Epic 13 — Notification Center
 - Epic 14 — Dashboard
-- Epic 18 — Activity & Audit Logs
+- Epic 18 — Activity & Audit Logs (built + tested — NOT YET COMMITTED to git, still local-only)
 - Epic 22 — Automation Engine (Content/Approval/Regeneration legs; Publishing leg blocked on Epic 11)
 - Epic 25 — Multi-Tenant SaaS Architecture
 
