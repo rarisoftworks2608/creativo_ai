@@ -1,9 +1,11 @@
 from django.conf import settings
 from django.core.mail import send_mail
+from django.utils import timezone
 from rest_framework import generics, status
 from rest_framework.exceptions import APIException
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -39,20 +41,46 @@ def _client_ip(request):
     return request.META.get('REMOTE_ADDR')
 
 
+# Epic 24 (Security: Suspicious activity) - past this many failed attempts for the
+# same email within the window, further attempts are blocked outright rather than
+# left to ScopedRateThrottle alone, which only limits *frequency* and would still
+# let a slow, patient brute force through indefinitely.
+LOGIN_LOCKOUT_THRESHOLD = 5
+LOGIN_LOCKOUT_WINDOW_MINUTES = 15
+
+
 class LoginView(TokenObtainPairView):
     """Authenticates a user with email/password and returns a JWT pair.
 
     Records every attempt (success or failure) to LoginHistory per
-    Epic 01 (Login history) / Epic 24 (Login monitoring).
+    Epic 01 (Login history) / Epic 24 (Login monitoring), and temporarily locks
+    out an email after repeated failures (Epic 24: Suspicious activity).
     """
 
     serializer_class = CustomTokenObtainPairSerializer
     permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'login'
 
     def post(self, request, *args, **kwargs):
         email = request.data.get('email', '')
         ip_address = _client_ip(request)
         user_agent = request.META.get('HTTP_USER_AGENT', '')[:255]
+
+        window_start = timezone.now() - timezone.timedelta(minutes=LOGIN_LOCKOUT_WINDOW_MINUTES)
+        recent_failures = LoginHistory.objects.filter(
+            email_attempted__iexact=email, was_successful=False, created_at__gte=window_start,
+        ).count()
+
+        if recent_failures >= LOGIN_LOCKOUT_THRESHOLD:
+            log_activity(
+                module=ActivityLog.Module.AUTH, action='Login blocked (too many failed attempts)',
+                description=email, request=request,
+            )
+            return Response(
+                {'detail': 'Too many failed login attempts. Try again in a few minutes.'},
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+            )
 
         try:
             response = super().post(request, *args, **kwargs)
@@ -64,6 +92,21 @@ class LoginView(TokenObtainPairView):
                 user_agent=user_agent,
                 was_successful=False,
             )
+            if recent_failures + 1 == LOGIN_LOCKOUT_THRESHOLD:
+                # Notify only on the attempt that crosses the threshold, not on
+                # every one of the (now-blocked) attempts after it - otherwise an
+                # attacker retrying every few seconds would flood every admin.
+                notify_admins(
+                    actor=None,
+                    notification_type=Notification.NotificationType.SUSPICIOUS_LOGIN,
+                    title=f'Repeated failed logins for {email}',
+                    message=(
+                        f'{LOGIN_LOCKOUT_THRESHOLD} failed attempts in the last '
+                        f'{LOGIN_LOCKOUT_WINDOW_MINUTES} minutes from IP {ip_address}. This email is now '
+                        f'temporarily locked out.'
+                    ),
+                    url='/activity-log',
+                )
             raise
 
         logged_in_user = User.objects.filter(email__iexact=email).first()
@@ -134,6 +177,8 @@ class ForgotPasswordView(APIView):
 
     permission_classes = [AllowAny]
     serializer_class = ForgotPasswordSerializer
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'password_reset'
 
     def post(self, request):
         serializer = ForgotPasswordSerializer(data=request.data)
@@ -158,11 +203,17 @@ class ForgotPasswordView(APIView):
 class ResetPasswordView(APIView):
     permission_classes = [AllowAny]
     serializer_class = ResetPasswordSerializer
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'password_reset'
 
     def post(self, request):
         serializer = ResetPasswordSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         serializer.save()
+        log_activity(
+            module=ActivityLog.Module.SETTINGS, action='Password reset via email link',
+            user=serializer.validated_data['user'], request=request,
+        )
         return Response({'detail': 'Password has been reset successfully.'})
 
 

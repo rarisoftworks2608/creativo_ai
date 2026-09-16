@@ -6,6 +6,7 @@ import everything from this module with `from .base import *` and then
 override what differs for that environment.
 """
 
+import sys
 from datetime import timedelta
 from pathlib import Path
 
@@ -174,7 +175,33 @@ REST_FRAMEWORK = {
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 20,
+    # Epic 24 (Security: Rate limiting) - a blanket per-IP/per-user ceiling on every
+    # endpoint, plus a much tighter 'login'/'password_reset' scope applied only to
+    # those two views (see authentication/views.py) since brute-forcing credentials
+    # is the attack that actually matters here, not normal API traffic.
+    'DEFAULT_THROTTLE_CLASSES': (
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle',
+    ),
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': env('THROTTLE_RATE_ANON', default='100/min'),
+        'user': env('THROTTLE_RATE_USER', default='300/min'),
+        'login': env('THROTTLE_RATE_LOGIN', default='10/min'),
+        'password_reset': env('THROTTLE_RATE_PASSWORD_RESET', default='5/min'),
+    },
 }
+
+if 'test' in sys.argv:
+    # Throttle counters live in the cache, not the DB, so they survive across
+    # test methods/files within one test run (TestCase only rolls back the DB).
+    # Real apps' test suites log in far more often per minute than a real user
+    # ever would, so a real-world rate limit would make the suite order-dependent
+    # and flaky rather than actually testing anything - the login-lockout feature
+    # itself (tests.authentication.test_login_lockout) is unrelated to this and
+    # is unaffected, since it's plain DB-backed logic, not cache-based throttling.
+    REST_FRAMEWORK['DEFAULT_THROTTLE_RATES'] = {
+        'anon': '100000/min', 'user': '100000/min', 'login': '100000/min', 'password_reset': '100000/min',
+    }
 
 
 # Simple JWT

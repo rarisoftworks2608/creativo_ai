@@ -18,11 +18,11 @@ Done:
 - Epic 14 — Dashboard
 - Epic 18 — Activity & Audit Logs (built + tested — NOT YET COMMITTED to git, still local-only)
 - Epic 22 — Automation Engine (Content/Approval/Regeneration legs; Publishing leg blocked on Epic 11)
+- Epic 23 — Background Jobs & Queue Management (admin Jobs page: view/filter/cancel across creative + video generation — NOT YET COMMITTED)
+- Epic 24 — Security (rate limiting on all endpoints + a stricter login/password-reset limit, plus login lockout + admin alert after 5 failed attempts in 15 min — NOT YET COMMITTED)
 - Epic 25 — Multi-Tenant SaaS Architecture
 
 Pending / Partial:
-- Epic 23 — Background Jobs & Queue Management (Celery + Beat running, no admin UI to monitor jobs)
-- Epic 24 — Security (JWT + tenant isolation + token encryption in place, no formal audit/rate-limiting pass)
 - Epic 27 — Testing & QA (backend unit tests exist per app, not full coverage; no frontend tests)
 
 Not Started:

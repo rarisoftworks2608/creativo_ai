@@ -284,6 +284,101 @@ class AdminDashboardStatsView(APIView):
         })
 
 
+class JobQueueView(APIView):
+    """Admin: unified view across all companies' background AI generation jobs
+    (Epic 23: Job Status / Scheduler monitoring). Creative and video generation
+    are the only two Celery-backed job types that exist so far - Publishing,
+    Analytics and Report jobs from the epic's full wishlist don't exist yet
+    (Epics 11/15/16), so they're simply not shown rather than faked.
+    """
+
+    permission_classes = [IsAdmin]
+
+    def get(self, request):
+        from apps.creative_generation.models import GenerationRequest
+        from apps.video_generation.models import VideoGenerationRequest
+
+        status_filter = request.query_params.get('status')
+        type_filter = request.query_params.get('type')
+        company_id = request.query_params.get('company')
+
+        jobs = []
+
+        if type_filter != 'video':
+            queryset = GenerationRequest.objects.select_related('company')
+            if status_filter:
+                queryset = queryset.filter(status=status_filter)
+            if company_id:
+                queryset = queryset.filter(company_id=company_id)
+            for job in queryset:
+                jobs.append({
+                    'id': job.id, 'type': 'creative', 'type_display': 'Creative Generation',
+                    'company_id': job.company_id, 'company_name': job.company.name,
+                    'status': job.status, 'status_display': job.get_status_display(),
+                    'error_message': job.error_message, 'retry_count': job.retry_count,
+                    'created_at': job.created_at, 'updated_at': job.updated_at,
+                })
+
+        if type_filter != 'creative':
+            queryset = VideoGenerationRequest.objects.select_related('company')
+            if status_filter:
+                queryset = queryset.filter(status=status_filter)
+            if company_id:
+                queryset = queryset.filter(company_id=company_id)
+            for job in queryset:
+                jobs.append({
+                    'id': job.id, 'type': 'video', 'type_display': 'Video Generation',
+                    'company_id': job.company_id, 'company_name': job.company.name,
+                    'status': job.status, 'status_display': job.get_status_display(),
+                    'error_message': job.error_message, 'retry_count': job.retry_count,
+                    'created_at': job.created_at, 'updated_at': job.updated_at,
+                })
+
+        jobs.sort(key=lambda j: j['created_at'], reverse=True)
+        return Response({'count': len(jobs), 'results': jobs[:200]})
+
+
+class JobCancelView(APIView):
+    """Admin: cancel a queued/pending job before it starts processing (Epic 23: Cancel).
+
+    There's no separate "cancelled" status - a cancelled job is marked FAILED with
+    a clear message, since every other part of the system (approval flow, retry)
+    already knows how to handle FAILED and a new status would need to be taught
+    to all of them for no real behavioral difference.
+    """
+
+    permission_classes = [IsAdmin]
+
+    def post(self, request, job_type, job_id):
+        from apps.creative_generation.models import GenerationRequest
+        from apps.video_generation.models import VideoGenerationRequest
+        from config.celery import app as celery_app
+
+        model = {'creative': GenerationRequest, 'video': VideoGenerationRequest}.get(job_type)
+        if model is None:
+            return Response({'detail': 'Unknown job type.'}, status=status.HTTP_404_NOT_FOUND)
+
+        job = generics.get_object_or_404(model, pk=job_id)
+        if job.status not in (model.Status.PENDING, model.Status.QUEUED):
+            return Response(
+                {'detail': 'Only a pending or queued job can be cancelled.'}, status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if job.celery_task_id:
+            celery_app.control.revoke(job.celery_task_id)
+
+        job.status = model.Status.FAILED
+        job.error_message = f'Cancelled by {request.user.get_short_name()}.'
+        job.save(update_fields=['status', 'error_message', 'updated_at'])
+
+        log_activity(
+            module=ActivityLog.Module.CREATIVE if job_type == 'creative' else ActivityLog.Module.VIDEO,
+            action='Generation cancelled', description=f'{job_type} job #{job_id}', company=job.company, request=request,
+        )
+
+        return Response({'detail': 'Job cancelled.'})
+
+
 class MediaLibraryView(APIView):
     """Admin: a unified, read-mostly view across a company's media - brand assets,
     generated creative variations, and generated videos (Epic 08: Media Library).

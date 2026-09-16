@@ -111,6 +111,17 @@ export default function Layout() {
               Activity Log
             </NavLink>
           )}
+          {isAdmin && (
+            <NavLink to="/jobs" className={({ isActive }) => (isActive ? 'active' : '')} onClick={() => setNavOpen(false)}>
+              <span className="nav-icon" aria-hidden="true">
+                <svg viewBox="0 0 20 20" fill="none">
+                  <rect x="3" y="4" width="14" height="12" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
+                  <path d="M6 8h8M6 11h5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                </svg>
+              </span>
+              Jobs
+            </NavLink>
+          )}
         </nav>
       </aside>
 
