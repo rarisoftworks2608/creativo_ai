@@ -6,6 +6,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.activity_log.models import ActivityLog
+from apps.activity_log.services import log_activity
 from apps.companies.models import ClientProfile, Company
 from common.permissions import IsAdmin
 
@@ -133,6 +135,11 @@ class GenerationRequestListCreateView(CompanyScopedMixin, generics.ListCreateAPI
         if generation_request.content_calendar_item_id is None:
             generation_request = _link_adhoc_calendar_item(generation_request, request.user)
         generation_request = _enqueue(generation_request)
+
+        log_activity(
+            module=ActivityLog.Module.CREATIVE, action='Creative generation started',
+            description=generation_request.get_creative_type_display(), company=company, request=request,
+        )
 
         return Response(GenerationRequestSerializer(generation_request).data, status=status.HTTP_202_ACCEPTED)
 

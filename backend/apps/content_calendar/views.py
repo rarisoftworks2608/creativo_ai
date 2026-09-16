@@ -11,6 +11,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.activity_log.models import ActivityLog
+from apps.activity_log.services import log_activity
 from apps.companies.models import ClientProfile, Company
 from apps.notifications.models import Notification
 from apps.notifications.services import notify_admins
@@ -109,10 +111,15 @@ class ContentCalendarItemListCreateView(CompanyScopedMixin, generics.ListCreateA
         return queryset
 
     def perform_create(self, serializer):
-        serializer.save(
-            company=self.get_company(),
+        company = self.get_company()
+        item = serializer.save(
+            company=company,
             created_by=self.request.user,
             source=ContentCalendarItem.Source.MANUAL,
+        )
+        log_activity(
+            module=ActivityLog.Module.CALENDAR, action='Calendar item created',
+            description=item.topic, company=company, request=self.request,
         )
 
 
@@ -132,6 +139,13 @@ class ContentCalendarItemDetailView(CompanyScopedMixin, generics.RetrieveUpdateD
 
     def get_queryset(self):
         return ContentCalendarItem.objects.filter(company=self.get_company())
+
+    def perform_update(self, serializer):
+        item = serializer.save()
+        log_activity(
+            module=ActivityLog.Module.CALENDAR, action='Calendar item updated',
+            description=item.topic, company=item.company, request=self.request,
+        )
 
 
 class ContentCalendarDuplicateView(CompanyScopedMixin, APIView):
@@ -210,6 +224,10 @@ class ContentCalendarGenerateNowView(CompanyScopedMixin, APIView):
             )
 
         item = generate_now(item)
+        log_activity(
+            module=ActivityLog.Module.CALENDAR, action='Generation started (manual)',
+            description=item.topic, company=company, request=request,
+        )
         return Response(ContentCalendarItemSerializer(item, context={'request': request}).data)
 
 
@@ -228,6 +246,11 @@ class ContentCalendarApproveView(CompanyScopedMixin, APIView):
 
         item.status = ContentCalendarItem.Status.APPROVED
         item.save(update_fields=['status', 'updated_at'])
+
+        log_activity(
+            module=ActivityLog.Module.APPROVAL, action='Content approved',
+            description=item.topic, company=company, request=request,
+        )
 
         notify_admins(
             actor=request.user,
@@ -262,6 +285,11 @@ class ContentCalendarRejectView(CompanyScopedMixin, APIView):
         item.client_feedback = feedback
         item.status = ContentCalendarItem.Status.REJECTED
         item.save(update_fields=['client_feedback', 'status', 'updated_at'])
+
+        log_activity(
+            module=ActivityLog.Module.APPROVAL, action='Content rejected',
+            description=f'{item.topic} — {feedback}', company=company, request=request,
+        )
 
         notify_admins(
             actor=request.user,

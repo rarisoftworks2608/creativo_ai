@@ -5,6 +5,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.activity_log.models import ActivityLog
+from apps.activity_log.services import log_activity
 from apps.notifications.models import Notification
 from apps.notifications.services import notify, notify_admins
 from common.emails import send_client_welcome_email
@@ -49,6 +51,10 @@ class CompanyListCreateView(generics.ListCreateAPIView):
 
     def perform_create(self, serializer):
         company = serializer.save()
+        log_activity(
+            module=ActivityLog.Module.COMPANY, action='Company created',
+            description=company.name, company=company, request=self.request,
+        )
         notify_admins(
             actor=self.request.user,
             notification_type=Notification.NotificationType.COMPANY_CREATED,
@@ -79,6 +85,13 @@ class CompanyDetailView(generics.RetrieveUpdateAPIView):
         super().check_permissions(request)
         if request.method not in ('GET', 'HEAD', 'OPTIONS') and not request.user.is_admin:
             self.permission_denied(request, message='Only admins can edit a company.')
+
+    def perform_update(self, serializer):
+        company = serializer.save()
+        log_activity(
+            module=ActivityLog.Module.COMPANY, action='Company updated',
+            description=company.name, company=company, request=self.request,
+        )
 
 
 class MyCompanyView(generics.RetrieveAPIView):
@@ -129,6 +142,10 @@ class CompanyStatusView(APIView):
             return Response({'detail': 'Invalid action.'}, status=status.HTTP_400_BAD_REQUEST)
 
         company.save(update_fields=['status', 'updated_at'])
+        log_activity(
+            module=ActivityLog.Module.COMPANY, action=f'Company {action}d',
+            description=company.name, company=company, request=request,
+        )
         return Response(CompanySerializer(company).data)
 
 
@@ -156,6 +173,12 @@ class CompanyClientListCreateView(generics.ListCreateAPIView):
         plain_password = serializer._plain_password  # noqa: SLF001 - only known right after creation
         if plain_password:
             send_client_welcome_email(profile.user, plain_password)
+
+        log_activity(
+            module=ActivityLog.Module.CLIENT, action='Client added',
+            description=f'{profile.user.email} added to {company.name}',
+            company=company, request=request,
+        )
 
         notify_admins(
             actor=request.user,
@@ -209,6 +232,10 @@ class CompanyClientDetailView(generics.RetrieveUpdateDestroyAPIView):
         serializer = self.get_serializer(instance, data=request.data, partial=partial)
         serializer.is_valid(raise_exception=True)
         serializer.save()
+        log_activity(
+            module=ActivityLog.Module.CLIENT, action='Client access updated',
+            description=instance.user.email, company=instance.company, request=request,
+        )
         return Response(ClientProfileSerializer(instance).data)
 
 

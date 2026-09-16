@@ -17,6 +17,7 @@ import SocialAccountsPage from './pages/SocialAccountsPage'
 import MediaLibraryPage from './pages/MediaLibraryPage'
 import TeamPage from './pages/TeamPage'
 import AccessControlPage from './pages/AccessControlPage'
+import ActivityLogPage from './pages/ActivityLogPage'
 import ClientDashboardPage from './pages/ClientDashboardPage'
 import './App.css'
 
@@ -51,6 +52,7 @@ function App() {
             <Route path="/client" element={<ClientDashboardPage />} />
             <Route path="/team" element={<TeamPage />} />
             <Route path="/access" element={<AccessControlPage />} />
+            <Route path="/activity-log" element={<ActivityLogPage />} />
           </Route>
         </Route>
 

@@ -5,6 +5,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.activity_log.models import ActivityLog
+from apps.activity_log.services import log_activity
 from apps.companies.models import ClientProfile, Company
 from common.permissions import IsAdmin
 
@@ -131,6 +133,11 @@ class VideoGenerationRequestListCreateView(CompanyScopedMixin, generics.ListCrea
         if video_request.content_calendar_item_id is None:
             video_request = _link_adhoc_calendar_item(video_request, request.user)
         video_request = _enqueue(video_request)
+
+        log_activity(
+            module=ActivityLog.Module.VIDEO, action='Video generation started',
+            description=video_request.get_video_type_display(), company=company, request=request,
+        )
 
         return Response(VideoGenerationRequestSerializer(video_request).data, status=status.HTTP_202_ACCEPTED)
 

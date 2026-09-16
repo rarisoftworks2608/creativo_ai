@@ -9,6 +9,8 @@ from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 
+from apps.activity_log.models import ActivityLog
+from apps.activity_log.services import log_activity
 from apps.notifications.models import Notification
 from apps.notifications.services import notify, notify_admins
 from common.emails import send_client_welcome_email
@@ -64,12 +66,16 @@ class LoginView(TokenObtainPairView):
             )
             raise
 
+        logged_in_user = User.objects.filter(email__iexact=email).first()
         LoginHistory.objects.create(
-            user=User.objects.filter(email__iexact=email).first(),
+            user=logged_in_user,
             email_attempted=email,
             ip_address=ip_address,
             user_agent=user_agent,
             was_successful=True,
+        )
+        log_activity(
+            module=ActivityLog.Module.AUTH, action='Logged in', user=logged_in_user, request=request,
         )
         return response
 
@@ -89,6 +95,7 @@ class LogoutView(APIView):
             token.blacklist()
         except TokenError:
             return Response({'detail': 'Invalid or already blacklisted token.'}, status=status.HTTP_400_BAD_REQUEST)
+        log_activity(module=ActivityLog.Module.AUTH, action='Logged out', request=request)
         return Response(status=status.HTTP_205_RESET_CONTENT)
 
 
@@ -114,6 +121,7 @@ class ChangePasswordView(APIView):
         serializer = ChangePasswordSerializer(data=request.data, context={'request': request})
         serializer.is_valid(raise_exception=True)
         serializer.save()
+        log_activity(module=ActivityLog.Module.SETTINGS, action='Password changed', request=request)
         return Response({'detail': 'Password changed successfully.'})
 
 
@@ -193,6 +201,13 @@ class UserListCreateView(generics.ListCreateAPIView):
         if plain_password:
             send_client_welcome_email(new_user, plain_password)
 
+        log_activity(
+            module=ActivityLog.Module.AUTH,
+            action=f'{new_user.get_role_display()} created',
+            description=new_user.email,
+            request=self.request,
+        )
+
         if new_user.is_admin:
             notify_admins(
                 actor=self.request.user,
@@ -230,9 +245,17 @@ class UserDetailView(generics.RetrieveUpdateAPIView):
         """
         partial = kwargs.pop('partial', False)
         instance = self.get_object()
+        was_active = instance.is_active
         serializer = self.get_serializer(instance, data=request.data, partial=partial)
         serializer.is_valid(raise_exception=True)
         serializer.save()
+        if instance.is_active != was_active:
+            log_activity(
+                module=ActivityLog.Module.AUTH,
+                action='User activated' if instance.is_active else 'User deactivated',
+                description=instance.email,
+                request=request,
+            )
         return Response(UserSerializer(instance).data)
 
 

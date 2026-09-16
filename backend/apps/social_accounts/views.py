@@ -4,6 +4,8 @@ from rest_framework import generics, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.activity_log.models import ActivityLog
+from apps.activity_log.services import log_activity
 from apps.companies.models import Company
 from common.crypto import decrypt_secret
 from common.permissions import IsAdmin
@@ -58,6 +60,11 @@ class SocialAccountListCreateView(CompanyScopedMixin, generics.ListCreateAPIView
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         account = serializer.save(company=company, connected_by=request.user)
+        log_activity(
+            module=ActivityLog.Module.SOCIAL, action='Social account connected',
+            description=f'{account.get_platform_display()} — {account.account_name}'.strip(' —'),
+            company=company, request=request,
+        )
         return Response(SocialAccountSerializer(account).data, status=status.HTTP_201_CREATED)
 
 
@@ -99,6 +106,12 @@ class SocialAccountDisconnectView(CompanyScopedMixin, APIView):
         account.status = SocialAccount.Status.DISCONNECTED
         account.access_token = ''
         account.save(update_fields=['status', 'access_token', 'updated_at'])
+
+        log_activity(
+            module=ActivityLog.Module.SOCIAL, action='Social account disconnected',
+            description=f'{account.get_platform_display()} — {account.account_name}'.strip(' —'),
+            company=company, request=request,
+        )
 
         return Response(SocialAccountSerializer(account).data)
 
