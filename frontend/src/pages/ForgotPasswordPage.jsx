@@ -25,13 +25,6 @@ export default function ForgotPasswordPage() {
 
   return (
     <div className="auth-screen">
-      <div className="auth-bg" aria-hidden="true">
-        <span className="auth-blob auth-blob-1" />
-        <span className="auth-blob auth-blob-2" />
-        <span className="auth-blob auth-blob-3" />
-        <span className="auth-grid" />
-      </div>
-
       <div className="auth-panel auth-panel-single">
         <form className="auth-card" onSubmit={handleSubmit}>
           <div className="auth-brand">
@@ -60,8 +53,8 @@ export default function ForgotPasswordPage() {
                   required
                 />
               </label>
-              <button type="submit" className="btn btn-primary btn-block auth-submit" disabled={submitting}>
-                <span>{submitting ? 'Sending…' : 'Send reset link'}</span>
+              <button type="submit" className="btn btn-primary btn-block" disabled={submitting}>
+                {submitting ? 'Sending…' : 'Send reset link'}
               </button>
             </>
           )}

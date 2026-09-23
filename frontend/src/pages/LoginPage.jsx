@@ -30,43 +30,7 @@ export default function LoginPage() {
 
   return (
     <div className="auth-screen">
-      <div className="auth-bg" aria-hidden="true">
-        <span className="auth-blob auth-blob-1" />
-        <span className="auth-blob auth-blob-2" />
-        <span className="auth-blob auth-blob-3" />
-        <span className="auth-grid" />
-      </div>
-
-      <div className="auth-panel">
-        <div className="auth-showcase" aria-hidden="true">
-          <div className="auth-showcase-badge">
-            <span className="brand-mark brand-mark-glow">AI</span>
-            <span>Marketing OS</span>
-          </div>
-          <h2 className="auth-showcase-title">
-            Run every client's marketing
-            <br />
-            from one command center.
-          </h2>
-          <p className="auth-showcase-copy">
-            Content calendars, AI-generated creatives, and video — planned, approved, and shipped in one place.
-          </p>
-          <ul className="auth-showcase-stats">
-            <li>
-              <strong>AI</strong>
-              <span>Strategy &amp; creative generation</span>
-            </li>
-            <li>
-              <strong>1</strong>
-              <span>Dashboard for every company you run</span>
-            </li>
-            <li>
-              <strong>0</strong>
-              <span>Spreadsheets left behind</span>
-            </li>
-          </ul>
-        </div>
-
+      <div className="auth-panel auth-panel-single">
         <form className="auth-card" onSubmit={handleSubmit}>
           <div className="auth-brand">
             <span className="brand-mark">AI</span>
@@ -99,8 +63,8 @@ export default function LoginPage() {
             />
           </label>
 
-          <button type="submit" className="btn btn-primary btn-block auth-submit" disabled={submitting}>
-            <span>{submitting ? 'Signing in…' : 'Sign in'}</span>
+          <button type="submit" className="btn btn-primary btn-block" disabled={submitting}>
+            {submitting ? 'Signing in…' : 'Sign in'}
           </button>
 
           <p className="auth-footer-link">
