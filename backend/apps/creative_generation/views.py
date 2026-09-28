@@ -128,7 +128,10 @@ class GenerationRequestListCreateView(CompanyScopedMixin, generics.ListCreateAPI
         return queryset
 
     def create(self, request, *args, **kwargs):
+        from apps.platform_settings.services import check_daily_generation_limit
+
         company = self.get_company()
+        check_daily_generation_limit(company)
         serializer = self.get_serializer(data=request.data, context={'request': request, 'company': company})
         serializer.is_valid(raise_exception=True)
         generation_request = serializer.save(company=company, created_by=request.user)

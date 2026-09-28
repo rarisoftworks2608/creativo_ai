@@ -23,6 +23,28 @@ export async function fetchProfile() {
   return response.data
 }
 
+export async function updateProfile(data) {
+  const hasFile = data.avatar instanceof File
+  let payload = data
+  let headers
+
+  if (hasFile) {
+    payload = new FormData()
+    Object.entries(data).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) payload.append(key, value)
+    })
+    headers = { 'Content-Type': 'multipart/form-data' }
+  }
+
+  const response = await apiClient.patch('/auth/profile/', payload, headers ? { headers } : undefined)
+  return response.data
+}
+
+export async function fetchLoginHistory() {
+  const response = await apiClient.get('/auth/login-history/')
+  return response.data
+}
+
 export async function requestPasswordReset(email) {
   const response = await apiClient.post('/auth/forgot-password/', { email })
   return response.data

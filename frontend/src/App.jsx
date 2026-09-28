@@ -19,6 +19,9 @@ import TeamPage from './pages/TeamPage'
 import AccessControlPage from './pages/AccessControlPage'
 import ActivityLogPage from './pages/ActivityLogPage'
 import JobsPage from './pages/JobsPage'
+import SettingsPage from './pages/SettingsPage'
+import AdminSettingsPage from './pages/AdminSettingsPage'
+import PromptTemplatesPage from './pages/PromptTemplatesPage'
 import ClientDashboardPage from './pages/ClientDashboardPage'
 import './App.css'
 
@@ -55,6 +58,9 @@ function App() {
             <Route path="/access" element={<AccessControlPage />} />
             <Route path="/activity-log" element={<ActivityLogPage />} />
             <Route path="/jobs" element={<JobsPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/admin-settings" element={<AdminSettingsPage />} />
+            <Route path="/prompt-templates" element={<PromptTemplatesPage />} />
           </Route>
         </Route>
 

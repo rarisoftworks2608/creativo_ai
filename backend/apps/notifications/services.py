@@ -5,7 +5,6 @@ video_generation, ...) depend on a small stable function surface instead of
 constructing Notification rows by hand.
 """
 
-from django.conf import settings
 from django.utils import timezone
 
 from .models import Notification
@@ -22,7 +21,14 @@ def notify(recipient, notification_type, title, *, message='', url='', company=N
         content_calendar_item=content_calendar_item,
     )
 
-    if settings.SEND_NOTIFICATION_EMAILS:
+    # Epic 19's platform-wide toggle AND the recipient's own Epic 20 preference
+    # both have to be on - either one being off means no email for this person.
+    from apps.platform_settings.models import PlatformSettings
+
+    platform_allows_email = PlatformSettings.load().send_notification_emails
+    recipient_allows_email = getattr(recipient, 'email_notifications_enabled', True)
+
+    if platform_allows_email and recipient_allows_email:
         # An email failure must never break notification creation - it's a mirror
         # of the in-app notification, not the source of truth for it.
         try:

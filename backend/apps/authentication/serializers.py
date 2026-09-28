@@ -15,22 +15,23 @@ class UserSerializer(serializers.ModelSerializer):
     """Read-only representation of a user, used for profile responses and admin listings."""
 
     full_name = serializers.CharField(source='get_full_name', read_only=True)
+    avatar = serializers.ImageField(read_only=True, use_url=True)
 
     class Meta:
         model = User
         fields = [
-            'id', 'email', 'first_name', 'last_name', 'full_name', 'phone_number',
-            'role', 'is_active', 'last_login', 'created_at', 'updated_at',
+            'id', 'email', 'first_name', 'last_name', 'full_name', 'phone_number', 'avatar',
+            'email_notifications_enabled', 'role', 'is_active', 'last_login', 'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'email', 'role', 'is_active', 'last_login', 'created_at', 'updated_at']
 
 
 class ProfileUpdateSerializer(serializers.ModelSerializer):
-    """Lets an authenticated user update their own profile fields."""
+    """Lets an authenticated user update their own profile fields (Epic 20: Client Settings)."""
 
     class Meta:
         model = User
-        fields = ['first_name', 'last_name', 'phone_number']
+        fields = ['first_name', 'last_name', 'phone_number', 'avatar', 'email_notifications_enabled']
 
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):

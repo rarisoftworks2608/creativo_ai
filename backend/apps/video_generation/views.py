@@ -126,7 +126,10 @@ class VideoGenerationRequestListCreateView(CompanyScopedMixin, generics.ListCrea
         return queryset
 
     def create(self, request, *args, **kwargs):
+        from apps.platform_settings.services import check_daily_generation_limit
+
         company = self.get_company()
+        check_daily_generation_limit(company)
         serializer = self.get_serializer(data=request.data, context={'request': request, 'company': company})
         serializer.is_valid(raise_exception=True)
         video_request = serializer.save(company=company, created_by=request.user)

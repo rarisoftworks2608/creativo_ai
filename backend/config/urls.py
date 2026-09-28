@@ -16,6 +16,8 @@ urlpatterns = [
     path('api/v1/auth/', include('apps.authentication.urls')),
     path('api/v1/notifications/', include('apps.notifications.urls')),
     path('api/v1/activity-log/', include('apps.activity_log.urls')),
+    path('api/v1/platform-settings/', include('apps.platform_settings.urls')),
+    path('api/v1/prompt-templates/', include('apps.prompt_templates.urls')),
     path('api/v1/companies/', include('apps.companies.urls')),
     path('api/v1/companies/<int:company_id>/content-calendar/', include('apps.content_calendar.urls')),
     path('api/v1/companies/<int:company_id>/brand/', include('apps.brand.urls')),

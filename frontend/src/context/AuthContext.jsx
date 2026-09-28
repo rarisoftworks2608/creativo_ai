@@ -35,6 +35,7 @@ export function AuthProvider({ children }) {
         await logoutRequest()
         setUser(null)
       },
+      setUser,
     }),
     [user, loading],
   )

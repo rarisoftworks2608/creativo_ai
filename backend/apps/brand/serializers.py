@@ -111,6 +111,14 @@ class BrandAssetUploadSerializer(serializers.ModelSerializer):
         model = BrandAsset
         fields = ['category', 'file', 'name']
 
+    def validate_file(self, value):
+        from apps.platform_settings.models import PlatformSettings
+
+        max_mb = PlatformSettings.load().max_upload_size_mb
+        if value.size > max_mb * 1024 * 1024:
+            raise serializers.ValidationError(f'File is too large - the limit is {max_mb} MB.')
+        return value
+
     def create(self, validated_data):
         request = self.context.get('request')
         return BrandAsset.objects.create(

@@ -20,6 +20,11 @@ class User(AbstractBaseUser, PermissionsMixin, TimeStampedModel):
     phone_number = models.CharField(max_length=20, blank=True)
     role = models.CharField(max_length=10, choices=Role.choices, default=Role.CLIENT)
 
+    # Epic 20 (Client Settings: Notification preferences) - a personal on/off switch on
+    # top of the platform-wide SEND_NOTIFICATION_EMAILS toggle (Epic 19): both must be
+    # true for this user to actually receive a notification email.
+    email_notifications_enabled = models.BooleanField(default=True)
+
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
 

@@ -68,6 +68,8 @@ LOCAL_APPS = [
     'apps.notifications',
     'apps.social_accounts',
     'apps.activity_log',
+    'apps.platform_settings',
+    'apps.prompt_templates',
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS

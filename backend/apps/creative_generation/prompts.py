@@ -52,6 +52,7 @@ def _brand_lines(brand_profile):
 
 def build_image_prompt(
     company, brand_profile, creative_type, platform, prompt_brief, product_info, variation_number, variation_count=3,
+    extra_guidance='',
 ):
     """Structured as labeled sections (COMPOSITION / VISUAL STYLE / BACKGROUND /
     BRAND SAFETY) rather than one flat paragraph - explicit section headers
@@ -118,8 +119,13 @@ def build_image_prompt(
         f'Creative brief: {prompt_brief or "Use your best judgement based on the brand context below."}',
         f'Product information: {product_info or _joined(company.products, empty="not specified")}',
         *_brand_lines(brand_profile),
-        variation_note,
     ]
+    if extra_guidance:
+        # Admin-configured guidance (Epic 21: Prompt & Template Management) - appended
+        # rather than replacing anything above, so the fixed layout system and brand
+        # safety rules always still apply regardless of what an admin writes here.
+        lines += ['ADDITIONAL GUIDANCE (admin-configured):', extra_guidance]
+    lines.append(variation_note)
     return '\n'.join(lines)
 
 
@@ -132,7 +138,9 @@ COPY_SYSTEM_PROMPT = (
 )
 
 
-def build_copy_prompt(company, brand_profile, brand_context, creative_type, platform, prompt_brief, product_info):
+def build_copy_prompt(
+    company, brand_profile, brand_context, creative_type, platform, prompt_brief, product_info, extra_guidance='',
+):
     format_guidance = CREATIVE_TYPE_GUIDANCE.get(creative_type, 'a social media creative')
     platform_guidance = PLATFORM_GUIDANCE.get(platform, PLATFORM_GUIDANCE['general'])
     lines = [
@@ -157,4 +165,6 @@ def build_copy_prompt(company, brand_profile, brand_context, creative_type, plat
         lines += ['', *_brand_lines(brand_profile)]
     if brand_profile is not None and brand_profile.restricted_words:
         lines.append(f'Restricted words - never use these: {_joined(brand_profile.restricted_words)}')
+    if extra_guidance:
+        lines += ['', 'ADDITIONAL GUIDANCE (admin-configured):', extra_guidance]
     return '\n'.join(lines)

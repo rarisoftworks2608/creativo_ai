@@ -45,6 +45,9 @@ class GenerationRequestCreateSerializer(serializers.ModelSerializer):
         return item
 
     def validate_variation_count(self, value):
-        if not 1 <= value <= 3:
-            raise serializers.ValidationError('variation_count must be between 1 and 3.')
+        from apps.platform_settings.models import PlatformSettings
+
+        max_allowed = PlatformSettings.load().max_variation_count
+        if not 1 <= value <= max_allowed:
+            raise serializers.ValidationError(f'variation_count must be between 1 and {max_allowed}.')
         return value

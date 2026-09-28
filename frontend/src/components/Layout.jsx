@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import NotificationBell from './NotificationBell'
 import ChangePasswordModal from './ChangePasswordModal'
@@ -122,6 +122,31 @@ export default function Layout() {
               Jobs
             </NavLink>
           )}
+          {isAdmin && (
+            <NavLink to="/prompt-templates" className={({ isActive }) => (isActive ? 'active' : '')} onClick={() => setNavOpen(false)}>
+              <span className="nav-icon" aria-hidden="true">
+                <svg viewBox="0 0 20 20" fill="none">
+                  <path d="M5 3.5h7l3 3v10a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-12a1 1 0 0 1 1-1Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+                  <path d="M7 10h6M7 13h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                </svg>
+              </span>
+              Prompt Library
+            </NavLink>
+          )}
+          {isAdmin && (
+            <NavLink to="/admin-settings" className={({ isActive }) => (isActive ? 'active' : '')} onClick={() => setNavOpen(false)}>
+              <span className="nav-icon" aria-hidden="true">
+                <svg viewBox="0 0 20 20" fill="none">
+                  <circle cx="10" cy="10" r="2.5" stroke="currentColor" strokeWidth="1.5" />
+                  <path
+                    d="M10 3.5v1.7M10 14.8v1.7M16.5 10h-1.7M5.2 10H3.5M14.6 5.4l-1.2 1.2M6.6 13.4l-1.2 1.2M14.6 14.6l-1.2-1.2M6.6 6.6 5.4 5.4"
+                    stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"
+                  />
+                </svg>
+              </span>
+              Admin Settings
+            </NavLink>
+          )}
         </nav>
       </aside>
 
@@ -142,13 +167,19 @@ export default function Layout() {
 
           <div className="topbar-user">
             <NotificationBell />
-            <div className="user-badge">
-              <span className="user-avatar">{user?.email?.[0]?.toUpperCase() ?? '?'}</span>
+            <Link to="/settings" className="user-badge">
+              <span className="user-avatar">
+                {user?.avatar ? (
+                  <img src={user.avatar} alt="" className="user-avatar-img" />
+                ) : (
+                  user?.email?.[0]?.toUpperCase() ?? '?'
+                )}
+              </span>
               <div className="user-text">
                 <div className="user-name">{user?.full_name || user?.email}</div>
                 <div className="user-role">{user?.role}</div>
               </div>
-            </div>
+            </Link>
             <button type="button" className="btn btn-ghost" onClick={() => setShowChangePassword(true)}>
               Change password
             </button>

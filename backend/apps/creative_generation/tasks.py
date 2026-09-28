@@ -10,6 +10,8 @@ from apps.brand.models import BrandProfile
 from apps.content_calendar.models import ContentCalendarItem
 from apps.notifications.models import Notification
 from apps.notifications.services import notify_content_ready
+from apps.prompt_templates.models import PromptTemplate
+from apps.prompt_templates.services import get_active_guidance
 from common.ai_errors import AIProviderError
 
 from . import prompts
@@ -76,15 +78,22 @@ def generate_creative_variations(self, generation_request_id):
 
     request.variations.all().delete()
 
+    image_guidance = get_active_guidance(
+        PromptTemplate.Category.IMAGE, platform=request.platform, creative_type=request.creative_type,
+    )
+    copy_guidance = get_active_guidance(
+        PromptTemplate.Category.CAPTION, platform=request.platform, creative_type=request.creative_type,
+    )
+
     image_count = 0
     for variation_number in range(1, request.variation_count + 1):
         image_prompt = prompts.build_image_prompt(
             company, brand_profile, request.creative_type, request.platform, request.prompt_brief,
-            request.product_info, variation_number, request.variation_count,
+            request.product_info, variation_number, request.variation_count, extra_guidance=image_guidance,
         )
         copy_prompt = prompts.build_copy_prompt(
             company, brand_profile, brand_context, request.creative_type, request.platform,
-            request.prompt_brief, request.product_info,
+            request.prompt_brief, request.product_info, extra_guidance=copy_guidance,
         )
 
         try:
