@@ -1,7 +1,7 @@
 AI Marketing Automation Platform — Product Development Plan
 
 
-*STATUS (as of 2026-09-16)*
+*STATUS (as of 2026-10-01)*
 
 Done:
 - Epic 01 — Authentication & User Management
@@ -16,10 +16,13 @@ Done:
 - Epic 10 — Social Media Account Management
 - Epic 13 — Notification Center
 - Epic 14 — Dashboard
-- Epic 18 — Activity & Audit Logs (built + tested — NOT YET COMMITTED to git, still local-only)
+- Epic 18 — Activity & Audit Logs
+- Epic 19 — Admin Settings (AI generation limits, notification toggle, upload size cap; AI provider/model/timezone shown read-only from .env)
+- Epic 20 — Client Settings (profile, change password, recent login activity, per-user email notification preference — no profile photo, removed per request)
+- Epic 21 — AI Prompt & Template Management (versioned prompt library, activate/deactivate, wired into real image + caption generation as appended guidance)
 - Epic 22 — Automation Engine (Content/Approval/Regeneration legs; Publishing leg blocked on Epic 11)
-- Epic 23 — Background Jobs & Queue Management (admin Jobs page: view/filter/cancel across creative + video generation — NOT YET COMMITTED)
-- Epic 24 — Security (rate limiting on all endpoints + a stricter login/password-reset limit, plus login lockout + admin alert after 5 failed attempts in 15 min — NOT YET COMMITTED)
+- Epic 23 — Background Jobs & Queue Management
+- Epic 24 — Security
 - Epic 25 — Multi-Tenant SaaS Architecture
 
 Pending / Partial:
@@ -31,9 +34,6 @@ Not Started:
 - Epic 15 — Analytics
 - Epic 16 — Reports
 - Epic 17 — Subscription & Usage Management
-- Epic 19 — Admin Settings
-- Epic 20 — Client Settings
-- Epic 21 — AI Prompt & Template Management
 - Epic 26 — DevOps & Infrastructure
 - Epic 28 — Documentation
 
