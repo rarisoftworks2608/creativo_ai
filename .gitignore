@@ -7,3 +7,10 @@ dist/
 db.sqlite3
 staticfiles/
 media/
+logs/
+*.log
+backups/
+.coverage
+htmlcov/
+# Celery beat's local schedule state (a dev run creates these next to manage.py)
+celerybeat-schedule*

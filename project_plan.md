@@ -1,41 +1,43 @@
 AI Marketing Automation Platform — Product Development Plan
 
 
-*STATUS (as of 2026-10-01)*
+*STATUS (as of 2026-10-02)*
 
 Done:
-- Epic 01 — Authentication & User Management
+- Epic 01 — Authentication & User Management (profile update fixed; WhatsApp notification preference added)
 - Epic 02 — Company/Customer Management
-- Epic 03 — Brand Management
+- Epic 03 — Brand Management (identity uploads now validated: real image, size limit, storage quota)
 - Epic 04 — Content Calendar
-- Epic 05 — AI Content Strategy
-- Epic 06 — AI Creative Generation
-- Epic 07 — AI Video Generation
-- Epic 08 — Media Management
-- Epic 09 — Content Approval Workflow
-- Epic 10 — Social Media Account Management
+- Epic 05 — AI Content Strategy (content language setting)
+- Epic 06 — AI Creative Generation (OpenAI gpt-image-1 provider added; switchable from Admin Settings)
+- Epic 07 — AI Video Generation (background music library, brand end card, H.264 CRF compression + faststart, scene editing + re-render, per-scene visual regeneration, S3-compatible rendering, FFmpeg auto-detection)
+- Epic 08 — Media Management (S3 / Cloudflare R2 storage option)
+- Epic 09 — Content Approval Workflow (review history timeline, approved variation locked in, admin approval queue, approval reminders, approve with note)
+- Epic 10 — Social Media Account Management (OAuth: Facebook Login for Business + Instagram, LinkedIn incl. Company Pages; page/organization picker; token refresh; manual token fallback)
+- Epic 11 — Publishing & Scheduling (publish now / schedule, multi-platform, Instagram/Facebook/LinkedIn publishers incl. carousel/reels/stories/video, queue, retries with backoff, cancel, reschedule, history, error logs, auto-schedule on approval)
+- Epic 12 — WhatsApp Automation (WhatsApp Cloud API + console test mode, notification group of client + internal numbers, 8 event templates, delivery log, webhook receipts, test message)
 - Epic 13 — Notification Center
-- Epic 14 — Dashboard
-- Epic 18 — Activity & Audit Logs
-- Epic 19 — Admin Settings (AI generation limits, notification toggle, upload size cap; AI provider/model/timezone shown read-only from .env)
-- Epic 20 — Client Settings (profile, change password, recent login activity, per-user email notification preference — no profile photo, removed per request)
-- Epic 21 — AI Prompt & Template Management (versioned prompt library, activate/deactivate, wired into real image + caption generation as appended guidance)
-- Epic 22 — Automation Engine (Content/Approval/Regeneration legs; Publishing leg blocked on Epic 11)
-- Epic 23 — Background Jobs & Queue Management
+- Epic 14 — Dashboard (publishing, engagement and subscription widgets)
+- Epic 15 — Analytics (Instagram/Facebook/LinkedIn post metrics, follower snapshots, engagement rate, top posts, best platform/content type, growth, campaigns, scheduled sync with failure handling)
+- Epic 16 — Reports (monthly/content/publishing/engagement/growth client reports, 6 admin reports, PDF/Excel/CSV export, monthly automation, email + WhatsApp delivery)
+- Epic 17 — Subscription & Usage Management (plans, subscriptions with per-company overrides, usage meters, optional enforcement, manual billing, expiry/renewal reminders)
+- Epic 18 — Activity & Audit Logs (settings changes record old → new values)
+- Epic 19 — Admin Settings (AI provider/model overrides, language, timezone, publishing, approval reminders, analytics, reports, subscription enforcement, integrations status)
+- Epic 20 — Client Settings
+- Epic 21 — AI Prompt & Template Management
+- Epic 22 — Automation Engine (all legs incl. Publishing and Analytics → Reports)
+- Epic 23 — Background Jobs & Queue Management (jobs page covers publishing, reports, analytics sync)
 - Epic 24 — Security
 - Epic 25 — Multi-Tenant SaaS Architecture
+- Epic 26 — DevOps & Infrastructure (Docker, Compose, Nginx + Let's Encrypt, GitHub Actions CI, health checks, logging, Sentry, backup/restore scripts)
+- Epic 27 — Testing & QA (backend suite covers every module; frontend lint + build in CI)
+- Epic 28 — Documentation (README + docs/: architecture, API, database, deployment, environment, Meta/LinkedIn setup, admin/client guides, FAQ, troubleshooting)
 
-Pending / Partial:
-- Epic 27 — Testing & QA (backend unit tests exist per app, not full coverage; no frontend tests)
-
-Not Started:
-- Epic 11 — Publishing & Scheduling (no actual posting to social platforms yet)
-- Epic 12 — WhatsApp Automation
-- Epic 15 — Analytics
-- Epic 16 — Reports
-- Epic 17 — Subscription & Usage Management
-- Epic 26 — DevOps & Infrastructure
-- Epic 28 — Documentation
+Waiting on external accounts (code complete, needs credentials):
+- Meta app review / business verification for client Pages (docs/meta-setup-guide.md)
+- LinkedIn Community Management API approval (docs/linkedin-setup-guide.md)
+- WhatsApp Business number + approved templates
+- OpenAI key (to switch image generation from Cloudflare)
 
 
 creative plan 
@@ -286,21 +288,21 @@ Use the reference creative only for its composition (right-hero / left-copy / to
 
 to run this project
 
-# terminal 1
-cd backend; venv\Scripts\Activate.ps1; 
-python manage.py runserver
-# terminal 2
+# all four at once (Windows): powershell -ExecutionPolicy Bypass -File scripts\dev.ps1
+
+# terminal 1 - API
+cd backend; .\venv\Scripts\python manage.py runserver
+
+# terminal 2 - frontend
 cd frontend; npm run dev
 
-# terminal 3
-cd backend
-venv\Scripts\Activate.ps1
-celery -A config worker -l info--pool=solo
+# terminal 3 - Celery worker
+cd backend; .\venv\Scripts\celery -A config worker -l info --pool=solo
 
-# terminal 4
-cd backend
-venv\Scripts\Activate.ps1
-celery -A config beat -l info
+# terminal 4 - Celery beat (schedule file kept outside the repo)
+cd backend; .\venv\Scripts\celery -A config beat -l info -s "$env:TEMP\creativo-celerybeat-schedule"
+
+# Redis must be running: docker start creativo-redis
 
 1. Product Overview
 

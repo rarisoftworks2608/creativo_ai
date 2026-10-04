@@ -14,6 +14,23 @@ import { extractErrorMessage } from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import Modal from '../components/Modal'
 import TagsInput from '../components/TagsInput'
+import ICONS from '../components/DashboardIcons'
+
+const COMPANY_MODULES = [
+  { path: 'brand', icon: 'image', title: 'Brand', text: 'Logo, colours, guidelines, assets' },
+  { path: 'ai-strategy', icon: 'sparkle', title: 'AI strategy', text: 'Brand context, ideas, platform strategy' },
+  { path: 'calendar', icon: 'calendar', title: 'Content calendar', text: 'Monthly plan & Excel import' },
+  { path: 'creative-generation', icon: 'wand', title: 'Creatives', text: 'AI image + copy variations' },
+  { path: 'video-generation', icon: 'video', title: 'Videos', text: 'Scripted reels with voice-over' },
+  { path: 'approvals', icon: 'check', title: 'Approvals', text: 'Client review & history' },
+  { path: 'publishing', icon: 'send', title: 'Publishing', text: 'Schedule & track posts' },
+  { path: 'social-accounts', icon: 'users', title: 'Social accounts', text: 'Instagram, Facebook, LinkedIn' },
+  { path: 'whatsapp', icon: 'chat', title: 'WhatsApp', text: 'Notification group & templates' },
+  { path: 'analytics', icon: 'chart', title: 'Analytics', text: 'Reach, engagement, growth' },
+  { path: 'reports', icon: 'file', title: 'Reports', text: 'Monthly PDF / Excel reports' },
+  { path: 'media-library', icon: 'image', title: 'Media library', text: 'Every asset, creative and video' },
+  { path: 'subscription', icon: 'dollar', title: 'Subscription', text: 'Plan, usage & billing' },
+]
 
 const FIELD_LABELS = {
   name: 'Company name',
@@ -345,86 +362,19 @@ export default function CompanyDetailPage() {
         </div>
       </div>
 
-      <div className="card">
-        <div className="card-header">
-          <h2>Brand management</h2>
-          <Link to={`/companies/${id}/brand`} className="btn btn-primary">
-            Open brand
+      <h2 className="dashboard-section-title">Company modules</h2>
+      <div className="module-grid">
+        {COMPANY_MODULES.map((module) => (
+          <Link key={module.path} to={`/companies/${id}/${module.path}`} className="module-card">
+            <span className="module-icon" aria-hidden="true">
+              {ICONS[module.icon]}
+            </span>
+            <span className="module-text">
+              <strong>{module.title}</strong>
+              <span>{module.path === 'calendar' ? `${calendarCount} item${calendarCount === 1 ? '' : 's'} planned` : module.text}</span>
+            </span>
           </Link>
-        </div>
-        <p className="page-subtitle">Logo, brand colors, guidelines, marketing information and brand assets.</p>
-      </div>
-
-      {isAdmin && (
-        <div className="card">
-          <div className="card-header">
-            <h2>AI content strategy</h2>
-            <Link to={`/companies/${id}/ai-strategy`} className="btn btn-primary">
-              Open AI strategy
-            </Link>
-          </div>
-          <p className="page-subtitle">Brand context, content ideas, and platform/audience/campaign strategy.</p>
-        </div>
-      )}
-
-      {isAdmin && (
-        <div className="card">
-          <div className="card-header">
-            <h2>AI creative generation</h2>
-            <Link to={`/companies/${id}/creative-generation`} className="btn btn-primary">
-              Open creative generation
-            </Link>
-          </div>
-          <p className="page-subtitle">Generate brand-aware image + copy variations for social creatives.</p>
-        </div>
-      )}
-
-      {isAdmin && (
-        <div className="card">
-          <div className="card-header">
-            <h2>AI video generation</h2>
-            <Link to={`/companies/${id}/video-generation`} className="btn btn-primary">
-              Open video generation
-            </Link>
-          </div>
-          <p className="page-subtitle">Generate scripted, scene-by-scene videos with voice-over and subtitles.</p>
-        </div>
-      )}
-
-      {isAdmin && (
-        <div className="card">
-          <div className="card-header">
-            <h2>Social media accounts</h2>
-            <Link to={`/companies/${id}/social-accounts`} className="btn btn-primary">
-              Open social accounts
-            </Link>
-          </div>
-          <p className="page-subtitle">Connect Instagram, Facebook and LinkedIn accounts for publishing.</p>
-        </div>
-      )}
-
-      {isAdmin && (
-        <div className="card">
-          <div className="card-header">
-            <h2>Media library</h2>
-            <Link to={`/companies/${id}/media-library`} className="btn btn-primary">
-              Open media library
-            </Link>
-          </div>
-          <p className="page-subtitle">Browse brand assets, generated creatives and videos in one place.</p>
-        </div>
-      )}
-
-      <div className="card">
-        <div className="card-header">
-          <h2>Content calendar</h2>
-          <Link to={`/companies/${id}/calendar`} className="btn btn-primary">
-            Open calendar
-          </Link>
-        </div>
-        <p className="page-subtitle">
-          {calendarCount} item{calendarCount === 1 ? '' : 's'} scheduled for this company.
-        </p>
+        ))}
       </div>
 
       <div className="card">
@@ -441,7 +391,7 @@ export default function CompanyDetailPage() {
           </div>
         ) : (
           <div className="table-wrapper">
-            <table className="table">
+            <table className="table table-stack">
               <thead>
                 <tr>
                   <th>Name</th>
@@ -454,10 +404,10 @@ export default function CompanyDetailPage() {
               <tbody>
                 {clients.map((client) => (
                   <tr key={client.id}>
-                    <td>{client.user.full_name}</td>
-                    <td>{client.user.email}</td>
-                    <td>{client.designation || '—'}</td>
-                    <td>{client.is_primary_contact ? '★' : ''}</td>
+                    <td data-label="Name">{client.user.full_name}</td>
+                    <td data-label="Email">{client.user.email}</td>
+                    <td data-label="Designation">{client.designation || '—'}</td>
+                    <td data-label="Primary">{client.is_primary_contact ? '★' : '—'}</td>
                     <td className="table-actions">
                       <button type="button" className="btn-link" onClick={() => setEditingClient(client)}>
                         Edit

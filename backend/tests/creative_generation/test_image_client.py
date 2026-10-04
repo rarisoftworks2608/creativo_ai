@@ -11,6 +11,7 @@ from apps.creative_generation.image_client import (
     CloudflareImageProvider,
     GeminiImageProvider,
     HuggingFaceImageProvider,
+    OpenAIImageProvider,
     get_image_provider,
 )
 
@@ -280,6 +281,115 @@ class CloudflareImageProviderTests(TestCase):
         self.assertEqual(sent_prompt, 'a red bicycle')
 
 
+def fake_openai_response(*, status_code=200, body=None, url='https://api.openai.com/v1/images/generations'):
+    if body is None:
+        body = {'created': 0, 'data': [{'b64_json': base64.b64encode(b'\x89PNG-fake').decode()}]}
+    return httpx.Response(status_code=status_code, json=body, request=httpx.Request('POST', url))
+
+
+class OpenAIImageProviderTests(TestCase):
+    """Exercises the OpenAI Images wrapper (network mocked): the gpt-image-1 request shape
+    for text-only and reference-image generations, and every failure mode mapped to
+    AIProviderError/AIProviderNotConfigured rather than an uncaught exception.
+    """
+
+    def setUp(self):
+        self._old_key = os.environ.pop('OPENAI_API_KEY', None)
+        os.environ['OPENAI_API_KEY'] = 'test-key'
+
+    def tearDown(self):
+        os.environ.pop('OPENAI_API_KEY', None)
+        if self._old_key is not None:
+            os.environ['OPENAI_API_KEY'] = self._old_key
+
+    @patch('httpx.post')
+    def test_success_returns_decoded_png_bytes(self, mock_post):
+        mock_post.return_value = fake_openai_response()
+        provider = OpenAIImageProvider(model='gpt-image-1')
+
+        image_bytes, mime_type = provider.generate_image(prompt='a red bicycle')
+
+        self.assertEqual(image_bytes, b'\x89PNG-fake')
+        self.assertEqual(mime_type, 'image/png')
+
+    @patch('httpx.post')
+    def test_text_prompt_calls_generations_with_portrait_size_and_bearer_key(self, mock_post):
+        mock_post.return_value = fake_openai_response()
+        provider = OpenAIImageProvider(model='gpt-image-1')
+
+        provider.generate_image(prompt='a red bicycle')
+
+        self.assertTrue(mock_post.call_args.args[0].endswith('/images/generations'))
+        sent_json = mock_post.call_args.kwargs['json']
+        self.assertEqual(sent_json['model'], 'gpt-image-1')
+        self.assertEqual(sent_json['prompt'], 'a red bicycle')
+        self.assertEqual(sent_json['size'], '1024x1536')
+        self.assertNotIn('response_format', sent_json)  # gpt-image models always return base64
+        self.assertEqual(mock_post.call_args.kwargs['headers']['Authorization'], 'Bearer test-key')
+
+    @patch('httpx.post')
+    def test_reference_images_are_sent_to_the_edits_endpoint(self, mock_post):
+        mock_post.return_value = fake_openai_response(url='https://api.openai.com/v1/images/edits')
+        provider = OpenAIImageProvider(model='gpt-image-1')
+
+        provider.generate_image(prompt='a red bicycle', reference_images=[(b'logo-bytes', 'image/jpeg')])
+
+        self.assertTrue(mock_post.call_args.args[0].endswith('/images/edits'))
+        field, (filename, data, mime_type) = mock_post.call_args.kwargs['files'][0]
+        self.assertEqual((field, filename, data, mime_type), ('image[]', 'reference_1.jpg', b'logo-bytes', 'image/jpeg'))
+        self.assertEqual(mock_post.call_args.kwargs['data']['model'], 'gpt-image-1')
+
+    def test_missing_api_key_raises_not_configured(self):
+        os.environ.pop('OPENAI_API_KEY', None)
+        provider = OpenAIImageProvider(model='gpt-image-1')
+
+        with self.assertRaises(AIProviderNotConfigured):
+            provider.generate_image(prompt='a red bicycle')
+
+    @patch('httpx.post')
+    def test_invalid_key_raises_not_configured(self, mock_post):
+        mock_post.return_value = fake_openai_response(status_code=401, body={'error': {'message': 'Incorrect API key'}})
+        provider = OpenAIImageProvider(model='gpt-image-1')
+
+        with self.assertRaises(AIProviderNotConfigured):
+            provider.generate_image(prompt='a red bicycle')
+
+    @patch('httpx.post')
+    def test_rate_limit_raises_provider_error(self, mock_post):
+        mock_post.return_value = fake_openai_response(status_code=429, body={'error': {'message': 'Rate limit reached'}})
+        provider = OpenAIImageProvider(model='gpt-image-1')
+
+        with self.assertRaises(AIProviderError) as ctx:
+            provider.generate_image(prompt='a red bicycle')
+        self.assertNotIsInstance(ctx.exception, AIProviderNotConfigured)
+
+    @patch('httpx.post')
+    def test_rejected_request_surfaces_openais_reason(self, mock_post):
+        mock_post.return_value = fake_openai_response(
+            status_code=400, body={'error': {'message': 'Your request was rejected by the safety system.'}},
+        )
+        provider = OpenAIImageProvider(model='gpt-image-1')
+
+        with self.assertRaisesMessage(AIProviderError, 'safety system'):
+            provider.generate_image(prompt='a red bicycle')
+
+    @patch('httpx.post')
+    def test_connection_failure_raises_provider_error(self, mock_post):
+        mock_post.side_effect = httpx.ConnectError('connection refused')
+        provider = OpenAIImageProvider(model='gpt-image-1')
+
+        with self.assertRaises(AIProviderError):
+            provider.generate_image(prompt='a red bicycle')
+
+    @patch('httpx.post')
+    def test_missing_image_in_response_raises_provider_error(self, mock_post):
+        mock_post.return_value = fake_openai_response(body={'created': 0, 'data': []})
+        provider = OpenAIImageProvider(model='gpt-image-1')
+
+        with self.assertRaises(AIProviderError):
+            provider.generate_image(prompt='a red bicycle')
+
+
 class GetImageProviderFactoryTests(TestCase):
     def test_defaults_to_gemini(self):
         with override_settings(AI_IMAGE_PROVIDER='gemini'):
@@ -292,6 +402,16 @@ class GetImageProviderFactoryTests(TestCase):
     def test_selects_cloudflare(self):
         with override_settings(AI_IMAGE_PROVIDER='cloudflare'):
             self.assertIsInstance(get_image_provider(), CloudflareImageProvider)
+
+    def test_selects_openai(self):
+        with override_settings(AI_IMAGE_PROVIDER='openai', AI_IMAGE_MODEL='gpt-image-1'):
+            provider = get_image_provider()
+        self.assertIsInstance(provider, OpenAIImageProvider)
+        self.assertEqual(provider.model, 'gpt-image-1')
+
+    def test_switching_to_openai_ignores_a_leftover_cloudflare_model(self):
+        with override_settings(AI_IMAGE_PROVIDER='openai', AI_IMAGE_MODEL='@cf/black-forest-labs/flux-1-schnell'):
+            self.assertEqual(get_image_provider().model, 'gpt-image-1')
 
     def test_unknown_provider_raises(self):
         with override_settings(AI_IMAGE_PROVIDER='not-a-real-provider'):

@@ -6,6 +6,8 @@ a stored BrandContext into a planning/strategy generation request for one
 of the STRATEGY_KINDS.
 """
 
+from common.ai_config import content_language_instruction
+
 
 def _joined(values, empty='Not specified.'):
     return ', '.join(v for v in values if v) or empty
@@ -78,4 +80,7 @@ def build_strategy_prompt(brand_context, instruction, notes=''):
     ]
     if notes:
         parts += ['', f'Additional guidance from the requester: {notes}']
+    language_line = content_language_instruction()
+    if language_line:
+        parts += ['', language_line]
     return '\n'.join(parts)

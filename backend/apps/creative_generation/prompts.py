@@ -6,6 +6,8 @@ brand profile (Epic 03) and, when available, the synthesized brand context
 information all flow into both the image prompt and the copy prompt.
 """
 
+from common.ai_config import content_language_instruction
+
 CREATIVE_TYPE_GUIDANCE = {
     # Legacy - these three bundled a platform into the format; still resolved for
     # old rows (retry, display of history) but no longer offered in the UI.
@@ -167,4 +169,7 @@ def build_copy_prompt(
         lines.append(f'Restricted words - never use these: {_joined(brand_profile.restricted_words)}')
     if extra_guidance:
         lines += ['', 'ADDITIONAL GUIDANCE (admin-configured):', extra_guidance]
+    language_line = content_language_instruction()
+    if language_line:
+        lines += ['', language_line]
     return '\n'.join(lines)

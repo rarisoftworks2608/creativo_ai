@@ -1,16 +1,21 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { useParams, useSearchParams } from 'react-router-dom'
 import {
   connectSocialAccount,
   disconnectSocialAccount,
+  getOAuthStatus,
   listSocialAccounts,
+  refreshSocialToken,
+  startOAuth,
   testSocialAccountConnection,
   updateSocialAccount,
 } from '../api/socialAccounts'
-import { getCompany } from '../api/companies'
 import { extractErrorMessage } from '../api/client'
 import { useAuth } from '../context/AuthContext'
+import { useCompanyWorkspace } from '../context/CompanyWorkspaceContext'
 import Modal from '../components/Modal'
+import { formatCompact, formatDate, formatDateTime, timeAgo } from '../utils/format'
+import { OAUTH_COMPANY_KEY } from '../utils/oauth'
 
 const PLATFORMS = [
   { value: 'instagram', label: 'Instagram' },
@@ -19,49 +24,49 @@ const PLATFORMS = [
 ]
 
 const TOKEN_HELP = {
-  instagram: 'Get a long-lived access token for the linked Instagram Business account from the Meta Developer Console (Graph API Explorer).',
-  facebook: 'Get a Page access token from the Meta Developer Console (Graph API Explorer), scoped to the Page you want to publish to.',
-  linkedin: 'Get an access token with the required organization/share scopes from the LinkedIn Developer Portal.',
+  instagram:
+    'Instagram professional account ID + its parent Facebook Page access token (Graph API Explorer → select the Page → copy the Page token).',
+  facebook: 'Facebook Page ID + a Page access token with pages_manage_posts (Graph API Explorer → your app → Page token).',
+  linkedin: 'Organization ID (or member ID) + an access token with w_organization_social (or w_member_social).',
 }
 
-const EMPTY_FORM = { platform: 'instagram', account_name: '', account_id: '', access_token: '', token_expires_at: '', notes: '' }
+const EMPTY_FORM = {
+  platform: 'instagram', account_name: '', account_id: '', page_id: '', access_token: '', token_expires_at: '', notes: '',
+}
 
 export default function SocialAccountsPage() {
   const { id: companyId } = useParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const { isAdmin } = useAuth()
+  const workspace = useCompanyWorkspace()
 
-  const [company, setCompany] = useState(null)
   const [accounts, setAccounts] = useState([])
+  const [oauth, setOauth] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [loadError, setLoadError] = useState('')
+  const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
+  const [busyId, setBusyId] = useState(null)
+  const [startingProvider, setStartingProvider] = useState('')
 
-  const [showConnect, setShowConnect] = useState(false)
+  const [showManual, setShowManual] = useState(false)
   const [form, setForm] = useState(EMPTY_FORM)
-  const [connecting, setConnecting] = useState(false)
-  const [connectError, setConnectError] = useState('')
-
-  const [editingAccount, setEditingAccount] = useState(null)
+  const [saving, setSaving] = useState(false)
+  const [editing, setEditing] = useState(null)
   const [editToken, setEditToken] = useState('')
-  const [savingEdit, setSavingEdit] = useState(false)
-  const [editError, setEditError] = useState('')
-
-  const [disconnectingId, setDisconnectingId] = useState(null)
-  const [testingId, setTestingId] = useState(null)
-  const [testResult, setTestResult] = useState(null)
+  const [showSetup, setShowSetup] = useState(null)
 
   const load = useCallback(async () => {
     if (!isAdmin) {
       setLoading(false)
       return
     }
-    setLoading(true)
-    setLoadError('')
+    setError('')
     try {
-      const [companyData, accountsData] = await Promise.all([getCompany(companyId), listSocialAccounts(companyId)])
-      setCompany(companyData)
-      setAccounts(accountsData.results)
+      const [accountData, oauthData] = await Promise.all([listSocialAccounts(companyId), getOAuthStatus(companyId)])
+      setAccounts(accountData.results)
+      setOauth(oauthData)
     } catch (err) {
-      setLoadError(extractErrorMessage(err, 'Could not load social accounts.'))
+      setError(extractErrorMessage(err, 'Could not load social accounts.'))
     } finally {
       setLoading(false)
     }
@@ -71,252 +76,371 @@ export default function SocialAccountsPage() {
     load()
   }, [load])
 
-  function updateField(field, value) {
-    setForm((prev) => ({ ...prev, [field]: value }))
+  useEffect(() => {
+    const connected = searchParams.get('connected')
+    if (connected) {
+      setNotice(`Connected ${connected} account${connected === '1' ? '' : 's'}.`)
+      setSearchParams({}, { replace: true })
+    }
+  }, [searchParams, setSearchParams])
+
+  if (!isAdmin) return <div className="alert alert-error">Social media account management is only available to admins.</div>
+  if (loading) return <div className="page-loading">Loading…</div>
+
+  async function beginOAuth(provider) {
+    setStartingProvider(provider)
+    setError('')
+    try {
+      const { authorization_url: url } = await startOAuth(companyId, provider)
+      sessionStorage.setItem(OAUTH_COMPANY_KEY, companyId)
+      window.location.assign(url)
+    } catch (err) {
+      setError(extractErrorMessage(err, 'Could not start the login.'))
+      setStartingProvider('')
+    }
   }
 
-  async function handleConnect(event) {
-    event.preventDefault()
-    setConnecting(true)
-    setConnectError('')
+  async function act(account, action) {
+    setBusyId(account.id)
+    setError('')
+    setNotice('')
     try {
-      const payload = { ...form, token_expires_at: form.token_expires_at || null }
+      if (action === 'test') {
+        const result = await testSocialAccountConnection(companyId, account.id)
+        setAccounts((prev) => prev.map((a) => (a.id === result.account.id ? result.account : a)))
+        setNotice(result.detail)
+      } else if (action === 'refresh') {
+        const result = await refreshSocialToken(companyId, account.id)
+        setAccounts((prev) => prev.map((a) => (a.id === result.account.id ? result.account : a)))
+        setNotice(result.detail)
+      } else if (action === 'disconnect') {
+        if (!window.confirm(`Disconnect ${account.account_name}? Scheduled posts to it will fail until it is reconnected.`)) return
+        const updated = await disconnectSocialAccount(companyId, account.id)
+        setAccounts((prev) => prev.map((a) => (a.id === updated.id ? updated : a)))
+      }
+    } catch (err) {
+      setError(extractErrorMessage(err, 'That action failed.'))
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  async function saveManual(event) {
+    event.preventDefault()
+    setSaving(true)
+    setError('')
+    try {
+      const payload = {
+        platform: form.platform, account_name: form.account_name, account_id: form.account_id,
+        access_token: form.access_token, token_expires_at: form.token_expires_at || null, notes: form.notes,
+        metadata: {},
+      }
+      if (form.platform === 'instagram' && form.page_id) payload.metadata.page_id = form.page_id
+      if (form.platform === 'linkedin') payload.metadata.account_type = form.page_id === 'person' ? 'person' : 'organization'
       const created = await connectSocialAccount(companyId, payload)
       setAccounts((prev) => [created, ...prev])
-      setShowConnect(false)
+      setShowManual(false)
       setForm(EMPTY_FORM)
     } catch (err) {
-      setConnectError(extractErrorMessage(err, 'Could not connect this account.'))
+      setError(extractErrorMessage(err, 'Could not connect this account.'))
     } finally {
-      setConnecting(false)
+      setSaving(false)
     }
   }
 
-  function openEdit(account) {
-    setEditingAccount({ ...account })
-    setEditToken('')
-    setEditError('')
-  }
-
-  async function handleSaveEdit(event) {
+  async function saveEdit(event) {
     event.preventDefault()
-    setSavingEdit(true)
-    setEditError('')
+    setSaving(true)
     try {
-      const payload = { account_name: editingAccount.account_name, notes: editingAccount.notes }
+      const payload = { account_name: editing.account_name, notes: editing.notes }
       if (editToken) payload.access_token = editToken
-      const updated = await updateSocialAccount(companyId, editingAccount.id, payload)
+      const updated = await updateSocialAccount(companyId, editing.id, payload)
       setAccounts((prev) => prev.map((a) => (a.id === updated.id ? updated : a)))
-      setEditingAccount(null)
+      setEditing(null)
     } catch (err) {
-      setEditError(extractErrorMessage(err, 'Could not save changes.'))
+      setError(extractErrorMessage(err, 'Could not save changes.'))
     } finally {
-      setSavingEdit(false)
+      setSaving(false)
     }
   }
 
-  async function handleTestConnection(accountId) {
-    setTestingId(accountId)
-    setTestResult(null)
-    try {
-      const result = await testSocialAccountConnection(companyId, accountId)
-      setAccounts((prev) => prev.map((a) => (a.id === result.account.id ? result.account : a)))
-      setTestResult({ id: accountId, ok: result.account.status === 'connected', message: result.detail })
-    } catch (err) {
-      setTestResult({ id: accountId, ok: false, message: extractErrorMessage(err, 'Could not test this connection.') })
-    } finally {
-      setTestingId(null)
-    }
-  }
-
-  async function handleDisconnect(accountId) {
-    if (!window.confirm('Disconnect this account? It will need a fresh token to reconnect.')) return
-    setDisconnectingId(accountId)
-    try {
-      const updated = await disconnectSocialAccount(companyId, accountId)
-      setAccounts((prev) => prev.map((a) => (a.id === updated.id ? updated : a)))
-    } catch (err) {
-      setLoadError(extractErrorMessage(err, 'Could not disconnect this account.'))
-    } finally {
-      setDisconnectingId(null)
-    }
-  }
-
-  if (!isAdmin) {
-    return <div className="alert alert-error">Social media account management is only available to admins.</div>
-  }
-  if (loading) return <div className="page-loading">Loading…</div>
-  if (loadError && !company) return <div className="alert alert-error">{loadError}</div>
-  if (!company) return null
+  const active = accounts.filter((a) => a.status !== 'disconnected')
+  const disconnected = accounts.filter((a) => a.status === 'disconnected')
 
   return (
     <div>
-      <Link to={`/companies/${companyId}`} className="back-link">
-        ← Back to {company.name}
-      </Link>
-
       <div className="page-header">
         <div>
-          <h1>Social Media Accounts</h1>
-          <p className="page-subtitle">{company.name}</p>
+          <h1>Social accounts</h1>
+          <p className="page-subtitle">
+            {workspace?.company?.name ? `${workspace.company.name} · ` : ''}Connect the Instagram, Facebook and LinkedIn accounts content
+            is published to.
+          </p>
         </div>
-        <button type="button" className="btn btn-primary" onClick={() => setShowConnect(true)}>
-          + Connect account
-        </button>
       </div>
 
-      {loadError && <div className="alert alert-error">{loadError}</div>}
+      {error && <div className="alert alert-error">{error}</div>}
+      {notice && <div className="alert alert-success">{notice}</div>}
 
-      {accounts.length === 0 ? (
+      <div className="connect-grid">
+        <div className="card connect-card">
+          <h2>Facebook & Instagram</h2>
+          <p className="page-subtitle">Log in with Facebook, then pick the Pages and linked Instagram professional accounts to publish to.</p>
+          <button type="button" className="btn btn-primary" disabled={!oauth?.meta.configured || startingProvider === 'meta'} onClick={() => beginOAuth('meta')}>
+            {startingProvider === 'meta' ? 'Redirecting…' : 'Continue with Facebook'}
+          </button>
+          {!oauth?.meta.configured && (
+            <button type="button" className="btn-link" onClick={() => setShowSetup('meta')}>
+              Not set up yet - how to enable
+            </button>
+          )}
+        </div>
+        <div className="card connect-card">
+          <h2>LinkedIn</h2>
+          <p className="page-subtitle">Log in with LinkedIn, then pick the Company Page (or personal profile) to publish to.</p>
+          <button type="button" className="btn btn-primary" disabled={!oauth?.linkedin.configured || startingProvider === 'linkedin'} onClick={() => beginOAuth('linkedin')}>
+            {startingProvider === 'linkedin' ? 'Redirecting…' : 'Continue with LinkedIn'}
+          </button>
+          {!oauth?.linkedin.configured && (
+            <button type="button" className="btn-link" onClick={() => setShowSetup('linkedin')}>
+              Not set up yet - how to enable
+            </button>
+          )}
+        </div>
+        <div className="card connect-card connect-card-muted">
+          <h2>Paste a token</h2>
+          <p className="page-subtitle">Advanced: connect with an access token from the platform&apos;s developer tools.</p>
+          <button type="button" className="btn btn-ghost" onClick={() => setShowManual(true)}>
+            Connect manually
+          </button>
+        </div>
+      </div>
+
+      {active.length === 0 ? (
         <div className="card">
           <div className="empty-state">
-            <p>No social accounts connected yet.</p>
+            <p>No accounts connected yet.</p>
           </div>
         </div>
       ) : (
-        <div className="table-wrapper">
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Platform</th>
-                <th>Account</th>
-                <th>Token</th>
-                <th>Expires</th>
-                <th>Status</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {accounts.map((account) => (
-                <tr key={account.id}>
-                  <td>{account.platform_display}</td>
-                  <td>
-                    {account.account_name}
-                    {account.account_id && <div className="page-subtitle">{account.account_id}</div>}
-                  </td>
-                  <td>{account.has_token ? <code>{account.token_masked}</code> : <span className="muted">Not set</span>}</td>
-                  <td>{account.token_expires_at ? new Date(account.token_expires_at).toLocaleDateString() : '—'}</td>
-                  <td>
-                    <span className={`badge badge-${account.status}`}>{account.status}</span>
-                  </td>
-                  <td className="table-actions">
-                    <button type="button" className="btn-link" onClick={() => openEdit(account)}>
-                      Edit
-                    </button>
-                    {account.status !== 'disconnected' && (
-                      <>
-                        <button
-                          type="button"
-                          className="btn-link"
-                          disabled={testingId === account.id}
-                          onClick={() => handleTestConnection(account.id)}
-                        >
-                          {testingId === account.id ? 'Testing…' : 'Test connection'}
-                        </button>
-                        <button
-                          type="button"
-                          className="btn-link btn-link-danger"
-                          disabled={disconnectingId === account.id}
-                          onClick={() => handleDisconnect(account.id)}
-                        >
-                          Disconnect
-                        </button>
-                      </>
-                    )}
-                    {testResult?.id === account.id && (
-                      <div className={testResult.ok ? 'muted' : 'alert alert-error'} style={{ marginTop: 4 }}>
-                        {testResult.message}
-                      </div>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="account-grid">
+          {active.map((account) => (
+            <div className="card account-card" key={account.id}>
+              <div className="account-card-head">
+                {account.profile?.picture_url ? (
+                  <img src={account.profile.picture_url} alt="" className="account-avatar" />
+                ) : (
+                  <span className="account-avatar account-avatar-empty">{account.platform_display[0]}</span>
+                )}
+                <div className="account-card-title">
+                  <strong>{account.account_name}</strong>
+                  <span className="page-subtitle">
+                    {account.platform_display}
+                    {account.profile?.account_type === 'organization' ? ' Company Page' : ''}
+                    {account.profile?.username ? ` · @${account.profile.username}` : ''}
+                  </span>
+                </div>
+                <span className={`badge badge-${account.status}`}>{account.status}</span>
+              </div>
+              <dl className="detail-list detail-list-compact">
+                {account.profile?.followers_count !== undefined && (
+                  <div className="detail-row">
+                    <dt>Followers</dt>
+                    <dd>{formatCompact(account.profile.followers_count)}</dd>
+                  </div>
+                )}
+                {account.profile?.page_name && (
+                  <div className="detail-row">
+                    <dt>Facebook Page</dt>
+                    <dd>{account.profile.page_name}</dd>
+                  </div>
+                )}
+                <div className="detail-row">
+                  <dt>Connected</dt>
+                  <dd>
+                    {account.connection_method === 'oauth' ? 'OAuth login' : 'Manual token'} · {formatDate(account.created_at)}
+                  </dd>
+                </div>
+                <div className="detail-row">
+                  <dt>Token</dt>
+                  <dd>
+                    {account.has_token ? <code>{account.token_masked}</code> : 'Not set'}
+                    {account.token_expires_at ? ` · expires ${formatDate(account.token_expires_at)}` : account.has_token ? ' · no expiry' : ''}
+                  </dd>
+                </div>
+                {account.scopes?.length > 0 && (
+                  <div className="detail-row">
+                    <dt>Permissions</dt>
+                    <dd className="scope-list">{account.scopes.join(', ')}</dd>
+                  </div>
+                )}
+                {account.last_checked_at && (
+                  <div className="detail-row">
+                    <dt>Last checked</dt>
+                    <dd>{timeAgo(account.last_checked_at)}</dd>
+                  </div>
+                )}
+              </dl>
+              {account.last_error && <div className="alert alert-error job-error">{account.last_error}</div>}
+              <div className="account-actions">
+                <button type="button" className="btn btn-ghost btn-sm" disabled={busyId === account.id} onClick={() => act(account, 'test')}>
+                  {busyId === account.id ? 'Working…' : 'Test connection'}
+                </button>
+                {account.has_refresh_token && (
+                  <button type="button" className="btn btn-ghost btn-sm" disabled={busyId === account.id} onClick={() => act(account, 'refresh')}>
+                    Refresh token
+                  </button>
+                )}
+                {account.status === 'expired' && account.platform !== 'linkedin' && oauth?.meta.configured && (
+                  <button type="button" className="btn btn-primary btn-sm" onClick={() => beginOAuth('meta')}>
+                    Reconnect
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="btn-link"
+                  onClick={() => {
+                    setEditing({ ...account })
+                    setEditToken('')
+                  }}
+                >
+                  Edit
+                </button>
+                <button type="button" className="btn-link btn-link-danger" disabled={busyId === account.id} onClick={() => act(account, 'disconnect')}>
+                  Disconnect
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
-      {showConnect && (
-        <Modal title="Connect social account" onClose={() => setShowConnect(false)}>
-          <form onSubmit={handleConnect}>
-            {connectError && <div className="alert alert-error">{connectError}</div>}
-            <label className="field">
-              <span>Platform *</span>
-              <select value={form.platform} onChange={(e) => updateField('platform', e.target.value)} required>
-                {PLATFORMS.map((p) => (
-                  <option key={p.value} value={p.value}>
-                    {p.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="field">
-              <span>Account name *</span>
-              <input
-                value={form.account_name}
-                onChange={(e) => updateField('account_name', e.target.value)}
-                placeholder="e.g. Acme Restaurant IG"
-                required
-              />
-            </label>
-            <label className="field">
-              <span>Account / Page ID</span>
-              <input value={form.account_id} onChange={(e) => updateField('account_id', e.target.value)} />
-            </label>
+      {disconnected.length > 0 && (
+        <details className="card">
+          <summary>Disconnected accounts ({disconnected.length})</summary>
+          <ul className="plain-list">
+            {disconnected.map((account) => (
+              <li key={account.id}>
+                {account.platform_display} · {account.account_name} · disconnected {formatDateTime(account.updated_at)}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+
+      {showSetup && oauth && (
+        <Modal title={showSetup === 'meta' ? 'Enable “Continue with Facebook”' : 'Enable “Continue with LinkedIn”'} onClose={() => setShowSetup(null)} width={640}>
+          {showSetup === 'meta' ? (
+            <ol className="setup-steps">
+              <li>Create a Meta app (type Business) at developers.facebook.com and add “Facebook Login for Business”.</li>
+              <li>
+                Add this Valid OAuth Redirect URI: <code>{oauth.meta.redirect_uri}</code>
+              </li>
+              <li>
+                Put the app ID and secret in the backend <code>.env</code> as <code>META_APP_ID</code> and <code>META_APP_SECRET</code>, then
+                restart the backend.
+              </li>
+              <li>Request these permissions in App Review before going live: {oauth.meta.scopes.join(', ')}.</li>
+            </ol>
+          ) : (
+            <ol className="setup-steps">
+              <li>Create an app at linkedin.com/developers, linked to your LinkedIn Company Page.</li>
+              <li>Add the products “Sign In with LinkedIn using OpenID Connect”, “Share on LinkedIn” and (for Company Pages) “Community Management API”.</li>
+              <li>
+                Add this Authorized redirect URL: <code>{oauth.linkedin.redirect_uri}</code>
+              </li>
+              <li>
+                Put the client ID and secret in the backend <code>.env</code> as <code>LINKEDIN_CLIENT_ID</code> and{' '}
+                <code>LINKEDIN_CLIENT_SECRET</code>, then restart the backend.
+              </li>
+            </ol>
+          )}
+          <p className="modal-hint">The full step-by-step guide is in docs/meta-setup-guide.md and docs/linkedin-setup-guide.md.</p>
+        </Modal>
+      )}
+
+      {showManual && (
+        <Modal title="Connect with an access token" onClose={() => setShowManual(false)}>
+          <form onSubmit={saveManual}>
+            <div className="field-row">
+              <label className="field">
+                <span>Platform *</span>
+                <select value={form.platform} onChange={(e) => setForm((f) => ({ ...f, platform: e.target.value }))}>
+                  {PLATFORMS.map((p) => (
+                    <option key={p.value} value={p.value}>
+                      {p.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                <span>Account name *</span>
+                <input value={form.account_name} onChange={(e) => setForm((f) => ({ ...f, account_name: e.target.value }))} required />
+              </label>
+            </div>
+            <div className="field-row">
+              <label className="field">
+                <span>{form.platform === 'facebook' ? 'Page ID *' : form.platform === 'instagram' ? 'Instagram account ID *' : 'Organization / member ID *'}</span>
+                <input value={form.account_id} onChange={(e) => setForm((f) => ({ ...f, account_id: e.target.value }))} required />
+              </label>
+              {form.platform === 'instagram' && (
+                <label className="field">
+                  <span>Parent Facebook Page ID</span>
+                  <input value={form.page_id} onChange={(e) => setForm((f) => ({ ...f, page_id: e.target.value }))} />
+                </label>
+              )}
+              {form.platform === 'linkedin' && (
+                <label className="field">
+                  <span>Posts as</span>
+                  <select value={form.page_id || 'organization'} onChange={(e) => setForm((f) => ({ ...f, page_id: e.target.value }))}>
+                    <option value="organization">Company Page</option>
+                    <option value="person">Personal profile</option>
+                  </select>
+                </label>
+              )}
+            </div>
             <label className="field">
               <span>Access token *</span>
-              <textarea rows={3} value={form.access_token} onChange={(e) => updateField('access_token', e.target.value)} required />
+              <textarea rows={3} value={form.access_token} onChange={(e) => setForm((f) => ({ ...f, access_token: e.target.value }))} required />
             </label>
             <p className="modal-hint">{TOKEN_HELP[form.platform]}</p>
             <label className="field">
               <span>Token expires on</span>
-              <input type="date" value={form.token_expires_at} onChange={(e) => updateField('token_expires_at', e.target.value)} />
-            </label>
-            <label className="field">
-              <span>Notes</span>
-              <textarea rows={2} value={form.notes} onChange={(e) => updateField('notes', e.target.value)} />
+              <input type="date" value={form.token_expires_at} onChange={(e) => setForm((f) => ({ ...f, token_expires_at: e.target.value }))} />
             </label>
             <div className="modal-actions">
-              <button type="button" className="btn btn-ghost" onClick={() => setShowConnect(false)}>
+              <button type="button" className="btn btn-ghost" onClick={() => setShowManual(false)}>
                 Cancel
               </button>
-              <button type="submit" className="btn btn-primary" disabled={connecting}>
-                {connecting ? 'Connecting…' : 'Connect'}
+              <button type="submit" className="btn btn-primary" disabled={saving}>
+                {saving ? 'Connecting…' : 'Connect'}
               </button>
             </div>
           </form>
         </Modal>
       )}
 
-      {editingAccount && (
-        <Modal title={`Edit ${editingAccount.account_name}`} onClose={() => setEditingAccount(null)}>
-          <form onSubmit={handleSaveEdit}>
-            {editError && <div className="alert alert-error">{editError}</div>}
+      {editing && (
+        <Modal title={`Edit ${editing.account_name}`} onClose={() => setEditing(null)}>
+          <form onSubmit={saveEdit}>
             <label className="field">
               <span>Account name</span>
-              <input
-                value={editingAccount.account_name}
-                onChange={(e) => setEditingAccount((prev) => ({ ...prev, account_name: e.target.value }))}
-              />
+              <input value={editing.account_name} onChange={(e) => setEditing((a) => ({ ...a, account_name: e.target.value }))} />
             </label>
             <label className="field">
               <span>Notes</span>
-              <textarea
-                rows={2}
-                value={editingAccount.notes}
-                onChange={(e) => setEditingAccount((prev) => ({ ...prev, notes: e.target.value }))}
-              />
+              <textarea rows={2} value={editing.notes} onChange={(e) => setEditing((a) => ({ ...a, notes: e.target.value }))} />
             </label>
             <label className="field">
               <span>Replace access token</span>
               <textarea rows={3} value={editToken} onChange={(e) => setEditToken(e.target.value)} placeholder="Leave blank to keep the current token" />
             </label>
             <div className="modal-actions">
-              <button type="button" className="btn btn-ghost" onClick={() => setEditingAccount(null)}>
+              <button type="button" className="btn btn-ghost" onClick={() => setEditing(null)}>
                 Cancel
               </button>
-              <button type="submit" className="btn btn-primary" disabled={savingEdit}>
-                {savingEdit ? 'Saving…' : 'Save'}
+              <button type="submit" className="btn btn-primary" disabled={saving}>
+                Save
               </button>
             </div>
           </form>

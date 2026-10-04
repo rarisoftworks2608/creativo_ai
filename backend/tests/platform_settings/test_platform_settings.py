@@ -7,6 +7,7 @@ from apps.authentication.models import User
 from apps.companies.models import ClientProfile, Company
 from apps.platform_settings.models import PlatformSettings
 from apps.platform_settings.services import check_daily_generation_limit
+from common.ai_config import get_model_name, get_provider_name
 
 
 class PlatformSettingsModelTests(TestCase):
@@ -110,3 +111,43 @@ class DailyGenerationLimitTests(TestCase):
         GenerationRequest.objects.create(company=other_company, creative_type=GenerationRequest.CreativeType.POST)
 
         check_daily_generation_limit(self.company)
+
+
+class AIProviderResolutionTests(TestCase):
+    """Admin Settings overrides vs .env values for the AI provider/model (common/ai_config.py)."""
+
+    def _override(self, **fields):
+        settings_obj = PlatformSettings.load()
+        for name, value in fields.items():
+            setattr(settings_obj, name, value)
+        settings_obj.save()
+
+    @override_settings(AI_IMAGE_PROVIDER='cloudflare', AI_IMAGE_MODEL='@cf/black-forest-labs/flux-1-schnell')
+    def test_env_values_are_used_without_overrides(self):
+        self.assertEqual(get_provider_name('image'), 'cloudflare')
+        self.assertEqual(get_model_name('image'), '@cf/black-forest-labs/flux-1-schnell')
+
+    @override_settings(AI_IMAGE_PROVIDER='cloudflare', AI_IMAGE_MODEL='@cf/black-forest-labs/flux-1-schnell')
+    def test_provider_override_uses_that_providers_default_model(self):
+        self._override(ai_image_provider='openai')
+
+        self.assertEqual(get_provider_name('image'), 'openai')
+        self.assertEqual(get_model_name('image'), 'gpt-image-1')
+
+    @override_settings(AI_IMAGE_PROVIDER='cloudflare', AI_IMAGE_MODEL='@cf/black-forest-labs/flux-1-schnell')
+    def test_model_override_wins(self):
+        self._override(ai_image_provider='openai', ai_image_model='custom-image-model')
+
+        self.assertEqual(get_model_name('image'), 'custom-image-model')
+
+    @override_settings(AI_IMAGE_PROVIDER='openai', AI_IMAGE_MODEL='@cf/black-forest-labs/flux-1-schnell')
+    def test_env_provider_switch_ignores_the_previous_providers_default_model(self):
+        self.assertEqual(get_model_name('image'), 'gpt-image-1')
+
+    @override_settings(AI_TEXT_PROVIDER='openai', AI_TEXT_MODEL='openai/gpt-oss-120b')
+    def test_env_text_provider_switch_ignores_the_groq_default_model(self):
+        self.assertEqual(get_model_name('text'), 'gpt-4.1-mini')
+
+    @override_settings(AI_IMAGE_PROVIDER='cloudflare', AI_IMAGE_MODEL='@cf/stabilityai/stable-diffusion-xl-base-1.0')
+    def test_custom_env_model_is_kept(self):
+        self.assertEqual(get_model_name('image'), '@cf/stabilityai/stable-diffusion-xl-base-1.0')

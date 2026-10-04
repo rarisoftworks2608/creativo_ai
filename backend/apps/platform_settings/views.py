@@ -19,7 +19,15 @@ class PlatformSettingsView(generics.RetrieveUpdateAPIView):
         from apps.activity_log.models import ActivityLog
         from apps.activity_log.services import log_activity
 
-        serializer.save(updated_by=self.request.user)
+        tracked = [f for f in serializer.validated_data]
+        before = {f: str(getattr(serializer.instance, f)) for f in tracked}
+        instance = serializer.save(updated_by=self.request.user)
+        after = {f: str(getattr(instance, f)) for f in tracked}
+        changed = [f for f in tracked if before[f] != after[f]]
         log_activity(
-            module=ActivityLog.Module.SETTINGS, action='Platform settings updated', request=self.request,
+            module=ActivityLog.Module.SETTINGS, action='Platform settings updated',
+            description=', '.join(changed)[:500],
+            old_value={f: before[f] for f in changed} or None,
+            new_value={f: after[f] for f in changed} or None,
+            request=self.request,
         )

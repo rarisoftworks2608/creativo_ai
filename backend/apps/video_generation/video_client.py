@@ -27,8 +27,7 @@ import os
 import time
 from abc import ABC, abstractmethod
 
-from django.conf import settings
-
+from common.ai_config import get_model_name, get_provider_name
 from common.ai_errors import AIProviderError, AIProviderNotConfigured
 
 __all__ = [
@@ -66,7 +65,7 @@ class HuggingFaceVideoProvider(VideoAIProvider):
     ROUTE_PROVIDER = 'fal-ai'
 
     def __init__(self, model=None):
-        self.model = model or settings.AI_VIDEO_MODEL
+        self.model = model or get_model_name('video')
 
     def generate_video_clip(self, *, image_bytes, mime_type, prompt):
         token = os.environ.get('HF_TOKEN')
@@ -121,7 +120,7 @@ class ReplicateVideoProvider(VideoAIProvider):
     REQUEST_TIMEOUT_SECONDS = 60.0
 
     def __init__(self, model=None):
-        self.model = model or settings.AI_VIDEO_MODEL
+        self.model = model or get_model_name('video')
 
     def _headers(self, token):
         return {'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'}
@@ -194,7 +193,7 @@ class ReplicateVideoProvider(VideoAIProvider):
 
 
 def get_video_provider() -> VideoAIProvider:
-    provider_name = getattr(settings, 'AI_VIDEO_PROVIDER', 'huggingface')
+    provider_name = get_provider_name('video') or 'huggingface'
     if provider_name == 'huggingface':
         return HuggingFaceVideoProvider()
     if provider_name == 'replicate':

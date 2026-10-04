@@ -4,14 +4,14 @@ import { extractErrorMessage } from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import ChangePasswordModal from '../components/ChangePasswordModal'
 
-const EMPTY_FORM = { first_name: '', last_name: '', phone_number: '', email_notifications_enabled: true }
+const EMPTY_FORM = {
+  first_name: '', last_name: '', phone_number: '', email_notifications_enabled: true, whatsapp_notifications_enabled: false,
+}
 
 export default function SettingsPage() {
   const { user, setUser } = useAuth()
 
   const [form, setForm] = useState(EMPTY_FORM)
-  const [avatarFile, setAvatarFile] = useState(null)
-  const [avatarPreview, setAvatarPreview] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [saved, setSaved] = useState(false)
@@ -27,6 +27,7 @@ export default function SettingsPage() {
       last_name: user.last_name || '',
       phone_number: user.phone_number || '',
       email_notifications_enabled: user.email_notifications_enabled ?? true,
+      whatsapp_notifications_enabled: user.whatsapp_notifications_enabled ?? false,
     })
   }, [user])
 
@@ -41,24 +42,14 @@ export default function SettingsPage() {
     setForm((prev) => ({ ...prev, [field]: value }))
   }
 
-  function handleAvatarChange(event) {
-    const file = event.target.files?.[0]
-    if (!file) return
-    setAvatarFile(file)
-    setAvatarPreview(URL.createObjectURL(file))
-  }
-
   async function handleSubmit(event) {
     event.preventDefault()
     setSaving(true)
     setError('')
     setSaved(false)
     try {
-      const payload = { ...form }
-      if (avatarFile) payload.avatar = avatarFile
-      const updated = await updateProfile(payload)
+      const updated = await updateProfile({ ...form })
       setUser(updated)
-      setAvatarFile(null)
       setSaved(true)
     } catch (err) {
       setError(extractErrorMessage(err, 'Could not save your settings.'))
@@ -66,8 +57,6 @@ export default function SettingsPage() {
       setSaving(false)
     }
   }
-
-  const avatarSrc = avatarPreview || user?.avatar
 
   return (
     <div>
@@ -87,20 +76,6 @@ export default function SettingsPage() {
           {error && <div className="alert alert-error">{error}</div>}
           {saved && <div className="alert alert-success">Your changes have been saved.</div>}
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20 }}>
-            <span className="user-avatar" style={{ width: 56, height: 56, fontSize: 20 }}>
-              {avatarSrc ? (
-                <img src={avatarSrc} alt="" className="user-avatar-img" />
-              ) : (
-                user?.email?.[0]?.toUpperCase() ?? '?'
-              )}
-            </span>
-            <label className="btn btn-ghost">
-              Change photo
-              <input type="file" accept="image/*" onChange={handleAvatarChange} style={{ display: 'none' }} />
-            </label>
-          </div>
-
           <div className="field-row">
             <label className="field">
               <span>First name</span>
@@ -118,8 +93,8 @@ export default function SettingsPage() {
           </label>
 
           <label className="field">
-            <span>Phone number</span>
-            <input value={form.phone_number} onChange={(e) => updateField('phone_number', e.target.value)} />
+            <span>Phone number (with country code)</span>
+            <input value={form.phone_number} inputMode="tel" placeholder="+91 98765 43210" onChange={(e) => updateField('phone_number', e.target.value)} />
           </label>
         </div>
 
@@ -135,6 +110,17 @@ export default function SettingsPage() {
             />
             Email me when there's new activity on my account
           </label>
+          <label className="field-checkbox">
+            <input
+              type="checkbox"
+              checked={form.whatsapp_notifications_enabled}
+              onChange={(e) => updateField('whatsapp_notifications_enabled', e.target.checked)}
+            />
+            Send me WhatsApp updates (approval requests, reminders, published posts, monthly reports) on my phone number
+          </label>
+          {form.whatsapp_notifications_enabled && !form.phone_number && (
+            <p className="field-hint">Add your phone number above (with country code, e.g. +91…) to receive WhatsApp updates.</p>
+          )}
         </div>
 
         <button type="submit" className="btn btn-primary" disabled={saving}>

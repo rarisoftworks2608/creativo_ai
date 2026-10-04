@@ -93,6 +93,13 @@ class BrandIdentityImageView(CompanyScopedMixin, APIView):
         upload = request.FILES.get('file')
         if not upload:
             return Response({'detail': 'file is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        error = _validate_identity_image(upload)
+        if error:
+            return Response({'detail': error}, status=status.HTTP_400_BAD_REQUEST)
+
+        from apps.subscriptions.enforcement import check_storage
+
+        check_storage(company, upload.size)
 
         profile, _created = BrandProfile.objects.get_or_create(company=company)
         old_file = getattr(profile, slot)
@@ -112,6 +119,30 @@ class BrandIdentityImageView(CompanyScopedMixin, APIView):
         setattr(profile, slot, None)
         profile.save(update_fields=[slot, 'updated_at'])
         return Response(BrandProfileSerializer(profile, context={'request': request}).data)
+
+
+def _validate_identity_image(upload):
+    """Logo/secondary logo/favicon must be a real image within the upload size limit
+    (Epic 08: File validation) - the creative compositor and video renderer read these
+    files directly, so a non-image here would break every later generation."""
+    from PIL import Image, UnidentifiedImageError
+
+    from apps.platform_settings.models import PlatformSettings
+
+    max_mb = PlatformSettings.load().max_upload_size_mb
+    if upload.size > max_mb * 1024 * 1024:
+        return f'File is too large - the limit is {max_mb} MB.'
+    name = (upload.name or '').lower()
+    if name.endswith('.svg'):
+        return 'SVG logos are not supported - upload a PNG (transparent background works best) or JPG.'
+    try:
+        upload.seek(0)
+        Image.open(upload).verify()
+    except (UnidentifiedImageError, OSError, SyntaxError):
+        return 'That file is not a valid image - upload a PNG, JPG or WEBP.'
+    finally:
+        upload.seek(0)
+    return ''
 
 
 class BrandAssetListCreateView(CompanyScopedMixin, AdminWriteMixin, generics.ListCreateAPIView):
@@ -134,9 +165,12 @@ class BrandAssetListCreateView(CompanyScopedMixin, AdminWriteMixin, generics.Lis
         return queryset
 
     def create(self, request, *args, **kwargs):
+        from apps.subscriptions.enforcement import check_storage
+
         company = self.get_company()
         serializer = self.get_serializer(data=request.data, context={'request': request, 'company': company})
         serializer.is_valid(raise_exception=True)
+        check_storage(company, serializer.validated_data['file'].size)
         asset = serializer.save()
         return Response(BrandAssetSerializer(asset, context={'request': request}).data, status=status.HTTP_201_CREATED)
 

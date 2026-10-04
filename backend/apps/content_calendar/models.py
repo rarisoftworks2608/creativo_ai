@@ -79,3 +79,52 @@ class ContentCalendarItem(TimeStampedModel):
 
     def __str__(self):
         return f'{self.topic} ({self.company.name}, {self.scheduled_date})'
+
+
+class ContentReviewEvent(models.Model):
+    """One step in a calendar item's review lifecycle (Epic 09: History - approval,
+    rejection, feedback and regeneration history; Epic 18: user activity).
+
+    Append-only: generated -> (variation selected) -> approved / rejected ->
+    regeneration requested -> regenerated -> approved -> scheduled -> published.
+    Written only through `services.record_review_event()`.
+    """
+
+    class Action(models.TextChoices):
+        GENERATED = 'generated', 'Submitted for review'
+        REGENERATED = 'regenerated', 'Regenerated & resubmitted'
+        GENERATION_FAILED = 'generation_failed', 'Generation failed'
+        VARIATION_SELECTED = 'variation_selected', 'Variation selected'
+        APPROVED = 'approved', 'Approved'
+        REJECTED = 'rejected', 'Rejected'
+        REGENERATION_REQUESTED = 'regeneration_requested', 'Regeneration requested'
+        REMINDER_SENT = 'reminder_sent', 'Approval reminder sent'
+        SCHEDULED = 'scheduled', 'Scheduled for publishing'
+        PUBLISHED = 'published', 'Published'
+        PUBLISH_FAILED = 'publish_failed', 'Publishing failed'
+
+    class ActorRole(models.TextChoices):
+        ADMIN = 'admin', 'Admin'
+        CLIENT = 'client', 'Client'
+        SYSTEM = 'system', 'System'
+
+    item = models.ForeignKey(ContentCalendarItem, on_delete=models.CASCADE, related_name='review_events')
+    company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='content_review_events')
+    action = models.CharField(max_length=30, choices=Action.choices)
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='+',
+    )
+    actor_role = models.CharField(max_length=10, choices=ActorRole.choices, default=ActorRole.SYSTEM)
+    feedback = models.TextField(blank=True, help_text='Rejection reason / change request / note.')
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at', '-id']
+        indexes = [
+            models.Index(fields=['company', 'action', '-created_at']),
+            models.Index(fields=['item', '-created_at']),
+        ]
+
+    def __str__(self):
+        return f'{self.get_action_display()} - {self.item_id}'

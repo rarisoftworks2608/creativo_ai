@@ -24,6 +24,10 @@ class User(AbstractBaseUser, PermissionsMixin, TimeStampedModel):
     # top of the platform-wide SEND_NOTIFICATION_EMAILS toggle (Epic 19): both must be
     # true for this user to actually receive a notification email.
     email_notifications_enabled = models.BooleanField(default=True)
+    # Epic 20 (Client Settings: WhatsApp preferences) / Epic 12 - when on and phone_number
+    # is set, this user is automatically included as a recipient of their company's
+    # WhatsApp notifications (in addition to the numbers an admin configures there).
+    whatsapp_notifications_enabled = models.BooleanField(default=False)
 
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)

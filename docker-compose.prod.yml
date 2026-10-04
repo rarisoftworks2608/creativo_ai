@@ -1,0 +1,39 @@
+# Production override - HTTPS with Let's Encrypt (Epic 26: Nginx, SSL).
+#
+#   1. Point your domain's DNS A record at the server.
+#   2. Set DOMAIN, LETSENCRYPT_EMAIL, ALLOWED_HOSTS, CSRF_TRUSTED_ORIGINS in a root .env
+#      (and FRONTEND_URL / BACKEND_PUBLIC_URL / SOCIAL_OAUTH_REDIRECT_BASE in backend/.env
+#      to https://DOMAIN).
+#   3. First certificate:  ./scripts/init-letsencrypt.sh
+#   4. docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+services:
+  backend:
+    environment:
+      SECURE_SSL_REDIRECT: "True"
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:?set ALLOWED_HOSTS=your-domain}
+      CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:?set CSRF_TRUSTED_ORIGINS=https://your-domain}
+
+  web:
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN=your-domain}
+    volumes:
+      - ./deploy/nginx/ssl.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - letsencrypt:/etc/letsencrypt:ro
+      - certbot_www:/var/www/certbot:ro
+      - media:/srv/media:ro
+      - static:/srv/static:ro
+
+  certbot:
+    image: certbot/certbot:latest
+    volumes:
+      - letsencrypt:/etc/letsencrypt
+      - certbot_www:/var/www/certbot
+    entrypoint: /bin/sh -c "trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --quiet; sleep 12h & wait $${!}; done"
+    restart: unless-stopped
+
+volumes:
+  letsencrypt:
+  certbot_www:

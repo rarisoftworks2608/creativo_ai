@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import VideoGenerationRequest, VideoScene
+from .models import BackgroundMusicTrack, VideoGenerationRequest, VideoScene
 
 
 class VideoSceneInline(admin.TabularInline):
@@ -20,3 +20,8 @@ class VideoGenerationRequestAdmin(admin.ModelAdmin):
     autocomplete_fields = ['company', 'content_calendar_item']
     readonly_fields = ['created_at', 'updated_at', 'celery_task_id']
     inlines = [VideoSceneInline]
+
+
+@admin.register(BackgroundMusicTrack)
+class BackgroundMusicTrackAdmin(admin.ModelAdmin):
+    list_display = ('name', 'mood', 'is_active', 'created_at')

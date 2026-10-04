@@ -34,3 +34,67 @@ def check_social_account_expiry():
             url=f'/companies/{account.company_id}/social-accounts',
             company=account.company,
         )
+
+
+def refresh_account_token(account):
+    """Renews a LinkedIn account's access token with its refresh token, in place.
+    Raises OAuthError on failure (and records it on the account)."""
+    from common.crypto import decrypt_secret, encrypt_secret
+
+    from .oauth import OAuthError, linkedin_refresh
+
+    refresh_token = decrypt_secret(account.refresh_token)
+    if not refresh_token:
+        raise OAuthError('No refresh token is stored for this account.')
+    try:
+        tokens = linkedin_refresh(refresh_token)
+    except OAuthError as exc:
+        account.last_error = str(exc)[:500]
+        account.save(update_fields=['last_error', 'updated_at'])
+        raise
+
+    account.access_token = encrypt_secret(tokens['access_token'])
+    account.token_expires_at = tokens['expires_at']
+    if tokens.get('refresh_token'):
+        account.refresh_token = encrypt_secret(tokens['refresh_token'])
+        account.refresh_token_expires_at = tokens['refresh_token_expires_at']
+    account.status = SocialAccount.Status.CONNECTED
+    account.last_error = ''
+    account.save(update_fields=[
+        'access_token', 'token_expires_at', 'refresh_token', 'refresh_token_expires_at', 'status', 'last_error', 'updated_at',
+    ])
+    return account
+
+
+@shared_task
+def refresh_expiring_tokens(days_ahead=7):
+    """Renews every LinkedIn token that expires within `days_ahead` days and has a
+    refresh token (Epic 10: Token refresh). Meta Page tokens obtained through OAuth
+    don't expire, so there's nothing to refresh on that side - a revoked Meta token is
+    caught by publishing/test-connection and the account is marked EXPIRED instead.
+    """
+    from .oauth import OAuthError
+
+    horizon = timezone.now() + timezone.timedelta(days=days_ahead)
+    accounts = SocialAccount.objects.filter(
+        platform=SocialAccount.Platform.LINKEDIN,
+        status__in=[SocialAccount.Status.CONNECTED, SocialAccount.Status.EXPIRED],
+        token_expires_at__isnull=False,
+        token_expires_at__lte=horizon,
+    ).exclude(refresh_token='').select_related('company')
+
+    refreshed = 0
+    for account in accounts:
+        try:
+            refresh_account_token(account)
+            refreshed += 1
+        except OAuthError as exc:
+            notify_admins(
+                actor=None,
+                notification_type=Notification.NotificationType.SOCIAL_TOKEN_EXPIRED,
+                title=f'LinkedIn token for {account.company.name} could not be refreshed',
+                message=f'"{account.account_name}": {exc}. Reconnect it with "Connect with LinkedIn".',
+                url=f'/companies/{account.company_id}/social-accounts',
+                company=account.company,
+            )
+    return refreshed

@@ -102,6 +102,10 @@ class ClientProfile(TimeStampedModel):
         CALENDAR = 'calendar', 'Content Calendar'
         CREATIVE_GENERATION = 'creative_generation', 'Creative Generation'
         VIDEO_GENERATION = 'video_generation', 'Video Generation'
+        PUBLISHING = 'publishing', 'Publishing'
+        ANALYTICS = 'analytics', 'Analytics'
+        REPORTS = 'reports', 'Reports'
+        SUBSCRIPTION = 'subscription', 'Subscription & Usage'
 
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL,

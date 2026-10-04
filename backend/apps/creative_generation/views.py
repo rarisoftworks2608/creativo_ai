@@ -40,7 +40,7 @@ def _link_adhoc_calendar_item(generation_request, user):
         topic=topic,
         content_type=generation_request.get_creative_type_display(),
         platforms=[platform],
-        scheduled_date=timezone.now().date(),
+        scheduled_date=timezone.localdate(),
         source=ContentCalendarItem.Source.AD_HOC,
         created_by=user,
     )
@@ -129,9 +129,11 @@ class GenerationRequestListCreateView(CompanyScopedMixin, generics.ListCreateAPI
 
     def create(self, request, *args, **kwargs):
         from apps.platform_settings.services import check_daily_generation_limit
+        from apps.subscriptions.enforcement import check_quota
 
         company = self.get_company()
         check_daily_generation_limit(company)
+        check_quota(company, 'creative')
         serializer = self.get_serializer(data=request.data, context={'request': request, 'company': company})
         serializer.is_valid(raise_exception=True)
         generation_request = serializer.save(company=company, created_by=request.user)
@@ -201,5 +203,14 @@ class VariationSelectView(CompanyScopedMixin, APIView):
             generation_request.variations.exclude(pk=variation.pk).update(is_selected=False)
             variation.is_selected = True
             variation.save(update_fields=['is_selected'])
+
+        if generation_request.content_calendar_item_id:
+            from apps.content_calendar.models import ContentReviewEvent
+            from apps.content_calendar.services import record_review_event
+
+            record_review_event(
+                generation_request.content_calendar_item, ContentReviewEvent.Action.VARIATION_SELECTED,
+                actor=request.user, metadata={'variation_id': variation.id, 'variation_number': variation.variation_number},
+            )
 
         return Response(GenerationRequestSerializer(generation_request).data)

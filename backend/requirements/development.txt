@@ -1,1 +1,5 @@
 -r base.txt
+
+# Optional: a bundled FFmpeg binary if you don't want to install FFmpeg system-wide
+# (rendering finds it automatically). Uncomment to use:
+# imageio-ffmpeg==0.6.0

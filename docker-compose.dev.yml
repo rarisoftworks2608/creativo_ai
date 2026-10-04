@@ -1,0 +1,37 @@
+# Local development infrastructure only - PostgreSQL + Redis in containers while Django,
+# Celery and Vite run natively (fast reload, easy debugging):
+#
+#   docker compose -f docker-compose.dev.yml up -d
+#   backend/.env:  DATABASE_URL=postgres://creativo:creativo@localhost:5433/creativo
+#                  REDIS_URL=redis://localhost:6379/0
+#
+# Postgres is published on 5433 so it doesn't clash with a locally installed PostgreSQL.
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: creativo
+      POSTGRES_USER: creativo
+      POSTGRES_PASSWORD: creativo
+    ports:
+      - "5433:5432"
+    volumes:
+      - dev_postgres:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  # docker compose -f docker-compose.dev.yml --profile monitoring up -d
+  flower:
+    image: mher/flower:2.0
+    profiles: ["monitoring"]
+    command: celery --broker=redis://redis:6379/0 flower --port=5555
+    ports:
+      - "5555:5555"
+    depends_on:
+      - redis
+
+volumes:
+  dev_postgres:

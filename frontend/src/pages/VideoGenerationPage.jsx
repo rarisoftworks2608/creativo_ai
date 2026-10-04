@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { createVideoRequest, listVideoRequests, retryVideoRequest } from '../api/videoGeneration'
+import {
+  createVideoRequest,
+  listVideoRequests,
+  regenerateSceneImage,
+  rerenderVideo,
+  retryVideoRequest,
+  updateVideoScene,
+} from '../api/videoGeneration'
+import { listMusicTracks } from '../api/system'
 import { generateNowCalendarItem, listCalendarItems } from '../api/contentCalendar'
 import { getCompany } from '../api/companies'
 import { extractErrorMessage } from '../api/client'
@@ -38,6 +46,9 @@ const EMPTY_FORM = {
   subtitles_enabled: true,
   include_logo: true,
   ai_motion_enabled: true,
+  music_enabled: false,
+  music_track: '',
+  include_outro: true,
 }
 
 export default function VideoGenerationPage() {
@@ -56,8 +67,13 @@ export default function VideoGenerationPage() {
   const [createError, setCreateError] = useState('')
 
   const [generatingItemId, setGeneratingItemId] = useState(null)
+  const [musicTracks, setMusicTracks] = useState([])
 
   const pollRef = useRef(null)
+
+  useEffect(() => {
+    if (isAdmin) listMusicTracks({ active: 'true' }).then(setMusicTracks).catch(() => setMusicTracks([]))
+  }, [isAdmin])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -124,7 +140,11 @@ export default function VideoGenerationPage() {
     setCreating(true)
     setCreateError('')
     try {
-      const payload = { ...form, content_calendar_item: form.content_calendar_item || null }
+      const payload = {
+        ...form,
+        content_calendar_item: form.content_calendar_item || null,
+        music_track: form.music_enabled && form.music_track ? Number(form.music_track) : null,
+      }
       const created = await createVideoRequest(companyId, payload)
       setRequests((prev) => [created, ...prev])
       setShowCreate(false)
@@ -199,7 +219,15 @@ export default function VideoGenerationPage() {
       ) : (
         <div className="request-list">
           {requests.map((request) => (
-            <VideoRequestCard key={request.id} request={request} canRetry={isAdmin} onRetry={() => handleRetry(request.id)} />
+            <VideoRequestCard
+              key={request.id}
+              request={request}
+              companyId={companyId}
+              isAdmin={isAdmin}
+              musicTracks={musicTracks}
+              onRetry={() => handleRetry(request.id)}
+              onUpdated={(updated) => setRequests((prev) => prev.map((r) => (r.id === updated.id ? updated : r)))}
+            />
           ))}
         </div>
       )}
@@ -305,7 +333,42 @@ export default function VideoGenerationPage() {
                 />
                 <span>AI motion (animate scenes)</span>
               </label>
+              <label className="field-checkbox field-checkbox-inline">
+                <input
+                  type="checkbox"
+                  checked={form.include_outro}
+                  onChange={(e) => updateForm('include_outro', e.target.checked)}
+                />
+                <span>Brand end card</span>
+              </label>
+              <label className="field-checkbox field-checkbox-inline">
+                <input
+                  type="checkbox"
+                  checked={form.music_enabled}
+                  onChange={(e) => updateForm('music_enabled', e.target.checked)}
+                />
+                <span>Background music</span>
+              </label>
             </div>
+
+            {form.music_enabled && (
+              <label className="field">
+                <span>Music track</span>
+                <select value={form.music_track} onChange={(e) => updateForm('music_track', e.target.value)}>
+                  <option value="">Random track from the library</option>
+                  {musicTracks.map((track) => (
+                    <option key={track.id} value={track.id}>
+                      {track.name} ({track.mood_display})
+                    </option>
+                  ))}
+                </select>
+                {musicTracks.length === 0 && (
+                  <span className="field-hint-inline">
+                    The music library is empty - add royalty-free tracks under Music Library, or the video renders without music.
+                  </span>
+                )}
+              </label>
+            )}
 
             <p className="modal-hint">
               Generates a script and scene breakdown, an AI visual and voice-over per scene, then renders one
@@ -343,25 +406,97 @@ const IN_PROGRESS_MESSAGES = {
   rendering: 'Rendering the final video with FFmpeg…',
 }
 
-function VideoRequestCard({ request, canRetry, onRetry }) {
+function VideoRequestCard({ request, companyId, isAdmin, musicTracks, onRetry, onUpdated }) {
   const typeLabel = VIDEO_TYPES.find((t) => t.value === request.video_type)?.label || request.video_type
   const inProgress = IN_PROGRESS_STATUSES.includes(request.status)
+  const [editingScenes, setEditingScenes] = useState(false)
+  const [drafts, setDrafts] = useState({})
+  const [options, setOptions] = useState(null)
+  const [busy, setBusy] = useState('')
+  const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
+
+  function startEditing() {
+    setDrafts(
+      Object.fromEntries(
+        request.scenes.map((scene) => [
+          scene.id,
+          { narration: scene.narration, visual_description: scene.visual_description, duration_seconds: scene.duration_seconds },
+        ]),
+      ),
+    )
+    setOptions({
+      voice_over_enabled: request.voice_over_enabled,
+      subtitles_enabled: request.subtitles_enabled,
+      include_logo: request.include_logo,
+      include_outro: request.include_outro,
+      music_enabled: request.music_enabled,
+      music_track: request.music_track || '',
+    })
+    setEditingScenes(true)
+    setError('')
+    setNotice('')
+  }
+
+  async function saveAndRerender() {
+    setBusy('rerender')
+    setError('')
+    try {
+      for (const scene of request.scenes) {
+        const draft = drafts[scene.id]
+        if (!draft) continue
+        const changed =
+          draft.narration !== scene.narration ||
+          draft.visual_description !== scene.visual_description ||
+          Number(draft.duration_seconds) !== scene.duration_seconds
+        if (changed) {
+          await updateVideoScene(companyId, request.id, scene.id, { ...draft, duration_seconds: Number(draft.duration_seconds) })
+        }
+      }
+      const updated = await rerenderVideo(companyId, request.id, {
+        ...options,
+        music_track: options.music_enabled && options.music_track ? Number(options.music_track) : null,
+      })
+      onUpdated(updated)
+      setEditingScenes(false)
+    } catch (err) {
+      setError(extractErrorMessage(err, 'Could not re-render the video.'))
+    } finally {
+      setBusy('')
+    }
+  }
+
+  async function newVisual(scene) {
+    setBusy(`image-${scene.id}`)
+    setError('')
+    try {
+      const result = await regenerateSceneImage(companyId, request.id, scene.id)
+      setNotice(result.detail)
+    } catch (err) {
+      setError(extractErrorMessage(err, 'Could not regenerate this visual.'))
+    } finally {
+      setBusy('')
+    }
+  }
 
   return (
     <div className="card request-card">
-      <div className="card-header">
+      <div className="card-header card-header-wrap">
         <div>
           <h2>{typeLabel}</h2>
           <p className="page-subtitle">
             {new Date(request.created_at).toLocaleString()}
             {request.retry_count > 0 ? ` · retried ${request.retry_count}×` : ''}
             {request.duration_seconds ? ` · ${Math.round(request.duration_seconds)}s · ${request.resolution}` : ''}
+            {request.usage?.music_track ? ` · music: ${request.usage.music_track}` : ''}
           </p>
         </div>
         <span className={`badge status-badge gen-status-${request.status}`}>{STATUS_LABELS[request.status]}</span>
       </div>
 
       {request.prompt_brief && <p className="modal-hint">{request.prompt_brief}</p>}
+      {error && <div className="alert alert-error">{error}</div>}
+      {notice && <div className="alert alert-success">{notice}</div>}
 
       {inProgress && (
         <div className="empty-state">
@@ -372,15 +507,22 @@ function VideoRequestCard({ request, canRetry, onRetry }) {
       {request.status === 'failed' && (
         <>
           <div className="alert alert-error">{request.error_message}</div>
-          {canRetry && (
-            <button type="button" className="btn btn-ghost" onClick={onRetry}>
-              Retry
-            </button>
+          {isAdmin && (
+            <div className="modal-actions">
+              {request.scenes.length > 0 && request.scenes.every((scene) => scene.image) && (
+                <button type="button" className="btn btn-ghost" onClick={startEditing}>
+                  Edit scenes & re-render
+                </button>
+              )}
+              <button type="button" className="btn btn-ghost" onClick={onRetry}>
+                Retry from scratch
+              </button>
+            </div>
           )}
         </>
       )}
 
-      {request.status === 'succeeded' && (
+      {request.status === 'succeeded' && !editingScenes && (
         <div className="video-result">
           <video className="video-preview" src={request.video_file} poster={request.thumbnail} controls />
           <div className="scene-grid">
@@ -388,11 +530,102 @@ function VideoRequestCard({ request, canRetry, onRetry }) {
               <div className="scene-card" key={scene.id}>
                 {scene.image && <img src={scene.image} alt={`Scene ${scene.scene_number}`} className="scene-image" />}
                 <div className="scene-body">
-                  <div className="scene-label">Scene {scene.scene_number}</div>
+                  <div className="scene-label">
+                    Scene {scene.scene_number} · {scene.duration_seconds}s
+                  </div>
                   <p className="scene-narration">{scene.narration}</p>
                 </div>
               </div>
             ))}
+          </div>
+          {isAdmin && (
+            <div className="modal-actions">
+              <button type="button" className="btn btn-ghost" onClick={startEditing}>
+                Edit scenes & re-render
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {editingScenes && (
+        <div className="scene-editor">
+          <p className="modal-hint">
+            Edit narration, on-screen description or timing, then re-render. Visuals are reused - use “New visual” to regenerate one
+            scene&apos;s image first.
+          </p>
+          {request.scenes.map((scene) => (
+            <div className="scene-edit-row" key={scene.id}>
+              {scene.image ? <img src={scene.image} alt="" className="scene-edit-thumb" /> : <div className="scene-edit-thumb" />}
+              <div className="scene-edit-fields">
+                <div className="scene-label">Scene {scene.scene_number}</div>
+                <label className="field">
+                  <span>Narration (voice-over & subtitle)</span>
+                  <textarea
+                    rows={2}
+                    value={drafts[scene.id]?.narration || ''}
+                    onChange={(e) => setDrafts((d) => ({ ...d, [scene.id]: { ...d[scene.id], narration: e.target.value } }))}
+                  />
+                </label>
+                <div className="field-row">
+                  <label className="field">
+                    <span>Visual description</span>
+                    <input
+                      value={drafts[scene.id]?.visual_description || ''}
+                      onChange={(e) => setDrafts((d) => ({ ...d, [scene.id]: { ...d[scene.id], visual_description: e.target.value } }))}
+                    />
+                  </label>
+                  <label className="field field-narrow">
+                    <span>Seconds</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={30}
+                      step={0.5}
+                      value={drafts[scene.id]?.duration_seconds ?? scene.duration_seconds}
+                      onChange={(e) => setDrafts((d) => ({ ...d, [scene.id]: { ...d[scene.id], duration_seconds: e.target.value } }))}
+                    />
+                  </label>
+                </div>
+                <button type="button" className="btn-link" disabled={busy === `image-${scene.id}`} onClick={() => newVisual(scene)}>
+                  {busy === `image-${scene.id}` ? 'Generating…' : 'New visual for this scene'}
+                </button>
+              </div>
+            </div>
+          ))}
+          {options && (
+            <div className="checkbox-row">
+              {[
+                ['voice_over_enabled', 'Voice-over'],
+                ['subtitles_enabled', 'Subtitles'],
+                ['include_logo', 'Logo'],
+                ['include_outro', 'Brand end card'],
+                ['music_enabled', 'Background music'],
+              ].map(([key, label]) => (
+                <label className="field-checkbox field-checkbox-inline" key={key}>
+                  <input type="checkbox" checked={options[key]} onChange={(e) => setOptions((o) => ({ ...o, [key]: e.target.checked }))} />
+                  <span>{label}</span>
+                </label>
+              ))}
+              {options.music_enabled && (
+                <select value={options.music_track} onChange={(e) => setOptions((o) => ({ ...o, music_track: e.target.value }))}>
+                  <option value="">Random track</option>
+                  {musicTracks.map((track) => (
+                    <option key={track.id} value={track.id}>
+                      {track.name}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+          )}
+          <div className="modal-actions">
+            <button type="button" className="btn btn-ghost" onClick={() => setEditingScenes(false)}>
+              Cancel
+            </button>
+            <button type="button" className="btn btn-primary" disabled={busy === 'rerender'} onClick={saveAndRerender}>
+              {busy === 'rerender' ? 'Starting…' : 'Save & re-render'}
+            </button>
           </div>
         </div>
       )}

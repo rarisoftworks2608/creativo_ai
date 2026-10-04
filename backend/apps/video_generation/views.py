@@ -10,8 +10,13 @@ from apps.activity_log.services import log_activity
 from apps.companies.models import ClientProfile, Company
 from common.permissions import IsAdmin
 
-from .models import VideoGenerationRequest
-from .serializers import VideoGenerationRequestCreateSerializer, VideoGenerationRequestSerializer
+from .models import BackgroundMusicTrack, VideoGenerationRequest, VideoScene
+from .serializers import (
+    BackgroundMusicTrackSerializer,
+    VideoGenerationRequestCreateSerializer,
+    VideoGenerationRequestSerializer,
+    VideoSceneUpdateSerializer,
+)
 from .tasks import generate_video
 
 # Best-guess platform for an ad-hoc generation's auto-created calendar item
@@ -41,7 +46,7 @@ def _link_adhoc_calendar_item(video_request, user):
         topic=topic,
         content_type=video_request.get_video_type_display(),
         platforms=[platform],
-        scheduled_date=timezone.now().date(),
+        scheduled_date=timezone.localdate(),
         source=ContentCalendarItem.Source.AD_HOC,
         created_by=user,
     )
@@ -127,9 +132,11 @@ class VideoGenerationRequestListCreateView(CompanyScopedMixin, generics.ListCrea
 
     def create(self, request, *args, **kwargs):
         from apps.platform_settings.services import check_daily_generation_limit
+        from apps.subscriptions.enforcement import check_quota
 
         company = self.get_company()
         check_daily_generation_limit(company)
+        check_quota(company, 'video')
         serializer = self.get_serializer(data=request.data, context={'request': request, 'company': company})
         serializer.is_valid(raise_exception=True)
         video_request = serializer.save(company=company, created_by=request.user)
@@ -180,3 +187,119 @@ class VideoGenerationRequestRetryView(CompanyScopedMixin, APIView):
         video_request = _enqueue(video_request)
 
         return Response(VideoGenerationRequestSerializer(video_request).data)
+
+
+EDITABLE_STATUSES = (VideoGenerationRequest.Status.SUCCEEDED, VideoGenerationRequest.Status.FAILED)
+
+
+class VideoSceneUpdateView(CompanyScopedMixin, APIView):
+    """Admin: edit one scene's narration / visual description / duration before
+    re-rendering (Epic 07: Script, Scenes)."""
+
+    permission_classes = [IsAdmin]
+    serializer_class = VideoSceneUpdateSerializer
+
+    def patch(self, request, company_id, pk, scene_id):
+        company = self.get_company()
+        video_request = generics.get_object_or_404(VideoGenerationRequest, pk=pk, company=company)
+        if video_request.status not in EDITABLE_STATUSES:
+            return Response({'detail': 'Scenes can only be edited once generation has finished.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        scene = generics.get_object_or_404(VideoScene, pk=scene_id, video_request=video_request)
+        serializer = VideoSceneUpdateSerializer(scene, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        video_request.refresh_from_db()
+        return Response(VideoGenerationRequestSerializer(video_request, context={'request': request}).data)
+
+
+class VideoSceneRegenerateImageView(CompanyScopedMixin, APIView):
+    """Admin: generate a new visual for one scene (runs in the background)."""
+
+    permission_classes = [IsAdmin]
+    serializer_class = VideoGenerationRequestSerializer
+
+    def post(self, request, company_id, pk, scene_id):
+        from .tasks import regenerate_scene_image
+
+        company = self.get_company()
+        video_request = generics.get_object_or_404(VideoGenerationRequest, pk=pk, company=company)
+        if video_request.status not in EDITABLE_STATUSES:
+            return Response({'detail': 'Wait for generation to finish first.'}, status=status.HTTP_400_BAD_REQUEST)
+        scene = generics.get_object_or_404(VideoScene, pk=scene_id, video_request=video_request)
+        regenerate_scene_image.delay(scene.id)
+        return Response({'detail': 'A new visual is being generated - re-render the video once it appears.'},
+                        status=status.HTTP_202_ACCEPTED)
+
+
+class VideoRerenderView(CompanyScopedMixin, APIView):
+    """Admin: re-render a finished video from its current scenes (after edits, or to
+    apply music/outro/subtitle option changes) without regenerating the script/visuals."""
+
+    permission_classes = [IsAdmin]
+    serializer_class = VideoGenerationRequestSerializer
+
+    def post(self, request, company_id, pk):
+        from .tasks import rerender_video
+
+        company = self.get_company()
+        video_request = generics.get_object_or_404(VideoGenerationRequest, pk=pk, company=company)
+        if video_request.status not in EDITABLE_STATUSES:
+            return Response({'detail': 'This video is still being generated.'}, status=status.HTTP_400_BAD_REQUEST)
+        if not video_request.scenes.exists():
+            return Response({'detail': 'This video has no scenes to render - retry the generation instead.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        options = {}
+        for flag in ('voice_over_enabled', 'subtitles_enabled', 'include_logo', 'music_enabled', 'include_outro'):
+            if flag in request.data:
+                options[flag] = bool(request.data.get(flag))
+        if 'music_track' in request.data:
+            track_id = request.data.get('music_track')
+            options['music_track'] = (
+                BackgroundMusicTrack.objects.filter(pk=track_id, is_active=True).first() if track_id else None
+            )
+        for field, value in options.items():
+            setattr(video_request, field, value)
+        video_request.status = VideoGenerationRequest.Status.QUEUED
+        video_request.save(update_fields=[*options.keys(), 'status', 'updated_at'])
+
+        result = rerender_video.delay(video_request.id)
+        VideoGenerationRequest.objects.filter(pk=video_request.pk, status=VideoGenerationRequest.Status.QUEUED).update(
+            celery_task_id=result.id or '',
+        )
+        video_request.refresh_from_db()
+        log_activity(
+            module=ActivityLog.Module.VIDEO, action='Video re-render started',
+            description=video_request.get_video_type_display(), company=company, request=request,
+        )
+        return Response(VideoGenerationRequestSerializer(video_request, context={'request': request}).data,
+                        status=status.HTTP_202_ACCEPTED)
+
+
+class BackgroundMusicListCreateView(generics.ListCreateAPIView):
+    """Admin: the shared background-music library (Epic 07: Music)."""
+
+    serializer_class = BackgroundMusicTrackSerializer
+    permission_classes = [IsAdmin]
+    pagination_class = None
+
+    def get_queryset(self):
+        queryset = BackgroundMusicTrack.objects.all()
+        if self.request.query_params.get('active') in ('1', 'true'):
+            queryset = queryset.filter(is_active=True)
+        return queryset
+
+    def perform_create(self, serializer):
+        serializer.save(uploaded_by=self.request.user)
+
+
+class BackgroundMusicDetailView(generics.RetrieveUpdateDestroyAPIView):
+    serializer_class = BackgroundMusicTrackSerializer
+    permission_classes = [IsAdmin]
+    queryset = BackgroundMusicTrack.objects.all()
+
+    def perform_destroy(self, instance):
+        if instance.file:
+            instance.file.delete(save=False)
+        instance.delete()

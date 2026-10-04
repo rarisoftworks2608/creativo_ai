@@ -14,4 +14,5 @@ urlpatterns = [
     path('<int:pk>/generate-now/', views.ContentCalendarGenerateNowView.as_view(), name='item-generate-now'),
     path('<int:pk>/approve/', views.ContentCalendarApproveView.as_view(), name='item-approve'),
     path('<int:pk>/reject/', views.ContentCalendarRejectView.as_view(), name='item-reject'),
+    path('<int:pk>/history/', views.ContentCalendarHistoryView.as_view(), name='item-history'),
 ]

@@ -10,12 +10,10 @@ class Notification(TimeStampedModel):
     """An in-app notification for one recipient (Epic 13: Notification Center - In-App).
 
     The first eight event types match the plan's notification list verbatim
-    (Epic 12/13). Approval/publishing events are included now so they never
-    need a schema change, but nothing creates them yet - there's no
-    Approval Workflow or Publishing module in the codebase to trigger them
-    from. company_created/client_added are an addition beyond the plan's
+    (Epic 12/13). company_created/client_added are an addition beyond the plan's
     list, requested so the admin team sees onboarding activity in the bell
-    too, not just via email.
+    too, not just via email. The publishing/report/subscription types are raised
+    by Epics 11, 16 and 17.
     """
 
     class NotificationType(models.TextChoices):
@@ -32,6 +30,12 @@ class Notification(TimeStampedModel):
         ADMIN_ADDED = 'admin_added', 'Admin Added'
         SOCIAL_TOKEN_EXPIRED = 'social_token_expired', 'Social Token Expired'
         SUSPICIOUS_LOGIN = 'suspicious_login', 'Suspicious Login Activity'
+        POST_SCHEDULED = 'post_scheduled', 'Post Scheduled'
+        REPORT_READY = 'report_ready', 'Report Ready'
+        SUBSCRIPTION_EXPIRING = 'subscription_expiring', 'Subscription Expiring'
+        SUBSCRIPTION_EXPIRED = 'subscription_expired', 'Subscription Expired'
+        USAGE_LIMIT_REACHED = 'usage_limit_reached', 'Usage Limit Reached'
+        ANALYTICS_SYNC_FAILED = 'analytics_sync_failed', 'Analytics Sync Failed'
 
     recipient = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='notifications')
     company = models.ForeignKey(

@@ -12,6 +12,10 @@ const PAGES = [
   { key: 'calendar', label: 'Calendar' },
   { key: 'creative_generation', label: 'Creative' },
   { key: 'video_generation', label: 'Video' },
+  { key: 'publishing', label: 'Publishing' },
+  { key: 'analytics', label: 'Analytics' },
+  { key: 'reports', label: 'Reports' },
+  { key: 'subscription', label: 'Plan & usage' },
 ]
 
 export default function AccessControlPage() {

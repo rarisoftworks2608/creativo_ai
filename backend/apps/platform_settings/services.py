@@ -16,7 +16,8 @@ def check_daily_generation_limit(company):
     from apps.creative_generation.models import GenerationRequest
     from apps.video_generation.models import VideoGenerationRequest
 
-    today_start = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    # Local midnight (TIME_ZONE), so the daily limit resets at the start of the business day.
+    today_start = timezone.localtime().replace(hour=0, minute=0, second=0, microsecond=0)
     creative_count = GenerationRequest.objects.filter(company=company, created_at__gte=today_start).count()
     video_count = VideoGenerationRequest.objects.filter(company=company, created_at__gte=today_start).count()
 

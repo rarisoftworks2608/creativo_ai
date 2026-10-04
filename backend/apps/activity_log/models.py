@@ -21,6 +21,11 @@ class ActivityLog(TimeStampedModel):
         APPROVAL = 'approval', 'Content Approval'
         SOCIAL = 'social', 'Social Accounts'
         SETTINGS = 'settings', 'Settings'
+        PUBLISHING = 'publishing', 'Publishing'
+        WHATSAPP = 'whatsapp', 'WhatsApp'
+        ANALYTICS = 'analytics', 'Analytics'
+        REPORTS = 'reports', 'Reports'
+        SUBSCRIPTION = 'subscription', 'Subscription'
 
     user = models.ForeignKey(
         'authentication.User',

@@ -366,11 +366,12 @@ class SubtitlesTests(APITestCase):
         self.assertIn('2\n00:00:03,500 --> 00:00:06,500\nSecond line.', srt)
 
 
+@patch('apps.video_generation.rendering.find_ffmpeg', return_value=None)
 class FFmpegAvailabilityTests(BaseVideoGenerationTestCase):
-    """Real (unmocked) checks against this environment, which genuinely has no
-    ffmpeg binary installed - confirms the "fail clearly, don't crash" contract."""
+    """FFmpeg lookup patched to "not found" (so this passes the same on machines/CI images
+    that do have ffmpeg) - confirms the "fail clearly, don't crash" contract."""
 
-    def test_check_ffmpeg_available_raises_when_missing(self):
+    def test_check_ffmpeg_available_raises_when_missing(self, mock_find):
         with self.assertRaises(rendering.FFmpegNotAvailable):
             rendering.check_ffmpeg_available()
 
@@ -378,7 +379,7 @@ class FFmpegAvailabilityTests(BaseVideoGenerationTestCase):
     @patch('apps.video_generation.tasks.get_voice_provider', return_value=FakeVoiceProvider())
     @patch('apps.video_generation.tasks.get_image_provider', return_value=FakeImageProvider())
     @patch('apps.video_generation.tasks.get_text_provider', return_value=FakeTextProvider())
-    def test_full_pipeline_fails_clearly_without_ffmpeg(self, mock_text, mock_image, mock_voice, mock_video):
+    def test_full_pipeline_fails_clearly_without_ffmpeg(self, mock_text, mock_image, mock_voice, mock_video, mock_find):
         """End-to-end through script/visuals/voice-over for real, hitting the real
         (missing) ffmpeg only at the render stage - everything up to there is genuine."""
         response = self.create_request()

@@ -7,6 +7,7 @@ from django.core.files.base import ContentFile
 from apps.ai_strategy.ai_client import get_provider as get_text_provider
 from apps.ai_strategy.models import BrandContext
 from apps.brand.models import BrandProfile
+from apps.content_calendar import services as review_services
 from apps.content_calendar.models import ContentCalendarItem
 from apps.notifications.models import Notification
 from apps.notifications.services import notify_content_ready
@@ -30,6 +31,9 @@ def _fail(request, message):
     if request.content_calendar_item_id:
         ContentCalendarItem.objects.filter(pk=request.content_calendar_item_id).update(
             status=ContentCalendarItem.Status.FAILED,
+        )
+        review_services.generation_failed(
+            request.content_calendar_item_id, message, kind='creative', request_id=request.id,
         )
 
 
@@ -148,12 +152,20 @@ def generate_creative_variations(self, generation_request_id):
             pass
 
     request.save(update_fields=['status', 'error_message', 'model_used', 'usage', 'cost_usd', 'updated_at'])
+    calendar_item = None
     if request.content_calendar_item_id:
         ContentCalendarItem.objects.filter(pk=request.content_calendar_item_id).update(
             status=ContentCalendarItem.Status.PENDING_APPROVAL,
         )
+        calendar_item = ContentCalendarItem.objects.filter(pk=request.content_calendar_item_id).first()
 
-    is_regeneration = request.retry_count > 0
+    # A regeneration after a client rejection is a brand new request (retry_count 0) on an
+    # item whose regeneration_count was bumped by ContentCalendarRejectView.
+    is_regeneration = request.retry_count > 0 or bool(calendar_item and calendar_item.regeneration_count > 0)
+    if calendar_item is not None:
+        review_services.submitted_for_review(
+            calendar_item.id, is_regeneration=is_regeneration, kind='creative', request_id=request.id,
+        )
     notify_content_ready(
         company=company,
         created_by=request.created_by,

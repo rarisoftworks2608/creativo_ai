@@ -8,6 +8,9 @@ const TYPES = [
   { value: '', label: 'All types' },
   { value: 'creative', label: 'Creative Generation' },
   { value: 'video', label: 'Video Generation' },
+  { value: 'publishing', label: 'Publishing' },
+  { value: 'report', label: 'Report Generation' },
+  { value: 'analytics', label: 'Analytics Sync' },
 ]
 
 const STATUSES = [
@@ -21,6 +24,7 @@ const STATUSES = [
 ]
 
 const CANCELLABLE = ['pending', 'queued']
+const CANCELLABLE_TYPES = ['creative', 'video', 'publishing']
 
 export default function JobsPage() {
   const { isAdmin } = useAuth()
@@ -74,7 +78,7 @@ export default function JobsPage() {
       <div className="page-header">
         <div>
           <h1>Background Jobs</h1>
-          <p className="page-subtitle">{count} generation jobs</p>
+          <p className="page-subtitle">{count} background jobs - generation, publishing, reports and analytics sync</p>
         </div>
       </div>
 
@@ -106,7 +110,7 @@ export default function JobsPage() {
           </div>
         ) : (
           <div className="table-wrapper">
-            <table className="table">
+            <table className="table table-stack">
               <thead>
                 <tr>
                   <th>Created</th>
@@ -123,18 +127,21 @@ export default function JobsPage() {
                   const key = `${job.type}-${job.id}`
                   return (
                     <tr key={key}>
-                      <td>{new Date(job.created_at).toLocaleString()}</td>
-                      <td>{job.type_display}</td>
-                      <td>{job.company_name}</td>
-                      <td>
+                      <td data-label="Created">{new Date(job.created_at).toLocaleString()}</td>
+                      <td data-label="Type">
+                        {job.type_display}
+                        {job.detail && <div className="page-subtitle">{job.detail}</div>}
+                      </td>
+                      <td data-label="Company">{job.company_name}</td>
+                      <td data-label="Status">
                         <span className={`badge ${job.status === 'failed' ? 'badge-inactive' : job.status === 'succeeded' ? 'badge-active' : ''}`}>
                           {job.status_display}
                         </span>
                       </td>
-                      <td>{job.error_message ? job.error_message.slice(0, 80) : <span className="muted">—</span>}</td>
-                      <td>{job.retry_count}</td>
+                      <td data-label="Error">{job.error_message ? job.error_message.slice(0, 80) : <span className="muted">—</span>}</td>
+                      <td data-label="Retries">{job.retry_count}</td>
                       <td>
-                        {CANCELLABLE.includes(job.status) && (
+                        {CANCELLABLE.includes(job.status) && CANCELLABLE_TYPES.includes(job.type) && (
                           <button
                             type="button"
                             className="btn-link btn-link-danger"

@@ -35,8 +35,11 @@ export async function generateNowCalendarItem(companyId, itemId) {
   return response.data
 }
 
-export async function approveCalendarItem(companyId, itemId) {
-  const response = await apiClient.post(`/companies/${companyId}/content-calendar/${itemId}/approve/`)
+export async function approveCalendarItem(companyId, itemId, { variationId, note } = {}) {
+  const payload = {}
+  if (variationId) payload.variation_id = variationId
+  if (note) payload.note = note
+  const response = await apiClient.post(`/companies/${companyId}/content-calendar/${itemId}/approve/`, payload)
   return response.data
 }
 

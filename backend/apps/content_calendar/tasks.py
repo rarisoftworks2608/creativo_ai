@@ -136,7 +136,15 @@ def auto_generate_due_content():
         scheduled_date__lte=now.date(),
         status__in=[ContentCalendarItem.Status.DRAFT, ContentCalendarItem.Status.SCHEDULED],
     )
+    from apps.subscriptions.enforcement import QuotaExceeded, check_quota
+
     for item in candidates:
         if item.scheduled_date == now.date() and item.scheduled_time and item.scheduled_time > now.time():
             continue  # scheduled later today - not due yet
+        try:
+            check_quota(item.company, 'video' if _is_video(item.content_type) else 'creative')
+        except QuotaExceeded:
+            # Left as draft/scheduled (admins are alerted once a day by check_quota) - it's
+            # picked up automatically on a later sweep once the limit allows.
+            continue
         generate_now(item)

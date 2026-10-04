@@ -75,6 +75,42 @@ const ICONS = {
       <path d="M13 8.3 17.5 6v8l-4.5-2.3" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
     </svg>
   ),
+  send: (
+    <svg viewBox="0 0 20 20" fill="none">
+      <path d="M17.5 2.5 8.75 11.25" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M17.5 2.5 12 17.5l-3.25-6.25L2.5 8l15-5.5Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+    </svg>
+  ),
+  chart: (
+    <svg viewBox="0 0 20 20" fill="none">
+      <path d="M3 16.5h14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      <path d="M5.5 13.5V9.5M10 13.5V5.5M14.5 13.5v-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  ),
+  file: (
+    <svg viewBox="0 0 20 20" fill="none">
+      <path d="M5 2.5h6.5L15.5 6.5v10a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-13a1 1 0 0 1 1-1Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+      <path d="M11.5 2.5v4h4M7 10.5h6M7 13.5h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+  chat: (
+    <svg viewBox="0 0 20 20" fill="none">
+      <path d="M3.5 15.5 4.6 12.4A6.5 6.5 0 1 1 7.4 15l-3.9.5Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+    </svg>
+  ),
+  shield: (
+    <svg viewBox="0 0 20 20" fill="none">
+      <path d="M10 2.5 16 5v4.5c0 3.6-2.5 6.6-6 8-3.5-1.4-6-4.4-6-8V5l6-2.5Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+      <path d="m7.5 10 1.8 1.8L12.8 8.3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+  music: (
+    <svg viewBox="0 0 20 20" fill="none">
+      <path d="M7.5 15V4.5l9-2v10" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+      <circle cx="5.5" cy="15" r="2" stroke="currentColor" strokeWidth="1.5" />
+      <circle cx="14.5" cy="12.5" r="2" stroke="currentColor" strokeWidth="1.5" />
+    </svg>
+  ),
 }
 
 export default ICONS

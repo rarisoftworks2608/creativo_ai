@@ -1,6 +1,6 @@
 """Provider-agnostic image generation client (Epic 06: AI Creative Generation).
 
-Gemini, Hugging Face, and Cloudflare Workers AI are implemented. Swapping
+Gemini, Hugging Face, Cloudflare Workers AI and OpenAI (gpt-image-1) are implemented. Swapping
 providers means adding a branch to `get_image_provider()` and a class
 implementing `ImageAIProvider` - the same pattern as
 apps.ai_strategy.ai_client's text provider (Epic 05).
@@ -18,11 +18,12 @@ from abc import ABC, abstractmethod
 
 from django.conf import settings
 
+from common.ai_config import get_model_name, get_provider_name
 from common.ai_errors import AIProviderError, AIProviderNotConfigured
 
 __all__ = [
     'AIProviderError', 'AIProviderNotConfigured', 'ImageAIProvider', 'GeminiImageProvider',
-    'HuggingFaceImageProvider', 'CloudflareImageProvider', 'get_image_provider',
+    'HuggingFaceImageProvider', 'CloudflareImageProvider', 'OpenAIImageProvider', 'get_image_provider',
 ]
 
 
@@ -38,7 +39,7 @@ class ImageAIProvider(ABC):
 
 class GeminiImageProvider(ImageAIProvider):
     def __init__(self, model=None):
-        self.model = model or settings.AI_IMAGE_MODEL
+        self.model = model or get_model_name('image')
 
     def generate_image(self, *, prompt, reference_images=None):
         if not os.environ.get('GEMINI_API_KEY'):
@@ -103,7 +104,7 @@ class HuggingFaceImageProvider(ImageAIProvider):
     )
 
     def __init__(self, model=None):
-        self.model = model or settings.AI_IMAGE_MODEL
+        self.model = model or get_model_name('image')
 
     def generate_image(self, *, prompt, reference_images=None):
         import httpx
@@ -181,7 +182,7 @@ class CloudflareImageProvider(ImageAIProvider):
     )
 
     def __init__(self, model=None):
-        self.model = model or settings.AI_IMAGE_MODEL
+        self.model = model or get_model_name('image')
 
     def _fit_prompt(self, prompt):
         if len(prompt) <= self.MAX_PROMPT_CHARS:
@@ -243,12 +244,94 @@ class CloudflareImageProvider(ImageAIProvider):
             raise AIProviderError('The AI provider returned malformed image data.') from exc
 
 
+class OpenAIImageProvider(ImageAIProvider):
+    """OpenAI Images API (gpt-image-1 by default) over plain HTTPS - no SDK needed.
+
+    Reads OPENAI_API_KEY from the environment. To switch from Cloudflare (or any other
+    provider) set AI_IMAGE_PROVIDER=openai in .env (AI_IMAGE_MODEL=gpt-image-1, or leave
+    the old provider's default model there and gpt-image-1 is used) - or pick "openai"
+    under Admin Settings > AI providers - nothing else changes.
+
+    Unlike the diffusion providers above, gpt-image-1 accepts reference images, so a
+    brand logo/product photo passed as `reference_images` is sent to the /images/edits
+    endpoint to ground the generation. Size defaults to the portrait 1024x1536 canvas,
+    the closest supported size to the platform's 4:5 creative layout (the compositor
+    then crops/fits it exactly).
+    """
+
+    BASE_URL = 'https://api.openai.com/v1'
+    DEFAULT_TIMEOUT_SECONDS = 180.0
+
+    def __init__(self, model=None):
+        self.model = model or get_model_name('image') or 'gpt-image-1'
+        self.size = getattr(settings, 'OPENAI_IMAGE_SIZE', '') or '1024x1536'
+        self.quality = getattr(settings, 'OPENAI_IMAGE_QUALITY', '') or 'medium'
+
+    def _is_dalle(self):
+        return self.model.startswith('dall-e')
+
+    def generate_image(self, *, prompt, reference_images=None):
+        import httpx
+
+        api_key = os.environ.get('OPENAI_API_KEY')
+        if not api_key:
+            raise AIProviderNotConfigured(
+                'OpenAI API credentials are not configured. Set OPENAI_API_KEY in the backend environment.'
+            )
+        headers = {'Authorization': f'Bearer {api_key}'}
+
+        try:
+            if reference_images and not self._is_dalle():
+                extensions = {'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp'}
+                files = [
+                    ('image[]', (f'reference_{index}.{extensions.get(mime, "png")}', data, mime or 'image/png'))
+                    for index, (data, mime) in enumerate(reference_images, start=1)
+                ]
+                response = httpx.post(
+                    f'{self.BASE_URL}/images/edits',
+                    headers=headers,
+                    data={'model': self.model, 'prompt': prompt, 'size': self.size, 'quality': self.quality, 'n': '1'},
+                    files=files,
+                    timeout=self.DEFAULT_TIMEOUT_SECONDS,
+                )
+            else:
+                payload = {'model': self.model, 'prompt': prompt, 'n': 1}
+                if self._is_dalle():
+                    payload.update({'size': '1024x1792', 'response_format': 'b64_json'})
+                else:
+                    payload.update({'size': self.size, 'quality': self.quality})
+                response = httpx.post(
+                    f'{self.BASE_URL}/images/generations', headers=headers, json=payload,
+                    timeout=self.DEFAULT_TIMEOUT_SECONDS,
+                )
+        except httpx.HTTPError as exc:
+            raise AIProviderError(f'Could not reach the AI provider: {exc}') from exc
+
+        if response.status_code in (401, 403):
+            raise AIProviderNotConfigured(
+                'OpenAI API key is invalid, or the organization is not verified for image generation. '
+                'Check OPENAI_API_KEY in the backend environment.'
+            )
+        if response.status_code == 429:
+            raise AIProviderError('The AI provider is rate-limiting requests (or the account is out of credit).')
+        if response.status_code >= 400:
+            raise AIProviderError(f'OpenAI image generation failed: {response.text[:300]}')
+
+        try:
+            image_b64 = response.json()['data'][0]['b64_json']
+            return base64.b64decode(image_b64), 'image/png'
+        except (ValueError, KeyError, IndexError, TypeError) as exc:
+            raise AIProviderError('The AI provider returned no image content.') from exc
+
+
 def get_image_provider() -> ImageAIProvider:
-    provider_name = getattr(settings, 'AI_IMAGE_PROVIDER', 'gemini')
+    provider_name = get_provider_name('image') or 'gemini'
     if provider_name == 'gemini':
         return GeminiImageProvider()
     if provider_name == 'huggingface':
         return HuggingFaceImageProvider()
     if provider_name == 'cloudflare':
         return CloudflareImageProvider()
+    if provider_name == 'openai':
+        return OpenAIImageProvider()
     raise AIProviderError(f'Unknown AI_IMAGE_PROVIDER "{provider_name}".')

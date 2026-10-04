@@ -31,7 +31,9 @@ class GTTSVoiceProvider(VoiceAIProvider):
         from gtts import gTTS
 
         try:
-            tts = gTTS(text=text, lang='en')
+            from common.ai_config import get_content_language
+
+            tts = gTTS(text=text, lang=voice or get_content_language()[0])
             buffer = BytesIO()
             tts.write_to_fp(buffer)
         except Exception as exc:

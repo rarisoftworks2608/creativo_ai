@@ -5,7 +5,13 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from apps.ai_strategy.ai_client import AIProviderError, AIProviderNotConfigured, AnthropicProvider, GroqProvider
+from apps.ai_strategy.ai_client import (
+    AIProviderError,
+    AIProviderNotConfigured,
+    AnthropicProvider,
+    GroqProvider,
+    OpenAITextProvider,
+)
 from apps.ai_strategy.models import BrandContext, StrategyOutput
 from apps.authentication.models import User
 from apps.companies.models import ClientProfile, Company
@@ -276,6 +282,15 @@ class GetProviderFactoryTests(TestCase):
         with override_settings(AI_TEXT_PROVIDER='groq'):
             self.assertIsInstance(get_provider(), GroqProvider)
 
+    def test_selects_openai(self):
+        from django.test import override_settings
+
+        from apps.ai_strategy.ai_client import get_provider
+        with override_settings(AI_TEXT_PROVIDER='openai', AI_TEXT_MODEL='openai/gpt-oss-120b'):
+            provider = get_provider()
+        self.assertIsInstance(provider, OpenAITextProvider)
+        self.assertEqual(provider.model, 'gpt-4.1-mini')  # the leftover Groq model is not sent to OpenAI
+
     def test_unknown_provider_raises(self):
         from django.test import override_settings
 
@@ -283,3 +298,100 @@ class GetProviderFactoryTests(TestCase):
         with override_settings(AI_TEXT_PROVIDER='not-a-real-provider'):
             with self.assertRaises(AIProviderError):
                 get_provider()
+
+
+class OpenAITextProviderTests(TestCase):
+    """Exercises the OpenAI Chat Completions wrapper (network mocked): the strict
+    JSON-schema request, JSON parsing, and every failure mode mapped to
+    AIProviderError/AIProviderNotConfigured.
+    """
+
+    SCHEMA = {
+        'type': 'object',
+        'properties': {'summary': {'type': 'string'}},
+        'required': ['summary'],
+        'additionalProperties': False,
+    }
+
+    def setUp(self):
+        import os
+        self._old_key = os.environ.pop('OPENAI_API_KEY', None)
+        os.environ['OPENAI_API_KEY'] = 'test-key'
+
+    def tearDown(self):
+        import os
+        os.environ.pop('OPENAI_API_KEY', None)
+        if self._old_key is not None:
+            os.environ['OPENAI_API_KEY'] = self._old_key
+
+    def _response(self, *, status_code=200, body):
+        import httpx
+        return httpx.Response(
+            status_code=status_code, json=body,
+            request=httpx.Request('POST', 'https://api.openai.com/v1/chat/completions'),
+        )
+
+    def _generate(self):
+        return OpenAITextProvider(model='gpt-4.1-mini').generate_json(system='sys', prompt='hello', json_schema=self.SCHEMA)
+
+    @patch('httpx.post')
+    def test_success_parses_json_and_requests_strict_schema(self, mock_post):
+        mock_post.return_value = self._response(body={'choices': [{'message': {'content': '{"summary": "ok"}'}}]})
+
+        self.assertEqual(self._generate(), {'summary': 'ok'})
+
+        sent_json = mock_post.call_args.kwargs['json']
+        self.assertEqual(sent_json['model'], 'gpt-4.1-mini')
+        self.assertEqual(sent_json['response_format']['type'], 'json_schema')
+        self.assertTrue(sent_json['response_format']['json_schema']['strict'])
+        self.assertEqual(sent_json['response_format']['json_schema']['schema'], self.SCHEMA)
+
+    def test_missing_api_key_raises_not_configured(self):
+        import os
+        os.environ.pop('OPENAI_API_KEY', None)
+
+        with self.assertRaises(AIProviderNotConfigured):
+            self._generate()
+
+    @patch('httpx.post')
+    def test_invalid_key_raises_not_configured(self, mock_post):
+        mock_post.return_value = self._response(status_code=401, body={'error': {'message': 'Incorrect API key'}})
+
+        with self.assertRaises(AIProviderNotConfigured):
+            self._generate()
+
+    @patch('httpx.post')
+    def test_invalid_json_content_raises_provider_error(self, mock_post):
+        mock_post.return_value = self._response(body={'choices': [{'message': {'content': 'not json'}}]})
+
+        with self.assertRaises(AIProviderError):
+            self._generate()
+
+
+class StructuredOutputSchemaTests(TestCase):
+    """OpenAI and Groq strict JSON-schema mode reject a schema unless every object sets
+    additionalProperties: false and lists all of its properties as required - guard every
+    schema the text providers are given, so a schema edit can't break those providers."""
+
+    def _assert_strict(self, schema, path):
+        if schema.get('type') == 'object' or 'properties' in schema:
+            self.assertIs(schema.get('additionalProperties'), False, f'{path}: additionalProperties must be False')
+            self.assertEqual(
+                set(schema.get('required', [])), set(schema.get('properties', {})),
+                f'{path}: every property must be required',
+            )
+        for name, sub_schema in schema.get('properties', {}).items():
+            self._assert_strict(sub_schema, f'{path}.{name}')
+        if isinstance(schema.get('items'), dict):
+            self._assert_strict(schema['items'], f'{path}[]')
+
+    def test_every_text_provider_schema_is_strict_mode_compatible(self):
+        from apps.ai_strategy.schemas import BRAND_CONTEXT_SCHEMA, STRATEGY_KINDS
+        from apps.creative_generation.schemas import COPY_SCHEMA
+        from apps.video_generation.schemas import SCRIPT_SCHEMA
+
+        schemas = {'BRAND_CONTEXT_SCHEMA': BRAND_CONTEXT_SCHEMA, 'COPY_SCHEMA': COPY_SCHEMA, 'SCRIPT_SCHEMA': SCRIPT_SCHEMA}
+        schemas.update({f'STRATEGY_KINDS[{kind}]': spec['schema'] for kind, spec in STRATEGY_KINDS.items()})
+        for name, schema in schemas.items():
+            with self.subTest(schema=name):
+                self._assert_strict(schema, name)

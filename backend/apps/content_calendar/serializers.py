@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import ContentCalendarItem
+from .models import ContentCalendarItem, ContentReviewEvent
 
 
 class ContentCalendarItemSerializer(serializers.ModelSerializer):
@@ -13,6 +13,8 @@ class ContentCalendarItemSerializer(serializers.ModelSerializer):
 
     latest_generation_request = serializers.SerializerMethodField()
     latest_video_request = serializers.SerializerMethodField()
+    publish_jobs = serializers.SerializerMethodField()
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
 
     class Meta:
         model = ContentCalendarItem
@@ -20,8 +22,9 @@ class ContentCalendarItemSerializer(serializers.ModelSerializer):
             'id', 'company', 'topic', 'category', 'weekly_theme', 'content_type', 'platforms',
             'objective', 'campaign', 'scheduled_date', 'scheduled_time',
             'caption_requirements', 'creative_requirements', 'cta', 'hashtags', 'source_notes',
-            'status', 'source', 'client_feedback', 'regeneration_count', 'created_by', 'created_at', 'updated_at',
-            'latest_generation_request', 'latest_video_request',
+            'status', 'status_display', 'source', 'client_feedback', 'regeneration_count',
+            'created_by', 'created_at', 'updated_at',
+            'latest_generation_request', 'latest_video_request', 'publish_jobs',
         ]
         read_only_fields = [
             'id', 'company', 'source', 'client_feedback', 'regeneration_count', 'created_by', 'created_at', 'updated_at',
@@ -43,6 +46,18 @@ class ContentCalendarItemSerializer(serializers.ModelSerializer):
             return None
         return VideoGenerationRequestSerializer(video_request, context=self.context).data
 
+    def get_publish_jobs(self, obj) -> list:
+        """Compact per-platform publishing status (Epic 11: client can view publishing
+        status) - the full job lives in the publishing app's own endpoints."""
+        return [
+            {
+                'id': job.id, 'platform': job.platform, 'status': job.status,
+                'scheduled_at': job.scheduled_at, 'published_at': job.published_at,
+                'external_url': job.external_url,
+            }
+            for job in obj.publish_jobs.all()
+        ]
+
     def validate_platforms(self, value):
         valid = {choice for choice, _label in ContentCalendarItem.Platform.choices}
         if not isinstance(value, list) or not value:
@@ -62,3 +77,31 @@ class ContentCalendarItemSerializer(serializers.ModelSerializer):
 
 class ExcelUploadSerializer(serializers.Serializer):
     file = serializers.FileField()
+
+
+class ContentReviewEventSerializer(serializers.ModelSerializer):
+    action_display = serializers.CharField(source='get_action_display', read_only=True)
+    actor_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ContentReviewEvent
+        fields = ['id', 'action', 'action_display', 'actor', 'actor_name', 'actor_role', 'feedback', 'metadata', 'created_at']
+        read_only_fields = fields
+
+    def get_actor_name(self, obj) -> str:
+        return obj.actor.get_full_name() if obj.actor else 'System'
+
+
+class ApprovalQueueItemSerializer(ContentCalendarItemSerializer):
+    """A calendar item as shown in the admin's cross-company approval queue."""
+
+    company_name = serializers.CharField(source='company.name', read_only=True)
+    pending_since = serializers.SerializerMethodField()
+
+    class Meta(ContentCalendarItemSerializer.Meta):
+        fields = [*ContentCalendarItemSerializer.Meta.fields, 'company_name', 'pending_since']
+
+    def get_pending_since(self, obj) -> str | None:
+        from .services import pending_since
+
+        return pending_since(obj)

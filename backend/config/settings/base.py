@@ -70,6 +70,12 @@ LOCAL_APPS = [
     'apps.activity_log',
     'apps.platform_settings',
     'apps.prompt_templates',
+    'apps.publishing',
+    'apps.whatsapp',
+    'apps.analytics',
+    'apps.subscriptions',
+    'apps.reports',
+    'apps.health',
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -290,6 +296,12 @@ AI_IMAGE_MODEL = env('AI_IMAGE_MODEL', default='gemini-3.1-flash-image')
 # provider's current rate card rather than assumed - cost_usd stays null until set.
 AI_IMAGE_COST_PER_IMAGE_USD = env('AI_IMAGE_COST_PER_IMAGE_USD', default='')
 
+# 'openai' (AI_IMAGE_PROVIDER=openai) reads OPENAI_API_KEY directly from the environment.
+# gpt-image-1 sizes: 1024x1024, 1024x1536 (portrait - closest to the 4:5 layout), 1536x1024.
+# Quality: low | medium | high | auto - higher quality costs more per image.
+OPENAI_IMAGE_SIZE = env('OPENAI_IMAGE_SIZE', default='1024x1536')
+OPENAI_IMAGE_QUALITY = env('OPENAI_IMAGE_QUALITY', default='medium')
+
 
 # AI voice-over provider (Epic 07: AI Video Generation)
 # gTTS is free and needs no API key - it works out of the box.
@@ -313,6 +325,134 @@ AI_VOICE_PROVIDER = env('AI_VOICE_PROVIDER', default='gtts')
 AI_VIDEO_PROVIDER = env('AI_VIDEO_PROVIDER', default='huggingface')
 AI_VIDEO_MODEL = env('AI_VIDEO_MODEL', default='Wan-AI/Wan2.2-TI2V-5B')
 REPLICATE_API_TOKEN = env('REPLICATE_API_TOKEN', default='')
+
+# Video rendering (Epic 07: Processing - FFmpeg, Compression). FFMPEG_BINARY may be a
+# full path (e.g. C:/ffmpeg/bin/ffmpeg.exe); blank = look it up on PATH, then fall back
+# to the binary bundled by the optional `imageio-ffmpeg` pip package if it's installed.
+FFMPEG_BINARY = env('FFMPEG_BINARY', default='')
+# H.264 CRF (lower = better quality/bigger file; 18-28 is sensible) and x264 preset.
+VIDEO_CRF = env.int('VIDEO_CRF', default=23)
+VIDEO_PRESET = env('VIDEO_PRESET', default='veryfast')
+
+
+# Public URLs (Epic 11: Publishing, Epic 12: WhatsApp)
+# Instagram and WhatsApp download media from a URL rather than accepting an upload, so
+# that URL must be reachable from the public internet. In production this is your
+# domain (or CDN/S3 bucket); in local development use a tunnel (e.g. `cloudflared tunnel
+# --url http://localhost:8000` or ngrok) and put its https URL here.
+BACKEND_PUBLIC_URL = env('BACKEND_PUBLIC_URL', default='http://localhost:8000')
+PUBLIC_MEDIA_BASE_URL = env('PUBLIC_MEDIA_BASE_URL', default='')
+
+
+# Social OAuth (Epic 10: Social Media Account Management)
+# Meta (Facebook Pages + Instagram professional accounts) - create an app at
+# developers.facebook.com (see docs/meta-setup-guide.md). Blank = OAuth "Connect with
+# Facebook" stays disabled and accounts can only be connected by pasting a token.
+META_APP_ID = env('META_APP_ID', default='')
+META_APP_SECRET = env('META_APP_SECRET', default='')
+META_GRAPH_API_VERSION = env('META_GRAPH_API_VERSION', default='v23.0')
+# Optional Facebook Login for Business configuration ID - when set it's used instead of
+# the scope list below (the configuration itself defines the permissions).
+META_LOGIN_CONFIG_ID = env('META_LOGIN_CONFIG_ID', default='')
+META_OAUTH_SCOPES = env.list('META_OAUTH_SCOPES', default=[
+    'pages_show_list', 'pages_read_engagement', 'pages_manage_posts', 'read_insights',
+    'business_management', 'instagram_basic', 'instagram_content_publish', 'instagram_manage_insights',
+])
+
+# LinkedIn - create an app at linkedin.com/developers (see docs/linkedin-setup-guide.md).
+# Posting as a Company Page needs the "Community Management API" product approved.
+LINKEDIN_CLIENT_ID = env('LINKEDIN_CLIENT_ID', default='')
+LINKEDIN_CLIENT_SECRET = env('LINKEDIN_CLIENT_SECRET', default='')
+# LinkedIn versioned REST API (YYYYMM). Each version is supported for about a year -
+# bump this when LinkedIn sunsets the one in use.
+LINKEDIN_API_VERSION = env('LINKEDIN_API_VERSION', default='202601')
+LINKEDIN_OAUTH_SCOPES = env.list('LINKEDIN_OAUTH_SCOPES', default=[
+    'openid', 'profile', 'w_member_social', 'r_organization_social', 'w_organization_social',
+    'rw_organization_admin',
+])
+
+# The provider redirects the browser back to the *frontend* (FRONTEND_URL/oauth/callback/<provider>),
+# which then hands the code to the API. Register exactly these URLs in the Meta/LinkedIn apps:
+#   {SOCIAL_OAUTH_REDIRECT_BASE}/oauth/callback/meta
+#   {SOCIAL_OAUTH_REDIRECT_BASE}/oauth/callback/linkedin
+SOCIAL_OAUTH_REDIRECT_BASE = env('SOCIAL_OAUTH_REDIRECT_BASE', default='') or FRONTEND_URL
+
+
+# WhatsApp Business Cloud API (Epic 12: WhatsApp Automation)
+# 'console' (default) logs messages instead of sending them, so the whole workflow can
+# be built and tested before a WhatsApp Business account exists. Switch to 'meta' once
+# the values below are filled in (see docs/meta-setup-guide.md, part C).
+WHATSAPP_PROVIDER = env('WHATSAPP_PROVIDER', default='console')
+WHATSAPP_ACCESS_TOKEN = env('WHATSAPP_ACCESS_TOKEN', default='')
+WHATSAPP_PHONE_NUMBER_ID = env('WHATSAPP_PHONE_NUMBER_ID', default='')
+WHATSAPP_BUSINESS_ACCOUNT_ID = env('WHATSAPP_BUSINESS_ACCOUNT_ID', default='')
+WHATSAPP_API_VERSION = env('WHATSAPP_API_VERSION', default='') or META_GRAPH_API_VERSION
+# Webhook (delivery/read receipts): {BACKEND_PUBLIC_URL}/api/v1/whatsapp/webhook/
+WHATSAPP_WEBHOOK_VERIFY_TOKEN = env('WHATSAPP_WEBHOOK_VERIFY_TOKEN', default='')
+WHATSAPP_APP_SECRET = env('WHATSAPP_APP_SECRET', default='') or META_APP_SECRET
+
+
+# Media storage (Epic 08: Storage - S3/R2, CDN)
+# Local disk by default. Set USE_S3_STORAGE=True to store uploads/generated media in
+# AWS S3 or Cloudflare R2 (R2: set AWS_S3_ENDPOINT_URL=https://<account>.r2.cloudflarestorage.com).
+USE_S3_STORAGE = env.bool('USE_S3_STORAGE', default=False)
+if USE_S3_STORAGE:
+    AWS_ACCESS_KEY_ID = env('AWS_ACCESS_KEY_ID', default='')
+    AWS_SECRET_ACCESS_KEY = env('AWS_SECRET_ACCESS_KEY', default='')
+    AWS_STORAGE_BUCKET_NAME = env('AWS_STORAGE_BUCKET_NAME', default='')
+    AWS_S3_ENDPOINT_URL = env('AWS_S3_ENDPOINT_URL', default='') or None
+    AWS_S3_REGION_NAME = env('AWS_S3_REGION_NAME', default='') or None
+    # Public CDN/custom domain in front of the bucket (e.g. media.example.com), optional.
+    AWS_S3_CUSTOM_DOMAIN = env('AWS_S3_CUSTOM_DOMAIN', default='') or None
+    # Media must be fetchable by Instagram/WhatsApp, so URLs are unsigned by default -
+    # the bucket (or CDN) needs public read on the media prefix.
+    AWS_QUERYSTRING_AUTH = env.bool('AWS_QUERYSTRING_AUTH', default=False)
+    AWS_DEFAULT_ACL = None
+    AWS_S3_FILE_OVERWRITE = False
+    AWS_LOCATION = env('AWS_LOCATION', default='media')
+    STORAGES = {
+        'default': {'BACKEND': 'storages.backends.s3.S3Storage'},
+        'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'},
+    }
+
+
+# Logging (Epic 26: Monitoring - Application logs)
+LOG_LEVEL = env('LOG_LEVEL', default='INFO')
+LOG_DIR = Path(env('LOG_DIR', default=str(BASE_DIR / 'logs')))
+LOG_TO_FILE = env.bool('LOG_TO_FILE', default=False)
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'standard': {'format': '%(asctime)s %(levelname)s [%(name)s] %(message)s'},
+    },
+    'handlers': {
+        'console': {'class': 'logging.StreamHandler', 'formatter': 'standard'},
+    },
+    'root': {'handlers': ['console'], 'level': LOG_LEVEL},
+    'loggers': {
+        'django': {'handlers': ['console'], 'level': 'INFO', 'propagate': False},
+        'django.request': {'handlers': ['console'], 'level': 'WARNING', 'propagate': False},
+        'apps': {'handlers': ['console'], 'level': LOG_LEVEL, 'propagate': False},
+        'celery': {'handlers': ['console'], 'level': 'INFO', 'propagate': False},
+    },
+}
+if LOG_TO_FILE:
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    LOGGING['handlers']['file'] = {
+        'class': 'logging.handlers.RotatingFileHandler',
+        'filename': str(LOG_DIR / 'app.log'),
+        'maxBytes': 10 * 1024 * 1024,
+        'backupCount': 5,
+        'formatter': 'standard',
+        'encoding': 'utf-8',
+    }
+    for logger_config in [LOGGING['root'], *LOGGING['loggers'].values()]:
+        logger_config['handlers'].append('file')
+
+# Error tracking (Epic 26: Monitoring) - initialized in production.py/staging.py when set.
+SENTRY_DSN = env('SENTRY_DSN', default='')
 
 
 # Celery / Redis (Epic 06: Generation Management - Queue)
@@ -345,4 +485,55 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'apps.social_accounts.tasks.check_social_account_expiry',
         'schedule': crontab(hour=8, minute=0),
     },
+    'refresh-social-tokens': {
+        'task': 'apps.social_accounts.tasks.refresh_expiring_tokens',
+        'schedule': crontab(hour=3, minute=0),
+    },
+    # Epic 11: Publishing & Scheduling - picks up every scheduled post whose time has come.
+    'dispatch-due-publish-jobs': {
+        'task': 'apps.publishing.tasks.dispatch_due_publish_jobs',
+        'schedule': crontab(minute='*'),
+    },
+    # Epic 09/12: remind clients about content still waiting for their approval.
+    'send-approval-reminders': {
+        'task': 'apps.notifications.tasks.send_approval_reminders',
+        'schedule': crontab(minute=5),
+    },
+    # Epic 15: Analytics - runs hourly, but each company is only synced once per
+    # PlatformSettings.analytics_sync_interval_hours.
+    'sync-analytics': {
+        'task': 'apps.analytics.tasks.sync_all_analytics',
+        'schedule': crontab(minute=20),
+    },
+    'snapshot-account-metrics': {
+        'task': 'apps.analytics.tasks.snapshot_all_account_metrics',
+        'schedule': crontab(hour=2, minute=30),
+    },
+    # Epic 16: Reports - runs daily, generates last month's reports on the configured day.
+    'generate-monthly-reports': {
+        'task': 'apps.reports.tasks.generate_monthly_reports',
+        'schedule': crontab(hour=6, minute=0),
+    },
+    # Epic 17: subscription expiry/renewal reminders + storage usage snapshot.
+    'check-subscriptions': {
+        'task': 'apps.subscriptions.tasks.check_subscriptions',
+        'schedule': crontab(hour=7, minute=0),
+    },
+    'recalculate-storage-usage': {
+        'task': 'apps.subscriptions.tasks.recalculate_storage_usage',
+        'schedule': crontab(hour=4, minute=0),
+    },
 }
+
+# One task at a time per worker process - video renders and publishing uploads are
+# long-running, so prefetching more would just starve the other worker processes.
+CELERY_WORKER_PREFETCH_MULTIPLIER = env.int('CELERY_WORKER_PREFETCH_MULTIPLIER', default=1)
+
+
+if 'test' in sys.argv:
+    # The test suite must not depend on a developer's local .env (e.g. a machine with
+    # SEND_NOTIFICATION_EMAILS=True would otherwise send extra emails in tests that
+    # assume the default). Tests that need these on use @override_settings.
+    SEND_NOTIFICATION_EMAILS = False
+    WHATSAPP_PROVIDER = 'console'
+    PUBLIC_MEDIA_BASE_URL = ''

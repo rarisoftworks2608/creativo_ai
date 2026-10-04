@@ -74,7 +74,15 @@ class VideoGenerationRequest(TimeStampedModel):
     include_logo = models.BooleanField(default=True)
     music_enabled = models.BooleanField(
         default=False,
-        help_text='Background music mixing has no configured provider yet - left off by default.',
+        help_text='Mix a background music track (from the admin-managed music library) under the voice-over.',
+    )
+    music_track = models.ForeignKey(
+        'BackgroundMusicTrack', null=True, blank=True, on_delete=models.SET_NULL, related_name='+',
+        help_text='Specific track to use; blank = a random active track from the library.',
+    )
+    include_outro = models.BooleanField(
+        default=True,
+        help_text='Append a short brand-coloured end card with the logo, company name and CTA/website.',
     )
     ai_motion_enabled = models.BooleanField(
         default=True,
@@ -112,6 +120,40 @@ class VideoGenerationRequest(TimeStampedModel):
 
     def __str__(self):
         return f'{self.get_video_type_display()} for {self.company.name} ({self.status})'
+
+
+def music_upload_path(instance, filename):
+    return f'music_library/{filename}'
+
+
+class BackgroundMusicTrack(TimeStampedModel):
+    """A royalty-free background music track an admin uploads once and every video can use
+    (Epic 07: Video Components - Music). Only upload music you have the rights to use
+    commercially (e.g. YouTube Audio Library, Pixabay Music, or licensed stock)."""
+
+    class Mood(models.TextChoices):
+        UPBEAT = 'upbeat', 'Upbeat'
+        CALM = 'calm', 'Calm'
+        CORPORATE = 'corporate', 'Corporate'
+        CINEMATIC = 'cinematic', 'Cinematic'
+        INSPIRATIONAL = 'inspirational', 'Inspirational'
+        FESTIVE = 'festive', 'Festive'
+        OTHER = 'other', 'Other'
+
+    name = models.CharField(max_length=150)
+    file = models.FileField(upload_to=music_upload_path)
+    mood = models.CharField(max_length=15, choices=Mood.choices, default=Mood.OTHER)
+    license_note = models.CharField(max_length=255, blank=True, help_text='Where it came from / license terms.')
+    is_active = models.BooleanField(default=True)
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='+',
+    )
+
+    class Meta:
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name
 
 
 class VideoScene(TimeStampedModel):

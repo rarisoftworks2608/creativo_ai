@@ -1,5 +1,7 @@
 import re
 
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import extend_schema
 from rest_framework import generics, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -243,21 +245,23 @@ IMAGE_EXTENSION_RE = re.compile(r'\.(png|jpe?g|gif|webp|svg)$', re.IGNORECASE)
 
 
 class AdminDashboardStatsView(APIView):
-    """Admin: aggregate stats for the admin dashboard landing page (Epic 14).
-
-    Publishing/subscription-status widgets from the epic's full wishlist are
-    intentionally left out - Epics 11 (Publishing) and 17 (Subscriptions) don't
-    exist yet, and fabricating numbers for features that aren't built would be
-    worse than just not showing them.
-    """
+    """Admin: aggregate stats for the admin dashboard landing page (Epic 14) - companies,
+    clients, content, approvals, publishing, AI usage, subscriptions and engagement."""
 
     permission_classes = [IsAdmin]
 
+    @extend_schema(responses=OpenApiTypes.OBJECT)
     def get(self, request):
-        from django.db.models import Sum
+        import datetime
 
+        from django.db.models import Sum
+        from django.utils import timezone
+
+        from apps.analytics.models import PostMetrics
         from apps.content_calendar.models import ContentCalendarItem
         from apps.creative_generation.models import GenerationRequest
+        from apps.publishing.models import PublishJob
+        from apps.subscriptions.models import Subscription
         from apps.video_generation.models import VideoGenerationRequest
 
         creative_succeeded = GenerationRequest.objects.filter(status=GenerationRequest.Status.SUCCEEDED).count()
@@ -266,6 +270,15 @@ class AdminDashboardStatsView(APIView):
         video_failed = VideoGenerationRequest.objects.filter(status=VideoGenerationRequest.Status.FAILED).count()
         creative_cost = GenerationRequest.objects.aggregate(total=Sum('cost_usd'))['total'] or 0
         video_cost = VideoGenerationRequest.objects.aggregate(total=Sum('cost_usd'))['total'] or 0
+
+        today = timezone.localdate()
+        month_start = today.replace(day=1)
+        last_30 = timezone.now() - datetime.timedelta(days=30)
+        current_subscriptions = Subscription.objects.filter(status__in=Subscription.CURRENT_STATUSES)
+        engagement = PostMetrics.objects.filter(published_at__gte=last_30).aggregate(
+            reach=Sum('reach'), engagements=Sum('engagements'),
+        )
+        reach, engagements = engagement['reach'] or 0, engagement['engagements'] or 0
 
         return Response({
             'total_companies': Company.objects.count(),
@@ -281,19 +294,46 @@ class AdminDashboardStatsView(APIView):
                 'creative_count': creative_succeeded,
                 'video_count': video_succeeded,
             },
+            'publishing': {
+                'published_total': PublishJob.objects.filter(status=PublishJob.Status.PUBLISHED).count(),
+                'published_this_month': PublishJob.objects.filter(
+                    status=PublishJob.Status.PUBLISHED, published_at__date__gte=month_start,
+                ).count(),
+                'scheduled': PublishJob.objects.filter(
+                    status__in=[PublishJob.Status.SCHEDULED, PublishJob.Status.QUEUED],
+                ).count(),
+                'failed': PublishJob.objects.filter(status=PublishJob.Status.FAILED).count(),
+                'ready_to_publish': ContentCalendarItem.objects.filter(status=ContentCalendarItem.Status.APPROVED)
+                .exclude(publish_jobs__status__in=[*PublishJob.ACTIVE_STATUSES, PublishJob.Status.PUBLISHED])
+                .distinct().count(),
+            },
+            'subscriptions': {
+                'active': current_subscriptions.count(),
+                'expiring_soon': current_subscriptions.filter(
+                    end_date__gte=today, end_date__lte=today + datetime.timedelta(days=14),
+                ).count(),
+                'expired': Subscription.objects.filter(status=Subscription.Status.EXPIRED).count(),
+                'companies_without_plan': Company.objects.filter(status=Company.Status.ACTIVE).exclude(
+                    subscriptions__status__in=Subscription.CURRENT_STATUSES,
+                ).count(),
+            },
+            'engagement_30d': {
+                'reach': reach,
+                'engagements': engagements,
+                'engagement_rate': round(engagements / reach * 100, 2) if reach else 0,
+            },
         })
 
 
 class JobQueueView(APIView):
-    """Admin: unified view across all companies' background AI generation jobs
-    (Epic 23: Job Status / Scheduler monitoring). Creative and video generation
-    are the only two Celery-backed job types that exist so far - Publishing,
-    Analytics and Report jobs from the epic's full wishlist don't exist yet
-    (Epics 11/15/16), so they're simply not shown rather than faked.
+    """Admin: unified view across all companies' background jobs (Epic 23: Job Status /
+    Scheduler monitoring) - creative + video generation, publishing, report generation
+    and analytics sync, filterable by ?type=creative|video|publishing|report|analytics.
     """
 
     permission_classes = [IsAdmin]
 
+    @extend_schema(responses=OpenApiTypes.OBJECT)
     def get(self, request):
         from apps.creative_generation.models import GenerationRequest
         from apps.video_generation.models import VideoGenerationRequest
@@ -304,7 +344,7 @@ class JobQueueView(APIView):
 
         jobs = []
 
-        if type_filter != 'video':
+        if type_filter in (None, '', 'creative'):
             queryset = GenerationRequest.objects.select_related('company')
             if status_filter:
                 queryset = queryset.filter(status=status_filter)
@@ -319,7 +359,7 @@ class JobQueueView(APIView):
                     'created_at': job.created_at, 'updated_at': job.updated_at,
                 })
 
-        if type_filter != 'creative':
+        if type_filter in (None, '', 'video'):
             queryset = VideoGenerationRequest.objects.select_related('company')
             if status_filter:
                 queryset = queryset.filter(status=status_filter)
@@ -334,8 +374,74 @@ class JobQueueView(APIView):
                     'created_at': job.created_at, 'updated_at': job.updated_at,
                 })
 
+        jobs.extend(_other_jobs(type_filter, status_filter, company_id))
         jobs.sort(key=lambda j: j['created_at'], reverse=True)
         return Response({'count': len(jobs), 'results': jobs[:200]})
+
+
+# Maps each new job type's own statuses onto the queue's pending/queued/processing/
+# succeeded/failed vocabulary so the Jobs page can filter them uniformly.
+PUBLISH_STATUS_MAP = {
+    'scheduled': 'pending', 'queued': 'queued', 'processing': 'processing',
+    'published': 'succeeded', 'failed': 'failed', 'cancelled': 'failed',
+}
+REPORT_STATUS_MAP = {'pending': 'queued', 'generating': 'processing', 'ready': 'succeeded', 'failed': 'failed'}
+SYNC_STATUS_MAP = {'running': 'processing', 'succeeded': 'succeeded', 'partial': 'succeeded', 'failed': 'failed'}
+
+
+def _other_jobs(type_filter, status_filter, company_id):
+    """Publishing, report and analytics-sync jobs for the unified queue (Epic 23)."""
+    from apps.analytics.models import AnalyticsSyncLog
+    from apps.publishing.models import PublishJob
+    from apps.reports.models import Report
+
+    jobs = []
+    if type_filter in (None, '', 'publishing'):
+        queryset = PublishJob.objects.select_related('company', 'content_calendar_item')
+        if company_id:
+            queryset = queryset.filter(company_id=company_id)
+        if status_filter:
+            queryset = queryset.filter(status__in=[k for k, v in PUBLISH_STATUS_MAP.items() if v == status_filter])
+        for job in queryset[:200]:
+            jobs.append({
+                'id': job.id, 'type': 'publishing', 'type_display': f'Publishing ({job.get_platform_display()})',
+                'company_id': job.company_id, 'company_name': job.company.name,
+                'status': PUBLISH_STATUS_MAP.get(job.status, job.status), 'status_display': job.get_status_display(),
+                'error_message': job.last_error, 'retry_count': max(job.attempts - 1, 0),
+                'created_at': job.created_at, 'updated_at': job.updated_at,
+                'detail': job.content_calendar_item.topic if job.content_calendar_item else '',
+                'scheduled_at': job.scheduled_at,
+            })
+    if type_filter in (None, '', 'report'):
+        queryset = Report.objects.select_related('company')
+        if company_id:
+            queryset = queryset.filter(company_id=company_id)
+        if status_filter:
+            queryset = queryset.filter(status__in=[k for k, v in REPORT_STATUS_MAP.items() if v == status_filter])
+        for report in queryset[:100]:
+            jobs.append({
+                'id': report.id, 'type': 'report', 'type_display': 'Report generation',
+                'company_id': report.company_id, 'company_name': report.company.name if report.company else 'All companies',
+                'status': REPORT_STATUS_MAP.get(report.status, report.status), 'status_display': report.get_status_display(),
+                'error_message': report.error, 'retry_count': 0,
+                'created_at': report.created_at, 'updated_at': report.updated_at, 'detail': report.title,
+            })
+    if type_filter in (None, '', 'analytics'):
+        queryset = AnalyticsSyncLog.objects.select_related('company')
+        if company_id:
+            queryset = queryset.filter(company_id=company_id)
+        if status_filter:
+            queryset = queryset.filter(status__in=[k for k, v in SYNC_STATUS_MAP.items() if v == status_filter])
+        for log in queryset[:100]:
+            jobs.append({
+                'id': log.id, 'type': 'analytics', 'type_display': 'Analytics sync',
+                'company_id': log.company_id, 'company_name': log.company.name,
+                'status': SYNC_STATUS_MAP.get(log.status, log.status), 'status_display': log.get_status_display(),
+                'error_message': '; '.join(e.get('message', '') for e in (log.errors or [])[:3]), 'retry_count': 0,
+                'created_at': log.started_at, 'updated_at': log.finished_at or log.started_at,
+                'detail': f'{log.posts_synced} posts, {log.accounts_synced} accounts',
+            })
+    return jobs
 
 
 class JobCancelView(APIView):
@@ -349,10 +455,25 @@ class JobCancelView(APIView):
 
     permission_classes = [IsAdmin]
 
+    @extend_schema(responses=OpenApiTypes.OBJECT, request=OpenApiTypes.OBJECT)
     def post(self, request, job_type, job_id):
         from apps.creative_generation.models import GenerationRequest
         from apps.video_generation.models import VideoGenerationRequest
         from config.celery import app as celery_app
+
+        if job_type == 'publishing':
+            from apps.publishing.models import PublishJob
+
+            job = generics.get_object_or_404(PublishJob, pk=job_id)
+            if job.status not in (PublishJob.Status.SCHEDULED, PublishJob.Status.QUEUED):
+                return Response({'detail': 'Only a scheduled or queued post can be cancelled.'}, status=status.HTTP_400_BAD_REQUEST)
+            if job.celery_task_id and job.status == PublishJob.Status.QUEUED:
+                celery_app.control.revoke(job.celery_task_id)
+            job.status = PublishJob.Status.CANCELLED
+            job.save(update_fields=['status', 'updated_at'])
+            log_activity(module=ActivityLog.Module.PUBLISHING, action='Scheduled post cancelled',
+                         description=f'Job #{job_id}', company=job.company, request=request)
+            return Response({'detail': 'Job cancelled.'})
 
         model = {'creative': GenerationRequest, 'video': VideoGenerationRequest}.get(job_type)
         if model is None:
@@ -391,6 +512,7 @@ class MediaLibraryView(APIView):
 
     permission_classes = [IsAdmin]
 
+    @extend_schema(responses=OpenApiTypes.OBJECT)
     def get(self, request, company_id):
         from apps.brand.models import BrandAsset
         from apps.creative_generation.models import GenerationVariation

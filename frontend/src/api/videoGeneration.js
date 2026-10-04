@@ -22,3 +22,20 @@ export async function retryVideoRequest(companyId, requestId) {
   const response = await apiClient.post(`/companies/${companyId}/video-generation/requests/${requestId}/retry/`)
   return response.data
 }
+
+export async function rerenderVideo(companyId, requestId, options = {}) {
+  const response = await apiClient.post(`/companies/${companyId}/video-generation/requests/${requestId}/rerender/`, options)
+  return response.data
+}
+
+export async function updateVideoScene(companyId, requestId, sceneId, payload) {
+  const response = await apiClient.patch(`/companies/${companyId}/video-generation/requests/${requestId}/scenes/${sceneId}/`, payload)
+  return response.data
+}
+
+export async function regenerateSceneImage(companyId, requestId, sceneId) {
+  const response = await apiClient.post(
+    `/companies/${companyId}/video-generation/requests/${requestId}/scenes/${sceneId}/regenerate-image/`,
+  )
+  return response.data
+}

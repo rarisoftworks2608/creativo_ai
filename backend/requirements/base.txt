@@ -29,15 +29,18 @@ boto3==1.34.144                        # AWS S3 client used by django-storages
 # Media processing
 Pillow==10.4.0                         # Image handling (used by ImageField, logo/creative uploads)
 
-# Spreadsheets
-openpyxl==3.1.5                        # Content calendar Excel template generation & import
+# Spreadsheets / documents
+openpyxl==3.1.5                        # Content calendar Excel template generation & import, Excel report export
+reportlab==4.4.4                       # PDF report export (Epic 16: Reports)
 
 # AI / LLM
 anthropic==0.123.0                     # Claude API client (Epic 05: AI content strategy generation)
 groq==1.6.0                            # Groq API client (Epic 05: alternate AI content strategy provider)
 google-genai==2.19.0                   # Gemini API client (Epic 06: AI creative image generation)
 httpx==0.28.1                          # HTTP client for Hugging Face Inference (Epic 06: free alternate image provider)
-gTTS==2.5.4                            # Free, keyless text-to-speech (Epic 07: AI video voice-over)
+# gTTS (free text-to-speech for video voice-over) lives in no-deps.txt - its click<8.2 pin
+# conflicts with huggingface_hub's click>=8.4, so it is installed with --no-deps (it only
+# uses click for its own command-line tool, which this project never calls).
 huggingface_hub==1.28.0                # Hugging Face Inference Providers client (Epic 07: free-tier AI scene motion)
 
 # Note: Epic 07 (AI Video Generation) also requires the `ffmpeg` binary on

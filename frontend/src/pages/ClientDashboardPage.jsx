@@ -3,7 +3,10 @@ import { Link } from 'react-router-dom'
 import { getMyCompany } from '../api/companies'
 import { approveCalendarItem, listCalendarItems, rejectCalendarItem } from '../api/contentCalendar'
 import { selectVariation } from '../api/creativeGeneration'
+import { getPublishingStats } from '../api/publishing'
+import { getAnalyticsSummary } from '../api/analytics'
 import { extractErrorMessage } from '../api/client'
+import { formatCompact, formatPercent } from '../utils/format'
 import Modal from '../components/Modal'
 import VariationGrid from '../components/VariationGrid'
 import ICONS from '../components/DashboardIcons'
@@ -37,6 +40,31 @@ const QUICK_LINKS = [
     description: 'Review the AI-generated videos and reels made for your brand.',
     path: (id) => `/companies/${id}/video-generation`,
   },
+  {
+    key: 'calendar', linkKey: 'approvals', icon: 'check', title: 'Content approvals',
+    description: 'Approve content or request changes, and see its full history.',
+    path: (id) => `/companies/${id}/approvals`,
+  },
+  {
+    key: 'publishing', icon: 'send', title: 'Publishing',
+    description: 'What is scheduled and what has gone live on each platform.',
+    path: (id) => `/companies/${id}/publishing`,
+  },
+  {
+    key: 'analytics', icon: 'chart', title: 'Analytics',
+    description: 'Reach, engagement, top posts and follower growth.',
+    path: (id) => `/companies/${id}/analytics`,
+  },
+  {
+    key: 'reports', icon: 'file', title: 'Reports',
+    description: 'Monthly reports to view or download as PDF, Excel or CSV.',
+    path: (id) => `/companies/${id}/reports`,
+  },
+  {
+    key: 'subscription', icon: 'dollar', title: 'Plan & usage',
+    description: 'Your plan and how much of this month\'s allowance is used.',
+    path: (id) => `/companies/${id}/subscription`,
+  },
 ]
 
 export default function ClientDashboardPage() {
@@ -51,6 +79,8 @@ export default function ClientDashboardPage() {
   const [rejectError, setRejectError] = useState('')
 
   const [selectingVariationId, setSelectingVariationId] = useState(null)
+  const [publishing, setPublishing] = useState(null)
+  const [performance, setPerformance] = useState(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -67,6 +97,13 @@ export default function ClientDashboardPage() {
       } else {
         setPendingItems([])
       }
+      const permissions = companyData.page_permissions || []
+      if (permissions.includes('publishing')) {
+        getPublishingStats(companyData.id).then(setPublishing).catch(() => setPublishing(null))
+      }
+      if (permissions.includes('analytics')) {
+        getAnalyticsSummary(companyData.id).then(setPerformance).catch(() => setPerformance(null))
+      }
     } catch (err) {
       setLoadError(extractErrorMessage(err, 'Could not load your dashboard.'))
     } finally {
@@ -81,7 +118,8 @@ export default function ClientDashboardPage() {
   async function handleApprove(item) {
     setBusyId(item.id)
     try {
-      await approveCalendarItem(company.id, item.id)
+      const selected = item.latest_generation_request?.variations?.find((v) => v.is_selected)
+      await approveCalendarItem(company.id, item.id, { variationId: selected?.id })
       setPendingItems((prev) => prev.filter((i) => i.id !== item.id))
     } catch (err) {
       setLoadError(extractErrorMessage(err, 'Could not approve this content.'))
@@ -158,6 +196,50 @@ export default function ClientDashboardPage() {
         </>
       )}
 
+      {(publishing || performance) && (
+        <>
+          <h2 className="dashboard-section-title">At a glance</h2>
+          <div className="stat-grid">
+            {publishing && (
+              <>
+                <div className="stat-tile stat-tile-success">
+                  <div className="stat-tile-icon">{ICONS.send}</div>
+                  <div className="stat-tile-body">
+                    <div className="stat-tile-value">{publishing.published_this_month}</div>
+                    <div className="stat-tile-label">Published this month</div>
+                  </div>
+                </div>
+                <div className="stat-tile">
+                  <div className="stat-tile-icon">{ICONS.calendar}</div>
+                  <div className="stat-tile-body">
+                    <div className="stat-tile-value">{publishing.scheduled}</div>
+                    <div className="stat-tile-label">Scheduled to publish</div>
+                  </div>
+                </div>
+              </>
+            )}
+            {performance && (
+              <>
+                <div className="stat-tile">
+                  <div className="stat-tile-icon">{ICONS.chart}</div>
+                  <div className="stat-tile-body">
+                    <div className="stat-tile-value">{formatCompact(performance.totals.reach)}</div>
+                    <div className="stat-tile-label">Reach · last 30 days</div>
+                  </div>
+                </div>
+                <div className="stat-tile">
+                  <div className="stat-tile-icon">{ICONS.sparkle}</div>
+                  <div className="stat-tile-body">
+                    <div className="stat-tile-value">{formatPercent(performance.totals.engagement_rate)}</div>
+                    <div className="stat-tile-label">Engagement rate · last 30 days</div>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </>
+      )}
+
       <h2 className="dashboard-section-title">Quick links</h2>
       {visibleLinks.length === 0 ? (
         <div className="card">
@@ -168,7 +250,7 @@ export default function ClientDashboardPage() {
       ) : (
         <div className="quick-link-grid">
           {visibleLinks.map((link) => (
-            <div className="quick-link-card" key={link.key}>
+            <div className="quick-link-card" key={link.linkKey || link.key}>
               <div className="quick-link-icon">{ICONS[link.icon]}</div>
               <h2>{link.title}</h2>
               <p>{link.description}</p>
@@ -181,8 +263,13 @@ export default function ClientDashboardPage() {
       )}
 
       <div className="card" style={{ marginTop: 28 }}>
-        <div className="card-header">
+        <div className="card-header card-header-wrap">
           <h2>Pending your approval ({pendingItems.length})</h2>
+          {(company.page_permissions || []).includes('calendar') && (
+            <Link to={`/companies/${company.id}/approvals`} className="btn btn-ghost">
+              Open approvals
+            </Link>
+          )}
         </div>
 
         {pendingItems.length === 0 ? (

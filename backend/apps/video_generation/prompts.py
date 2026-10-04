@@ -5,6 +5,8 @@ brand colors/tone/voice and product information flow into both the script
 and each scene's visual prompt.
 """
 
+from common.ai_config import content_language_instruction
+
 VIDEO_TYPE_GUIDANCE = {
     'instagram_reel': 'A fast-paced, vertical (9:16) Instagram Reel.',
     'facebook_reel': 'A fast-paced, vertical (9:16) Facebook Reel.',
@@ -66,6 +68,9 @@ def build_script_prompt(
         'two, written to be read aloud) and a visual_description of what should be shown on screen. Keep the '
         'sum of all scene durations close to the target duration.'
     )
+    language_line = content_language_instruction()
+    if language_line:
+        lines.append(language_line)
     return '\n'.join(lines)
 
 
