@@ -1,0 +1,326 @@
+=====================================================================
+ DOCKER GUIDE - AI Management System (Creativo / Marketing OS)
+=====================================================================
+
+---------------------------------------------------------------------
+0. THE SHORT VERSION
+---------------------------------------------------------------------
+BEFORE (4 terminals):
+    Terminal 1:  python manage.py runserver              (API)
+    Terminal 2:  npm run dev                             (frontend)
+    Terminal 3:  celery -A config worker ...             (background jobs)
+    Terminal 4:  celery -A config beat ...               (scheduler)
+    + Redis started by hand:  docker start creativo-redis
+
+NOW (1 command, from the project root folder):
+    docker compose up -d --build
+
+Then open:  http://localhost
+Login:      the DJANGO_SUPERUSER_EMAIL / DJANGO_SUPERUSER_PASSWORD
+            you put in backend\.env
+
+Stop everything:   docker compose stop
+Start it again:    docker compose start
+
+
+---------------------------------------------------------------------
+1. WHAT IS DOCKER AND WHY WE USE IT
+---------------------------------------------------------------------
+Docker packs each part of the app (database, Redis, Django, Celery,
+website) into a "container" - a small, isolated mini-computer that
+already has everything it needs installed.
+
+Why it helps this project:
+  - ONE command starts the whole app (no 4 terminals).
+  - No need to install Python, Node, PostgreSQL, Redis or ffmpeg on the
+    PC. Docker images already contain them.
+  - Works the same on every PC. A new teammate only needs Docker
+    Desktop + git, not a long manual setup.
+  - Same setup can be used on a real server for production.
+  - Each service is separate, so one crashing does not kill the rest,
+    and it restarts automatically (restart: unless-stopped).
+  - No port clashes like the PHP-on-port-8000 problem; containers talk
+    to each other on a private Docker network.
+
+Words you will see:
+  IMAGE      = a blueprint/template (built from a Dockerfile).
+  CONTAINER  = a running copy of an image.
+  VOLUME     = a storage area that survives when containers are removed
+               (this is where the database and uploaded files live).
+  COMPOSE    = a tool that starts many containers together using one
+               file (docker-compose.yml).
+
+
+---------------------------------------------------------------------
+2. FILES AND WHAT EACH ONE CONTAINS
+---------------------------------------------------------------------
+
+docker-compose.yml          (project root)  <-- THE MAIN FILE
+    Defines all 6 containers (services) and how they connect:
+
+    db        PostgreSQL 16 database. Data stored in volume
+              "postgres_data". Has a health check (pg_isready) so other
+              services wait until it is ready.
+
+    redis     Redis 7. Message queue for Celery. Data stored in volume
+              "redis_data". Has a health check (redis-cli ping).
+
+    backend   Django API served by gunicorn on port 8000 (inside Docker
+              only). On start it: waits for DB -> runs migrations ->
+              creates the admin user -> collectstatic -> starts gunicorn.
+
+    worker    Celery worker. Runs background jobs: AI text/image/video
+              generation, publishing, reports, etc.
+
+    beat      Celery beat. The scheduler: triggers scheduled posts,
+              auto-generation, periodic cleanups. Its schedule file is
+              kept in volume "celerybeat".
+
+    web       Nginx. The ONLY service exposed to your PC (port 80 or
+              WEB_PORT). Serves the built React website and forwards
+              /api, /admin, /media, /static to the backend.
+
+    flower    OPTIONAL Celery dashboard (profile "monitoring"), port
+              5555. Not started unless you ask for it.
+
+    Volumes (saved data):
+      postgres_data  database          redis_data   queue data
+      media          uploaded/generated images, videos, logos
+      static         Django admin CSS/JS
+      logs           application log files
+      celerybeat     beat schedule
+
+    Shared settings: the block "x-backend" at the top is reused by
+    backend, worker and beat so they all use the same image, same
+    backend\.env, and the same DATABASE_URL / REDIS_URL (pointing to the
+    containers "db" and "redis", NOT localhost).
+
+
+backend\Dockerfile          (recipe for the Django/Celery image)
+    - Starts from python:3.12-slim.
+    - Installs ffmpeg (video rendering), DejaVu fonts (PDF reports),
+      curl (health check).
+    - Installs Python packages from requirements\production.txt and
+      requirements\no-deps.txt.
+    - Copies the backend code, runs collectstatic, creates a non-root
+      user "app" (safer).
+    - Has a HEALTHCHECK calling /api/v1/health/.
+    - ENTRYPOINT = docker\entrypoint.sh, default command = gunicorn.
+    The SAME image is used for backend, worker and beat; only the
+    command differs.
+
+
+backend\docker\entrypoint.sh    (runs every time a backend container starts)
+    - Waits for PostgreSQL (manage.py wait_for_db).
+    - If RUN_MIGRATIONS=1 (only the "backend" service): runs migrate and
+      creates the first admin from DJANGO_SUPERUSER_EMAIL / PASSWORD
+      (skipped if that admin already exists).
+    - Then runs the real command (gunicorn / celery worker / celery beat).
+
+
+backend\.dockerignore
+    Files NOT copied into the image: venv, .env, db.sqlite3, media,
+    __pycache__, logs, celerybeat-schedule*. Keeps the image small and
+    keeps your secrets out of it.
+
+
+frontend\Dockerfile         (recipe for the website image, 2 stages)
+    Stage 1: node:22 -> npm ci -> npm run build  (makes the static site;
+             VITE_API_URL is set to /api/v1 so the site calls the same
+             address it was loaded from).
+    Stage 2: nginx -> copies the built site + nginx.conf.
+
+
+frontend\nginx.conf
+    Nginx rules:
+      /api/    -> Django backend          /admin/  -> Django admin
+      /static/ -> static volume           /media/  -> media volume
+      /assets/ -> cached 1 year           /        -> React app (SPA)
+      /healthz -> health check
+    Because the site and the API share one address (http://localhost),
+    there are NO CORS problems.
+
+
+frontend\.dockerignore
+    Excludes node_modules, dist, .env from the image build.
+
+
+backend\.env                (NOT in git - you create it)
+    Secrets/config read by the containers: SECRET_KEY, AI API keys,
+    email settings, DJANGO_SUPERUSER_EMAIL / DJANGO_SUPERUSER_PASSWORD.
+    Note: DATABASE_URL, REDIS_URL, ALLOWED_HOSTS are overridden by
+    docker-compose.yml, so values for them in .env are ignored in
+    Docker mode.
+
+
+docker-compose.dev.yml      (OPTIONAL - old style development)
+    Starts ONLY Postgres + Redis in Docker so you can still run
+    Django/Celery/Vite natively with hot reload.
+        docker compose -f docker-compose.dev.yml up -d
+
+
+docker-compose.prod.yml     (OPTIONAL - real server with HTTPS)
+    Override adding port 443, Let's Encrypt certificates (certbot) and
+    forced SSL. Used together with the main file:
+        docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+    Needs a domain name. See docs\deployment.md.
+
+
+scripts\
+    dev.ps1               starts the old native 4-process dev setup
+    backup.sh / restore.sh  database + media backup and restore
+    init-letsencrypt.sh   first HTTPS certificate
+
+
+---------------------------------------------------------------------
+3. HOW A REQUEST FLOWS
+---------------------------------------------------------------------
+Browser -> http://localhost  -> [web / Nginx]
+              page files      -> served directly by Nginx
+              /api/...        -> [backend / Django] -> [db / PostgreSQL]
+                                        |
+                                        +--> puts a job in [redis]
+                                                    |
+                                  [worker / Celery] picks it up and runs
+                                  it (AI generation, publishing...)
+                                  [beat / Celery] adds scheduled jobs
+                                  to the same queue on a timer.
+
+
+---------------------------------------------------------------------
+4. FIRST-TIME SETUP (new PC / new teammate)
+---------------------------------------------------------------------
+Needs: Docker Desktop (running) + git.
+
+  1. git clone <repo-url>
+  2. cd ai-management-system
+  3. copy backend\.env.example backend\.env
+  4. Edit backend\.env and add:
+         SECRET_KEY=<long random string>
+         DJANGO_SUPERUSER_EMAIL=admin@creativo.com
+         DJANGO_SUPERUSER_PASSWORD=<strong password>
+     (optional) AI keys: ANTHROPIC_API_KEY, GEMINI_API_KEY, GROQ_API_KEY
+  5. docker compose up -d --build        (first build: a few minutes)
+  6. Open http://localhost and log in.
+
+If port 80 is busy, in PowerShell:
+     $env:WEB_PORT = "8080"
+     $env:CSRF_TRUSTED_ORIGINS = "http://localhost:8080"
+     docker compose up -d
+and open http://localhost:8080
+
+
+---------------------------------------------------------------------
+5. COMMANDS CHEAT SHEET (run in the project root folder)
+---------------------------------------------------------------------
+
+START / STOP
+  docker compose up -d --build     Build images and start everything
+                                   (use after code changes too)
+  docker compose up -d             Start without rebuilding (use after
+                                   editing backend\.env)
+  docker compose stop              Pause all containers, keep data
+  docker compose start             Resume paused containers
+  docker compose restart backend   Restart one service
+  docker compose down              Remove containers, KEEP data volumes
+  docker compose down -v           Remove containers AND DELETE ALL DATA
+                                   (database, uploaded media!) - careful
+
+LOOK AT STATUS
+  docker compose ps                List services and their health
+  docker compose logs -f backend   Live logs of the API
+  docker compose logs -f worker    Live logs of Celery jobs
+  docker compose logs -f beat      Live logs of the scheduler
+  docker compose logs --tail 100 backend    Last 100 lines
+  docker stats                     CPU/RAM usage per container
+
+RUN COMMANDS INSIDE A CONTAINER
+  docker compose exec backend python manage.py createsuperuser
+                                   Create another admin
+  docker compose exec backend python manage.py migrate
+                                   Apply migrations manually
+  docker compose exec backend python manage.py shell
+                                   Django shell
+  docker compose exec backend python manage.py test apps.authentication
+                                   Run tests for one app
+  docker compose exec db psql -U creativo -d creativo
+                                   Open the PostgreSQL console
+
+OPTIONAL EXTRAS
+  docker compose --profile monitoring up -d flower
+                                   Celery dashboard at http://localhost:5555
+                                   (user admin / password change-me,
+                                    or FLOWER_USER / FLOWER_PASSWORD)
+
+BACKUP YOUR DATA
+  docker compose exec db pg_dump -U creativo creativo > backup.sql
+
+CLEAN UP DISK SPACE (not needed normally)
+  docker image prune               Remove unused old images
+  docker system df                 See how much space Docker uses
+
+
+---------------------------------------------------------------------
+6. WHICH COMMAND WHEN
+---------------------------------------------------------------------
+  I changed Python/React code        -> docker compose up -d --build
+  I changed backend\.env             -> docker compose up -d
+  Something looks broken             -> docker compose ps
+                                        docker compose logs backend
+  I want to shut down for the day    -> docker compose stop
+  I want to start again tomorrow     -> docker compose start
+  I want a totally fresh database    -> docker compose down -v
+                                        docker compose up -d --build
+  Page shows 502 Bad Gateway         -> backend is still starting;
+                                        wait 30-60 seconds, retry
+
+
+---------------------------------------------------------------------
+7. COMMON PROBLEMS
+---------------------------------------------------------------------
+  "cannot connect to docker API / pipe not found"
+      Docker Desktop is not running. Start it, wait for "Engine running".
+
+  "port is already allocated" / bind error on port 80
+      Another program uses port 80 (IIS, XAMPP, Skype...). Set WEB_PORT
+      (see section 4).
+
+  502 Bad Gateway right after starting
+      Backend is still migrating. Wait and refresh.
+
+  Login fails with CSRF / host error
+      Set ALLOWED_HOSTS and CSRF_TRUSTED_ORIGINS to the address you use
+      in the browser (include the port if not 80).
+
+  AI features return "503 / key not set"
+      Add the key to backend\.env, then: docker compose up -d
+
+  Data from my old local db.sqlite3 is missing
+      Docker uses its own PostgreSQL database - it starts empty. The
+      two databases are separate.
+
+  Changes in code not showing
+      Docker uses built images, there is no hot reload. Run
+      docker compose up -d --build.
+
+
+---------------------------------------------------------------------
+8. DOCKER vs OLD 4-TERMINAL SETUP
+---------------------------------------------------------------------
+                    Docker                     4 terminals
+  Start             1 command                  4 commands + Redis
+  Installs needed   Docker Desktop only        Python, Node, Redis, ffmpeg
+  Database          PostgreSQL (container)     SQLite file
+  Code changes      rebuild needed             hot reload (fast)
+  Best for          running/demo/deploy        daily coding & debugging
+  Address           http://localhost           http://localhost:5173
+
+Do not run both at once - they use different databases and may clash
+on ports.
+
+For coding with hot reload but Docker for the database/Redis only:
+    docker compose -f docker-compose.dev.yml up -d
+    (then run runserver / npm run dev / celery natively)
+
+More details: docs\deployment.md, docs\troubleshooting.md
+=====================================================================
