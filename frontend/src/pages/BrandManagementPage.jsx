@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import {
   deleteBrandAsset,
   getBrandProfile,
+  importBrandFromWebsite,
   listBrandAssets,
   removeBrandImage,
   renameBrandAsset,
@@ -53,6 +54,7 @@ export default function BrandManagementPage() {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
   const [activeTab, setActiveTab] = useState('identity')
+  const [importCount, setImportCount] = useState(0)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -72,6 +74,15 @@ export default function BrandManagementPage() {
     load()
   }, [load])
 
+  // Re-reads company + brand without the full-page loading state, so the import card (and
+  // its result message) stays mounted while every section below picks up the new values.
+  const refresh = useCallback(async () => {
+    const [companyData, brandData] = await Promise.all([getCompany(companyId), getBrandProfile(companyId)])
+    setCompany(companyData)
+    setBrand(brandData)
+    setImportCount((count) => count + 1)
+  }, [companyId])
+
   if (loading) return <div className="page-loading">Loading…</div>
   if (loadError && !brand) return <div className="alert alert-error">{loadError}</div>
   if (!brand || !company) return null
@@ -90,6 +101,10 @@ export default function BrandManagementPage() {
       </div>
 
       {loadError && <div className="alert alert-error">{loadError}</div>}
+
+      {isAdmin && (
+        <WebsiteImportCard companyId={companyId} initialUrl={company.website} onImported={refresh} />
+      )}
 
       <div className="view-toggle brand-tabs">
         {TABS.map((tab) => (
@@ -111,7 +126,81 @@ export default function BrandManagementPage() {
       {activeTab === 'marketing' && (
         <MarketingSection companyId={companyId} company={company} brand={brand} setBrand={setBrand} />
       )}
-      {activeTab === 'assets' && <AssetsSection companyId={companyId} />}
+      {activeTab === 'assets' && <AssetsSection key={importCount} companyId={companyId} />}
+    </div>
+  )
+}
+
+function WebsiteImportCard({ companyId, initialUrl, onImported }) {
+  const [url, setUrl] = useState(initialUrl || '')
+  const [overwrite, setOverwrite] = useState(false)
+  const [importing, setImporting] = useState(false)
+  const [error, setError] = useState('')
+  const [result, setResult] = useState(null)
+
+  async function handleImport(event) {
+    event.preventDefault()
+    setImporting(true)
+    setError('')
+    setResult(null)
+    try {
+      const data = await importBrandFromWebsite(companyId, { url, overwrite })
+      await onImported()
+      setResult(data)
+    } catch (err) {
+      setError(extractErrorMessage(err, 'Could not import from that website.'))
+    } finally {
+      setImporting(false)
+    }
+  }
+
+  return (
+    <div className="card">
+      <div className="card-header">
+        <h2>Auto-fill from website</h2>
+      </div>
+      <form onSubmit={handleImport}>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+          <label className="field" style={{ flex: '1 1 320px', margin: 0 }}>
+            <span>Company website</span>
+            <input
+              type="text"
+              value={url}
+              onChange={(event) => setUrl(event.target.value)}
+              placeholder="https://www.example.com"
+              disabled={importing}
+              required
+            />
+          </label>
+          <button type="submit" className="btn btn-primary" disabled={importing || !url.trim()}>
+            {importing ? 'Reading website…' : 'Auto-fill brand'}
+          </button>
+        </div>
+        <label className="field-checkbox" style={{ marginTop: 12 }}>
+          <input
+            type="checkbox"
+            checked={overwrite}
+            onChange={(event) => setOverwrite(event.target.checked)}
+            disabled={importing}
+          />
+          <span>Replace values that are already filled in (otherwise only empty fields are filled)</span>
+        </label>
+        <p className="modal-hint">
+          Reads the homepage and its About/Products pages, then fills the colors, fonts, logo, guidelines and
+          marketing information. Takes up to a minute. Review the result and edit anything that isn't right.
+        </p>
+      </form>
+      {error && <div className="alert alert-error">{error}</div>}
+      {result && (
+        <div className="alert alert-success">
+          {result.filled.length > 0
+            ? `Filled ${result.filled.length} fields: ${result.filled.join(', ')}.`
+            : 'Nothing new to fill - every field already has a value. Tick "Replace values" to overwrite them.'}
+          {result.warnings.map((warning) => (
+            <div key={warning}>{warning}</div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

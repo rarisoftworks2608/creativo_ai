@@ -161,13 +161,6 @@ class CloudflareImageProvider(ImageAIProvider):
     BASE_URL = 'https://api.cloudflare.com/client/v4/accounts'
     DEFAULT_TIMEOUT_SECONDS = 60.0
 
-    # Vertical 4:5 (multiples of 16, exact 4:5 ratio) - the platform's fixed creative
-    # layout system (see prompts.build_image_prompt's COMPOSITION section) is portrait,
-    # and this is the one provider here that actually takes explicit pixel dimensions
-    # rather than relying on the prompt text alone to suggest an aspect ratio.
-    IMAGE_WIDTH = 896
-    IMAGE_HEIGHT = 1120
-
     # FLUX.1 [schnell]'s hard limit, per Cloudflare's docs - the shared prompt built by
     # prompts.build_image_prompt() (brand voice, do's/don'ts, ...) routinely exceeds this
     # for a company with a fleshed-out brand profile, even though it's well within what
@@ -208,9 +201,10 @@ class CloudflareImageProvider(ImageAIProvider):
                 f'{self.BASE_URL}/{account_id}/ai/run/{self.model}',
                 headers=headers,
                 # FLUX.1 [schnell] has no negative_prompt/guidance parameter at all (it's a
-                # guidance-distilled model) - `steps` (max 8, default 4) and explicit
-                # width/height are the only levers available on this endpoint.
-                json={'prompt': prompt, 'steps': 8, 'width': self.IMAGE_WIDTH, 'height': self.IMAGE_HEIGHT},
+                # guidance-distilled model), and Cloudflare now rejects width/height with a
+                # 400 ("Additional or unevaluated properties") - `steps` (max 8, default 4)
+                # is the only lever available on this endpoint.
+                json={'prompt': prompt, 'steps': 8},
                 timeout=self.DEFAULT_TIMEOUT_SECONDS,
             )
             response.raise_for_status()
@@ -222,7 +216,11 @@ class CloudflareImageProvider(ImageAIProvider):
                 ) from exc
             if exc.response.status_code == 429:
                 raise AIProviderError('The AI provider is rate-limiting requests. Try again shortly.') from exc
-            raise AIProviderError(f'Cloudflare image generation failed: {exc}') from exc
+            try:
+                detail = '; '.join(e.get('message', str(e)) for e in exc.response.json().get('errors') or [])
+            except ValueError:
+                detail = ''
+            raise AIProviderError(f'Cloudflare image generation failed: {detail or exc}') from exc
         except httpx.HTTPError as exc:
             raise AIProviderError(f'Could not reach the AI provider: {exc}') from exc
 

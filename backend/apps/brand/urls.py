@@ -7,6 +7,8 @@ app_name = 'brand'
 urlpatterns = [
     path('', views.BrandProfileView.as_view(), name='brand-profile'),
 
+    path('import-from-website/', views.BrandImportFromWebsiteView.as_view(), name='brand-import-from-website'),
+
     path('logo/', views.BrandIdentityImageView.as_view(), {'slot': 'logo'}, name='brand-logo'),
     path('secondary-logo/', views.BrandIdentityImageView.as_view(), {'slot': 'secondary_logo'}, name='brand-secondary-logo'),
     path('favicon/', views.BrandIdentityImageView.as_view(), {'slot': 'favicon'}, name='brand-favicon'),

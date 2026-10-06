@@ -15,6 +15,7 @@ from .serializers import (
     BrandAssetUploadSerializer,
     BrandProfileSerializer,
     BrandProfileWriteSerializer,
+    BrandWebsiteImportSerializer,
 )
 
 IMAGE_SLOTS = {'logo', 'secondary_logo', 'favicon'}
@@ -73,6 +74,40 @@ class BrandProfileView(CompanyScopedMixin, AdminWriteMixin, generics.RetrieveUpd
     def update(self, request, *args, **kwargs):
         super().update(request, *args, **kwargs)
         return Response(BrandProfileSerializer(self.get_object(), context=self.get_serializer_context()).data)
+
+
+class BrandImportFromWebsiteView(CompanyScopedMixin, APIView):
+    """Admin: read the company's website and auto-fill the brand profile from it.
+
+    Colors, fonts, logo and favicon are taken from the site itself; voice, tone, do's/don'ts,
+    personas, products and so on are drafted by the text AI from the site's copy. With
+    overwrite=false only empty fields are filled.
+    """
+
+    permission_classes = [IsAdmin]
+    serializer_class = BrandWebsiteImportSerializer
+
+    def post(self, request, company_id):
+        from common.ai_errors import AIProviderError, AIProviderNotConfigured
+
+        from . import website_import
+
+        company = self.get_company()
+        serializer = BrandWebsiteImportSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        profile, _created = BrandProfile.objects.get_or_create(company=company)
+        try:
+            filled, warnings = website_import.import_brand_from_website(
+                company, profile, serializer.validated_data['url'], overwrite=serializer.validated_data['overwrite'],
+                user=request.user,
+            )
+        except website_import.WebsiteImportError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except AIProviderNotConfigured as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+        except AIProviderError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+        return Response({'filled': filled, 'warnings': warnings})
 
 
 class BrandIdentityImageView(CompanyScopedMixin, APIView):

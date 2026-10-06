@@ -50,3 +50,13 @@ export async function renameBrandAsset(companyId, assetId, name) {
   const response = await apiClient.patch(`/companies/${companyId}/brand/assets/${assetId}/`, { name })
   return response.data
 }
+
+export async function importBrandFromWebsite(companyId, { url, overwrite }) {
+  // Reads the site and drafts the whole profile with AI, so it can take a while.
+  const response = await apiClient.post(
+    `/companies/${companyId}/brand/import-from-website/`,
+    { url, overwrite },
+    { timeout: 120000 },
+  )
+  return response.data
+}

@@ -126,3 +126,10 @@ class BrandAssetUploadSerializer(serializers.ModelSerializer):
             uploaded_by=getattr(request, 'user', None),
             **validated_data,
         )
+
+
+class BrandWebsiteImportSerializer(serializers.Serializer):
+    """Input for "auto-fill brand from website": the address and whether to replace values already filled in."""
+
+    url = serializers.CharField(max_length=500)
+    overwrite = serializers.BooleanField(default=False)

@@ -106,9 +106,14 @@ def generate_now(item):
         )
         _enqueue_video(video_request)
     else:
+        # Without this the model's own default (3) applies, so "Generate now" and the
+        # auto-generation sweep always made 3 images regardless of the admin setting.
+        from apps.platform_settings.models import PlatformSettings
+
         generation_request = GenerationRequest.objects.create(
             company=item.company, content_calendar_item=item,
             creative_type=_pick_creative_type(item), platform=_pick_platform(item), prompt_brief=prompt_brief,
+            variation_count=PlatformSettings.load().default_variation_count,
         )
         _enqueue_creative(generation_request)
 
