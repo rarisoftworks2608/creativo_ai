@@ -114,6 +114,9 @@ def generate_now(item):
             company=item.company, content_calendar_item=item,
             creative_type=_pick_creative_type(item), platform=_pick_platform(item), prompt_brief=prompt_brief,
             variation_count=PlatformSettings.load().default_variation_count,
+            # Brand colors, fonts, headline and CTA are only drawn onto the image when this
+            # is on; the logo alone is added either way.
+            include_text_overlay=True,
         )
         _enqueue_creative(generation_request)
 
