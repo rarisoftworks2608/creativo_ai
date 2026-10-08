@@ -44,6 +44,8 @@ def _brand_lines(brand_profile):
     colors = ', '.join(f'{c.get("name", "")} {c.get("hex", "")}'.strip() for c in brand_profile.brand_colors) or 'not specified'
     return [
         f'Brand colors: {colors}',
+        'Color direction: build the scene\'s color grade, lighting, props and background tones around the '
+        'brand colors above so the creative looks on-brand - the overlay text and logo use the same palette.',
         f'Brand tone: {brand_profile.tone or "not specified"}',
         f'Visual style: {brand_profile.visual_style or "not specified"}',
         f'Typography notes: {brand_profile.typography_notes or "not specified"}',
@@ -118,7 +120,8 @@ def build_image_prompt(
         'separately-generated, guaranteed-accurate assets - anything rendered here would only ever be '
         'redundant or, worse, misspelled/fake.',
 
-        f'Creative brief: {prompt_brief or "Use your best judgement based on the brand context below."}',
+        f'Creative brief (context only - never write any of its words, the occasion name or the year '
+        f'into the image): {prompt_brief or "Use your best judgement based on the brand context below."}',
         f'Product information: {product_info or _joined(company.products, empty="not specified")}',
         *_brand_lines(brand_profile),
     ]

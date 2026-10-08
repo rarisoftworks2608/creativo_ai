@@ -49,7 +49,7 @@ WHITE = '#FFFFFF'
 # COMPOSITION section describes these same numbers in English; if either changes, the
 # reserved space in the generated photo and the real overlay drift apart.
 CONTENT_ZONE_WIDTH_FRACTION = 0.42  # left zone the copy is drawn into (spec: 40-45%)
-LOGO_WIDTH_FRACTION = 0.16
+LOGO_WIDTH_FRACTION = 0.22
 
 
 def compose_creative(

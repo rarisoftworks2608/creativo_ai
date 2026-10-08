@@ -114,6 +114,9 @@ def generate_now(item):
             company=item.company, content_calendar_item=item,
             creative_type=_pick_creative_type(item), platform=_pick_platform(item), prompt_brief=prompt_brief,
             variation_count=PlatformSettings.load().default_variation_count,
+            # Calendar creatives are publish-ready posts, so they get the full brand layout
+            # (brand-font copy in brand colors + the real logo) instead of a bare photo.
+            include_text_overlay=True,
         )
         _enqueue_creative(generation_request)
 
