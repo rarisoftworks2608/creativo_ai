@@ -236,3 +236,79 @@ class BrandColorsTests(SimpleTestCase):
 
         self.assertTrue(banner_color.startswith('#'))
         self.assertNotEqual(banner_color, 'not-a-hex-color')
+
+
+class BrandLayerTests(SimpleTestCase):
+    def flat_background_logo(self):
+        """A dark-brown mark on a flat off-white background with lots of empty margin, like a JPEG logo upload."""
+        image = Image.new('RGB', (400, 200), (247, 247, 247))
+        image.paste(Image.new('RGB', (120, 60), (123, 90, 69)), (140, 70))
+        buf = io.BytesIO()
+        image.save(buf, format='JPEG', quality=95)
+        return buf.getvalue()
+
+    def test_logo_background_is_removed_and_the_margin_trimmed(self):
+        from apps.creative_generation.compositor import _prepare_mark
+
+        mark = _prepare_mark(self.flat_background_logo())
+
+        self.assertEqual(mark.mode, 'RGBA')
+        self.assertLessEqual(abs(mark.width - 120), 4)  # trimmed to the artwork, not the 400px canvas
+        self.assertLessEqual(abs(mark.height - 60), 4)
+        self.assertEqual(mark.getpixel((mark.width // 2, mark.height // 2))[3], 255)  # artwork stays solid
+
+    def test_logo_with_real_transparency_is_kept_as_is(self):
+        from apps.creative_generation.compositor import _prepare_mark
+
+        image = Image.new('RGBA', (100, 40), (0, 0, 0, 0))
+        image.paste(Image.new('RGBA', (60, 20), (255, 255, 255, 255)), (20, 10))
+        buf = io.BytesIO()
+        image.save(buf, format='PNG')
+
+        mark = _prepare_mark(buf.getvalue())
+
+        self.assertEqual((mark.width, mark.height), (60, 20))
+
+    def test_unreadable_logo_gives_none(self):
+        from apps.creative_generation.compositor import _prepare_mark
+
+        self.assertIsNone(_prepare_mark(b'not-an-image'))
+
+    def test_no_white_plate_is_drawn_behind_the_logo(self):
+        original = fake_image_bytes(size=(800, 800), color=(40, 90, 60))
+        logo = self.flat_background_logo()
+
+        result_bytes, _ = compose_creative(original, 'image/jpeg', logo_bytes=logo)
+
+        composed = Image.open(io.BytesIO(result_bytes)).convert('RGB')
+        # Top-right is where the old white logo plate used to go - it must be untouched photo now.
+        for actual, expected in zip(composed.getpixel((780, 20)), (40, 90, 60)):  # JPEG rounding tolerance
+            self.assertLessEqual(abs(actual - expected), 3)
+        # The logo itself sits in the bottom strip, in white.
+        bottom = composed.crop((0, 700, 400, 800))
+        self.assertTrue(any(sum(px) > 700 for px in bottom.getdata()))
+
+    def test_footer_uses_the_brand_color(self):
+        original = fake_image_bytes(size=(800, 800), color=(255, 255, 255))
+        brand = FakeBrandProfile(brand_colors=[{'name': 'Primary', 'hex': '#0000FF'}])
+
+        result_bytes, _ = compose_creative(original, 'image/jpeg', headline='Hello', brand_profile=brand)
+
+        composed = Image.open(io.BytesIO(result_bytes)).convert('RGB')
+        r, g, b = composed.getpixel((790, 795))  # bottom-right corner: deepest part of the gradient, no text there
+        self.assertGreater(b, r + 40)  # blue-tinted, not neutral grey
+
+    def test_long_text_ends_with_an_ellipsis_instead_of_being_cut_mid_sentence(self):
+        from PIL import ImageDraw, ImageFont
+
+        from apps.creative_generation.compositor import _wrapped_lines
+
+        draw = ImageDraw.Draw(Image.new('RGB', (10, 10)))
+        font = ImageFont.load_default()
+        lines = _wrapped_lines(draw, 'one two three four five six seven eight nine ten ' * 4, font, 120, max_lines=2)
+
+        self.assertEqual(len(lines), 2)
+        self.assertTrue(lines[-1].endswith('...'))
+
+    def test_non_breaking_hyphen_survives(self):
+        self.assertEqual(_sanitize_text('Data‑Driven'), 'Data-Driven')

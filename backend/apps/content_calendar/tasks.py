@@ -114,13 +114,8 @@ def generate_now(item):
             company=item.company, content_calendar_item=item,
             creative_type=_pick_creative_type(item), platform=_pick_platform(item), prompt_brief=prompt_brief,
             variation_count=PlatformSettings.load().default_variation_count,
-<<<<<<< HEAD
             # Calendar creatives are publish-ready posts, so they get the full brand layout
             # (brand-font copy in brand colors + the real logo) instead of a bare photo.
-=======
-            # Brand colors, fonts, headline and CTA are only drawn onto the image when this
-            # is on; the logo alone is added either way.
->>>>>>> 44ec172b586ed1af0bb29e9848777f48b0db3815
             include_text_overlay=True,
         )
         _enqueue_creative(generation_request)

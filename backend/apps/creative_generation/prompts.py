@@ -58,16 +58,12 @@ def build_image_prompt(
     company, brand_profile, creative_type, platform, prompt_brief, product_info, variation_number, variation_count=3,
     extra_guidance='',
 ):
-    """Structured as labeled sections (COMPOSITION / VISUAL STYLE / BACKGROUND /
-    BRAND SAFETY) rather than one flat paragraph - explicit section headers
-    measurably improve instruction-following on faster/distilled image models, the
-    same way a real creative brief separates concerns instead of burying them in
-    prose. The compositional target - RIGHT 55-60% hero subject, LEFT 40-45% calm
-    zone, TOP-RIGHT logo-safe corner, vertical 4:5 - is the platform's fixed
-    creative layout system (see project_plan.md's "creative plan" section) and
-    matches exactly what compose_creative draws afterward - see
-    compositor.py's _draw_left_content_zone/_place_logo_top_right - so the
-    reserved space and the real overlay always agree.
+    """The creative brief leads and is followed as written - a detailed brief (a full scene,
+    named props, people, lighting) must come out as that scene, not be squeezed into a fixed
+    layout. Brand context follows as guidance, and the safety section keeps text/logos out of
+    the picture: the real headline, CTA and logo are drawn on afterwards by
+    compositor.compose_creative from the real assets and copy, so anything the image model
+    rendered there would only ever be redundant or misspelled.
     """
     format_guidance = CREATIVE_TYPE_GUIDANCE.get(creative_type, 'A social media creative.')
     platform_guidance = PLATFORM_GUIDANCE.get(platform, PLATFORM_GUIDANCE['general'])
@@ -78,57 +74,44 @@ def build_image_prompt(
         'Make this the single best possible on-brand variation.'
     )
     lines = [
-        f'Generate a premium marketing creative background image for "{company.name}" '
-        f'({company.industry or "general business"}), in a sophisticated editorial advertising style - '
-        'art-directed and intentional, not a generic AI-generated stock photo.',
+        # The company name / industry are deliberately not quoted here: image models tend to
+        # paint any name they are given into the picture as a faint caption or watermark.
+        'Create a marketing image for a brand. Its name, tagline and industry must not appear in the image.',
+        f'Format: {format_guidance} {platform_guidance}',
 
-        'COMPOSITION (fixed layout system - follow exactly):',
-        f'- {format_guidance} {platform_guidance}',
-        '- Vertical 4:5 portrait canvas.',
-        '- RIGHT 55-60% of the frame: the main subject/hero visual, the clear photographic focal point, '
-        'composed with intent rather than centered by default. Preserve the subject clearly and let it '
-        'extend naturally toward the right and bottom edges of the canvas.',
-        '- LEFT 40-45% of the frame: keep this a calm, spacious, visually quiet zone - soft environmental '
-        'texture, a gradient, blur, open sky, or shadow only, with no important visual detail. A headline '
-        'and supporting copy are composited there afterward and must never have to fight busy detail for '
-        'attention.',
-        '- TOP-RIGHT corner: keep clean and uncluttered too - the real brand logo is placed there '
-        'afterward, and important detail directly behind it will get covered.',
-        '- The composition should feel spacious and premium, with generous breathing room - do not fill '
-        'every available area.',
+        'CREATIVE BRIEF - this is the primary instruction. Follow it faithfully: the scene, subjects, '
+        'setting, props, people, lighting, mood and level of detail it describes. Never write any of '
+        "the brief's own words - the occasion name, a slogan, the year - into the image as text:",
+        prompt_brief or 'Use your best judgement based on the brand context below.',
+        f'Product information: {product_info or _joined(company.products, empty="not specified")}',
 
-        'VISUAL STYLE:',
-        '- Photorealistic, shot on a professional camera - natural skin texture, realistic fabric, '
-        'materials and reflections, shallow depth of field, cinematic but believable lighting.',
-        '- No illustration, cartoon, painterly, or 3D-render look. No fantasy/surreal elements unless the '
-        'brief explicitly calls for them. Avoid excessive HDR, oversaturation, or artificial glow.',
+        'PHOTOGRAPHIC QUALITY:',
+        '- Photorealistic, like a real professional photograph (editorial / commercial campaign '
+        'photography): realistic light, true-to-life materials and textures, natural skin and fabric, '
+        'believable depth of field.',
+        '- Show the complete scene the brief describes - environment, supporting details, atmosphere - '
+        'rather than a tight close-up of one subject, unless the brief asks for a close-up.',
+        '- Keep every subject fully in frame, composed naturally edge to edge. No distorted anatomy, '
+        'extra limbs or malformed faces and hands; no illustration, cartoon, plastic/CGI look, '
+        'oversaturation or artificial glow.',
+        '- Keep faces and the main focal point out of the bottom 20% of the frame, and let the scene simply '
+        'continue there (floor, surface, flowers, soft shadow) - plain and uncluttered, with no panel, banner, '
+        'caption, label or any text.',
 
-        'BACKGROUND:',
-        '- Keep the environment soft and uncluttered, especially behind the LEFT calm zone and the '
-        'TOP-RIGHT logo-safe corner - simplify rather than fill the frame with detail.',
-        '- A real event/street photo is often covered in signage; deliberately avoid reproducing that '
-        'here - use a plain wall, open sky, soft bokeh crowd, or plain fabric/decoration backdrop instead '
-        'of a busy, sign-covered backdrop.',
+        'BRAND (guidance - apply naturally without overpowering the brief):',
+        *_brand_lines(brand_profile),
 
         'BRAND SAFETY (critical):',
-        '- Do not render any words, letters, numbers, logos, watermarks, brand marks, emblems, or badges '
-        'anywhere in the image, in any language or script - this includes background/environmental text '
-        '(banners, hoardings, posters, shop signs, street signs, flags, writing on clothing), not just '
-        'foreground branding, even blurred or far in the background.',
-        '- Do not invent a fake company logo or name anywhere in the scene.',
-        '- The real headline, CTA text, and real brand logo are composited on afterward from '
-        'separately-generated, guaranteed-accurate assets - anything rendered here would only ever be '
-        'redundant or, worse, misspelled/fake.',
-
-        f'Creative brief (context only - never write any of its words, the occasion name or the year '
-        f'into the image): {prompt_brief or "Use your best judgement based on the brand context below."}',
-        f'Product information: {product_info or _joined(company.products, empty="not specified")}',
-        *_brand_lines(brand_profile),
+        '- Do not render any words, letters, numbers, logos, watermarks, brand marks or emblems anywhere '
+        'in the image, in any language or script - including background text such as banners, posters, '
+        'signs, packaging and writing on clothing.',
+        '- Do not write the brand name, a tagline, a caption or a watermark anywhere, even faintly or '
+        'blurred. The real logo and headline are added afterwards.',
     ]
     if extra_guidance:
         # Admin-configured guidance (Epic 21: Prompt & Template Management) - appended
-        # rather than replacing anything above, so the fixed layout system and brand
-        # safety rules always still apply regardless of what an admin writes here.
+        # rather than replacing anything above, so the brand safety rules always still
+        # apply regardless of what an admin writes here.
         lines += ['ADDITIONAL GUIDANCE (admin-configured):', extra_guidance]
     lines.append(variation_note)
     return '\n'.join(lines)

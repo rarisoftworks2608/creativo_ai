@@ -1,26 +1,23 @@
-"""Overlays brand elements onto an AI-generated creative (Epic 06: AI Creative Generation).
+"""Applies the brand layer onto an AI-generated creative (Epic 06: AI Creative Generation).
 
-Diffusion image models are unreliable at rendering legible text - even top-tier ones
-regularly misspell headlines/CTAs baked into the picture. This module sidesteps that
-entirely: the image model is instructed to produce a clean visual only (see
-prompts.build_image_prompt), and the eyebrow/headline/description/CTA text - already
-generated accurately as plain data by the text AI (Epic 05/06) - is drawn on top here
-with Pillow. Since the text is never re-interpreted by an image model, spelling is
-always exactly what was generated.
+Diffusion image models are unreliable at rendering legible text and can never reproduce a
+real logo - even top-tier ones misspell headlines and invent marks. So the image model is
+told to produce a clean photograph only (see prompts.build_image_prompt) and everything
+brand-specific is drawn on top here with Pillow, from the real assets and the real copy:
 
-Layout system (project_plan.md's "creative plan" - fixed, not a style choice): the
-image is generated RIGHT-hero / LEFT-calm-zone / TOP-RIGHT-logo-safe, vertical 4:5 (see
-prompts.build_image_prompt's COMPOSITION section), and this module composites the real
-copy into that same LEFT zone and the real logo into that same TOP-RIGHT corner - the
-reserved space and the real overlay are two halves of one design, so they must always
-target the same geometry.
+  * a soft footer tinted with the brand's own color, carrying the headline, a CTA pill in the
+    brand accent color, and the logo (cut out of its background and shown in white, so it
+    never sits in a plate), all set in the brand fonts. With no copy to show, the footer is a
+    slim strip with just the logo.
+
+The photo itself is never resized or cropped.
 """
 
 import io
 import unicodedata
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageChops, ImageDraw, ImageFont
 
 FONT_DIR = Path(__file__).resolve().parent / 'fonts'
 
@@ -44,59 +41,6 @@ HEADLINE_FONT_FAMILY = 'playfair display'
 DEFAULT_BANNER_COLOR = '#1A1A1A'  # "ink" - headline/body text color
 DEFAULT_ACCENT_COLOR = '#D4A017'  # eyebrow/CTA/divider accent
 WHITE = '#FFFFFF'
-
-# The fixed layout system's proportions - kept as named constants since prompts.py's
-# COMPOSITION section describes these same numbers in English; if either changes, the
-# reserved space in the generated photo and the real overlay drift apart.
-CONTENT_ZONE_WIDTH_FRACTION = 0.42  # left zone the copy is drawn into (spec: 40-45%)
-LOGO_WIDTH_FRACTION = 0.22
-
-
-def compose_creative(
-    image_bytes, mime_type, *,
-    eyebrow='', headline='', description='', cta='',
-    logo_bytes=None, symbol_bytes=None, brand_profile=None,
-):
-    """Composites the eyebrow/headline/description/CTA copy into the image's LEFT
-    content zone and the brand logo into its TOP-RIGHT corner (each only if the
-    corresponding input is provided). Returns (composited_bytes, 'image/jpeg').
-    Returns the input unchanged if there's nothing to overlay.
-    """
-    if not any([eyebrow, headline, description, cta, logo_bytes, symbol_bytes]):
-        return image_bytes, mime_type
-
-    eyebrow = _sanitize_text(eyebrow)
-    headline = _sanitize_text(headline)
-    description = _sanitize_text(description)
-    cta = _sanitize_text(cta)
-
-    base = Image.open(io.BytesIO(image_bytes)).convert('RGBA')
-    width, height = base.size
-    overlay = Image.new('RGBA', base.size, (0, 0, 0, 0))
-
-    ink_color, accent_color = _brand_colors(brand_profile)
-    padding = max(24, width // 20)
-
-    if eyebrow or headline or description or cta:
-        _draw_left_content_zone(
-            overlay, eyebrow=eyebrow, headline=headline, description=description, cta=cta,
-            width=width, height=height, padding=padding,
-            ink_color=ink_color, accent_color=accent_color, brand_profile=brand_profile,
-        )
-
-    # The real brand logo is the single mark placed top-right per the layout system;
-    # `logo_bytes` (BrandProfile.logo) takes priority over `symbol_bytes`
-    # (BrandProfile.secondary_logo) when both are set, rather than drawing two marks
-    # that would now collide with the LEFT content zone or the RIGHT hero subject.
-    mark_bytes = logo_bytes or symbol_bytes
-    if mark_bytes:
-        _place_logo_top_right(overlay, mark_bytes, width, padding, accent_color)
-
-    composed = Image.alpha_composite(base, overlay).convert('RGB')
-    output = io.BytesIO()
-    composed.save(output, format='JPEG', quality=95)
-    return output.getvalue(), 'image/jpeg'
-
 
 _CHAR_REPLACEMENTS = {
     '–': '-', '—': '-',       # en dash, em dash
@@ -196,116 +140,167 @@ def _wrapped_lines(draw, text, font, max_width, max_lines):
     return lines
 
 
-def _horizontal_gradient(size, color, *, left_alpha, right_alpha):
-    """A solid-color RGBA image whose alpha fades linearly from left_alpha to
-    right_alpha - the scrim behind the LEFT content zone, fading out toward the RIGHT
-    hero subject so the photo stays visible there instead of getting covered by a
-    hard-edged panel.
-    """
-    width, height = size
-    row = Image.new('L', (width, 1))
-    for x in range(width):
-        t = x / max(width - 1, 1)
-        row.putpixel((x, 0), int(left_alpha + (right_alpha - left_alpha) * t))
-    alpha_mask = row.resize((width, height))
-    solid = Image.new('RGBA', (width, height), (*_rgb(color), 255))
-    solid.putalpha(alpha_mask)
-    return solid
+# --------------------------------------------------------------------------- brand layer
+
+def compose_creative(
+    image_bytes, mime_type, *,
+    eyebrow='', headline='', description='', cta='',
+    logo_bytes=None, symbol_bytes=None, brand_profile=None,
+):
+    """Returns (composited_bytes, 'image/jpeg'), or the input unchanged if there is nothing
+    to apply. `logo_bytes` (BrandProfile.logo) takes priority over `symbol_bytes`
+    (BrandProfile.secondary_logo) - only one mark is ever drawn."""
+    mark_bytes = logo_bytes or symbol_bytes
+    if not any([eyebrow, headline, description, cta, mark_bytes]):
+        return image_bytes, mime_type
+
+    eyebrow = _sanitize_text(eyebrow)
+    headline = _sanitize_text(headline)
+    description = _sanitize_text(description)
+    cta = _sanitize_text(cta)
+
+    base = Image.open(io.BytesIO(image_bytes)).convert('RGBA')
+    primary, accent = _brand_colors(brand_profile)
+    mark = _prepare_mark(mark_bytes) if mark_bytes else None
+
+    if mark is not None or any([eyebrow, headline, description, cta]):
+        _draw_brand_footer(
+            base, eyebrow=eyebrow, headline=headline, description=description, cta=cta,
+            primary=primary, accent=accent, mark=mark, brand_profile=brand_profile,
+        )
+
+    output = io.BytesIO()
+    base.convert('RGB').save(output, format='JPEG', quality=95)
+    return output.getvalue(), 'image/jpeg'
 
 
-def _draw_left_content_zone(overlay, *, eyebrow, headline, description, cta, width, height, padding, ink_color, accent_color, brand_profile):
-    """Draws eyebrow -> thin divider -> headline -> description -> CTA, top to bottom,
-    inside the LEFT CONTENT_ZONE_WIDTH_FRACTION of the frame - the typography hierarchy
-    from project_plan.md's "creative plan" (small kicker, large serif headline,
-    supporting sans copy, understated CTA), over a soft white scrim so it stays legible
-    regardless of what's actually behind it in the generated photo.
-    """
-    zone_width = int(width * CONTENT_ZONE_WIDTH_FRACTION)
-    # Wider than the zone itself so the fade-out doesn't create a hard edge right at the
-    # text boundary - it keeps softening a bit further into the hero side.
-    scrim_width = min(width, int(width * (CONTENT_ZONE_WIDTH_FRACTION + 0.16)))
-    scrim = _horizontal_gradient((scrim_width, height), WHITE, left_alpha=240, right_alpha=0)
-    overlay.alpha_composite(scrim, (0, 0))
-
-    draw = ImageDraw.Draw(overlay)
-    max_text_width = zone_width - 2 * padding
-    y = padding * 2
-
-    if eyebrow:
-        eyebrow_font = _brand_font(brand_profile, 'semibold', max(14, width // 45))
-        eyebrow_text = eyebrow.upper()
-        draw.text((padding, y), eyebrow_text, font=eyebrow_font, fill=_rgb(accent_color))
-        bbox = draw.textbbox((padding, y), eyebrow_text, font=eyebrow_font)
-        y = bbox[3] + padding // 2
-        divider_end = min(padding + max(60, zone_width // 4), width - padding)
-        draw.line([(padding, y), (divider_end, y)], fill=_rgb(accent_color), width=2)
-        y += padding
-
-    if headline:
-        headline_size = max(30, width // 12)
-        headline_font = _headline_font('bold', headline_size)
-        longest_word = max(headline.split(), key=len, default='')
-        while headline_size > 24 and draw.textlength(longest_word, font=headline_font) > max_text_width:
-            headline_size -= 2
-            headline_font = _headline_font('bold', headline_size)
-        lines = _wrapped_lines(draw, headline, headline_font, max_text_width, max_lines=4)
-        line_height = int(headline_font.size * 1.22)
-        for line in lines:
-            draw.text((padding, y), line, font=headline_font, fill=_rgb(ink_color))
-            y += line_height
-        y += padding // 2
-
-    if description:
-        desc_font = _brand_font(brand_profile, 'semibold', max(16, width // 42))
-        lines = _wrapped_lines(draw, description, desc_font, max_text_width, max_lines=4)
-        line_height = int(desc_font.size * 1.45)
-        for line in lines:
-            draw.text((padding, y), line, font=desc_font, fill=_rgb(ink_color))
-            y += line_height
-        y += padding // 2
-
-    if cta:
-        cta_font = _brand_font(brand_profile, 'semibold', max(16, width // 40))
-        cta_text = cta.upper()
-        draw.text((padding, y), cta_text, font=cta_font, fill=_rgb(accent_color))
-        bbox = draw.textbbox((padding, y), cta_text, font=cta_font)
-        underline_y = bbox[3] + 4
-        draw.line([(padding, underline_y), (bbox[2], underline_y)], fill=_rgb(accent_color), width=2)
-
-
-def _place_logo_top_right(overlay, mark_bytes, width, padding, accent_color):
-    """Pastes the real brand logo into the TOP-RIGHT corner, on a small opaque patch so
-    it stays legible over the hero photo regardless of what's behind it - and, same as
-    before, so nothing the image model may have drawn in that corner survives underneath
-    it. Only drawn when a real logo/symbol was actually provided (corrupt bytes still
-    paint the patch alone, as a safe fallback, but nothing is invented from nothing).
-    """
+def _prepare_mark(mark_bytes):
+    """The logo as RGBA with a transparent background, trimmed to its artwork - or None if
+    the file can't be read. Logos are often uploaded as JPEGs / opaque PNGs with a flat
+    off-white background; that background is keyed out so the logo can sit directly on the
+    creative instead of inside a white box."""
     try:
         mark = Image.open(io.BytesIO(mark_bytes)).convert('RGBA')
     except Exception:  # noqa: BLE001 - a corrupt/unsupported image file should never fail generation
-        mark = None
+        return None
+    width, height = mark.size
+    if mark.getchannel('A').getextrema()[0] >= 250:  # fully opaque: look for a flat background
+        corners = [mark.getpixel(point)[:3] for point in ((0, 0), (width - 1, 0), (0, height - 1), (width - 1, height - 1))]
+        background = tuple(sum(c[i] for c in corners) // 4 for i in range(3))
+        if all(sum(abs(c[i] - background[i]) for i in range(3)) <= 45 for c in corners):
+            difference = ImageChops.difference(mark.convert('RGB'), Image.new('RGB', mark.size, background)).convert('L')
+            mark.putalpha(difference.point(lambda v: 0 if v < 24 else min(255, (v - 24) * 6)))
+    box = mark.getchannel('A').point(lambda v: 255 if v > 24 else 0).getbbox()
+    return mark.crop(box) if box else None
 
+
+def _silhouette(mark, color):
+    """The logo recolored to one solid color (a "reversed" logo), keeping its shape."""
+    solid = Image.new('RGBA', mark.size, (*_rgb(color), 255))
+    solid.putalpha(mark.getchannel('A'))
+    return solid
+
+
+def _mix(hex_color, other_rgb, amount):
+    r, g, b = _rgb(hex_color)
+    return '#%02X%02X%02X' % tuple(int(c + (o - c) * amount) for c, o in zip((r, g, b), other_rgb))
+
+
+def _relative_luminance(hex_color):
+    def channel(value):
+        value /= 255
+        return value / 12.92 if value <= 0.03928 else ((value + 0.055) / 1.055) ** 2.4
+
+    r, g, b = (channel(c) for c in _rgb(hex_color))
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def _contrast_ratio(color_a, color_b):
+    lighter, darker = sorted((_relative_luminance(color_a), _relative_luminance(color_b)), reverse=True)
+    return (lighter + 0.05) / (darker + 0.05)
+
+
+def _readable_on(color, background, minimum=3.0):
+    """`color`, lightened step by step until it reads against `background`."""
+    for _ in range(12):
+        if _contrast_ratio(color, background) >= minimum:
+            break
+        color = _mix(color, (255, 255, 255), 0.15)
+    return color
+
+
+def _vertical_gradient(size, color, max_alpha):
+    """Solid `color` whose opacity ramps from 0 at the top to max_alpha by 60% of the way down."""
+    width, height = size
+    column = Image.new('L', (1, height))
+    for y in range(height):
+        column.putpixel((0, y), int(max_alpha * min(1.0, (y / max(height - 1, 1)) / 0.6) ** 1.5))
+    solid = Image.new('RGBA', size, (*_rgb(color), 255))
+    solid.putalpha(column.resize((width, height)))
+    return solid
+
+
+def _draw_brand_footer(base, *, eyebrow, headline, description, cta, primary, accent, mark, brand_profile):
+    """Eyebrow / headline / (description) above a row holding the logo (left) and the CTA
+    pill (right), over a gradient of the brand's own color fading in from the bottom edge.
+    Any of those parts may be missing; with only a logo this is just a slim logo strip."""
+    width, height = base.size
+    unit = min(width, int(height * 0.7))  # keeps a wide landscape image from getting a towering footer
+    pad = max(20, int(unit * 0.045))
+    max_width = width - 2 * pad
+    deep = _mix(primary, (0, 0, 0), 0.62)  # dark brand tone: white text on it is always legible
+    accent_on_dark = _readable_on(accent, deep)
+    draw = ImageDraw.Draw(base)
+
+    # --- measure everything first, bottom-up, so the gradient can be sized to fit
+    row_h = int(unit * 0.085)
+    pill = None
+    if cta:
+        cta_font = _brand_font(brand_profile, 'semibold', max(15, int(unit * 0.03)))
+        pill_h = int(row_h * 0.82)
+        pill = (cta.upper(), cta_font, int(draw.textlength(cta.upper(), font=cta_font) + pill_h * 0.9), pill_h)
+    logo = None
     if mark is not None:
-        mark_w = max(1, int(width * LOGO_WIDTH_FRACTION))
-        mark_h = max(1, int(mark.height * (mark_w / mark.width)))
-        mark = mark.resize((mark_w, mark_h))
-        chip_w, chip_h = mark_w + padding, mark_h + padding
-    else:
-        chip_w = chip_h = int(width * (LOGO_WIDTH_FRACTION + 0.06))
+        scale = min(row_h / mark.height, max_width * (0.5 if pill else 0.6) / mark.width)
+        logo = _silhouette(mark.resize((max(1, int(mark.width * scale)), max(1, int(mark.height * scale))), Image.LANCZOS), '#FFFFFF')
+    has_row = bool(pill or logo)
+    row_top = height - pad - (row_h if has_row else 0)
+    cursor = row_top - (int(pad * 0.6) if has_row else 0)  # bottom edge of the text block
 
-    margin = padding // 2
-    chip_x = overlay.width - margin - chip_w
-    chip_box = [chip_x, margin, chip_x + chip_w, margin + chip_h]
+    lines, font, line_h = [], None, 0
+    text = headline or description
+    if text:
+        size = max(26, int(unit * (0.058 if headline else 0.04)))
+        make_font = (lambda px: _headline_font('bold', px)) if headline else (lambda px: _brand_font(brand_profile, 'semibold', px))
+        font = make_font(size)
+        longest_word = max(text.split(), key=len)
+        while size > 20 and draw.textlength(longest_word, font=font) > max_width:
+            size -= 2
+            font = make_font(size)
+        lines = _wrapped_lines(draw, text, font, max_width, max_lines=2 if headline else 3)
+        line_h = int(font.size * 1.2)
+        cursor -= line_h * len(lines)
+    text_top = cursor
+    eyebrow_font = None
+    if eyebrow:
+        eyebrow_font = _brand_font(brand_profile, 'semibold', max(14, int(unit * 0.026)))
+        cursor -= int(eyebrow_font.size * 1.6)
+    content_top = cursor
 
-    draw = ImageDraw.Draw(overlay)
-    # Fully opaque white patch with a thin accent rule underneath - a clean logo plate,
-    # not a colored block, matching the "premium editorial" look rather than a badge.
-    draw.rounded_rectangle(chip_box, radius=min(14, chip_h // 4), fill=(*_rgb(WHITE), 255))
-    draw.line(
-        [(chip_x, margin + chip_h), (chip_x + chip_w, margin + chip_h)], fill=_rgb(accent_color), width=2,
-    )
+    scrim_h = min(int(height * 0.6), height - content_top + pad * 2)
+    base.alpha_composite(_vertical_gradient((width, scrim_h), deep, 235), (0, height - scrim_h))
+    draw = ImageDraw.Draw(base)
 
-    if mark is not None:
-        mark_x = chip_x + (chip_w - mark_w) // 2
-        mark_y = margin + (chip_h - mark_h) // 2
-        overlay.alpha_composite(mark, (mark_x, mark_y))
+    # --- draw
+    if eyebrow_font:
+        draw.text((pad, content_top), eyebrow.upper(), font=eyebrow_font, fill=_rgb(accent_on_dark))
+    for index, line in enumerate(lines):
+        draw.text((pad, text_top + index * line_h), line, font=font, fill=(255, 255, 255))
+    if logo is not None:
+        base.alpha_composite(logo, (pad, row_top + (row_h - logo.height) // 2))
+    if pill:
+        text_value, cta_font, pill_w, pill_h = pill
+        x1, y0 = width - pad, row_top + (row_h - pill_h) // 2
+        draw.rounded_rectangle([x1 - pill_w, y0, x1, y0 + pill_h], radius=pill_h // 2, fill=_rgb(accent_on_dark))
+        label_color = '#FFFFFF' if _contrast_ratio('#FFFFFF', accent_on_dark) >= _contrast_ratio(deep, accent_on_dark) else deep
+        draw.text((x1 - pill_w // 2, y0 + pill_h // 2), text_value, font=cta_font, fill=_rgb(label_color), anchor='mm')
