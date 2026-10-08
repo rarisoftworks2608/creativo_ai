@@ -104,6 +104,7 @@ _CHAR_REPLACEMENTS = {
     '“': '"', '”': '"',       # curly double quotes
     '…': '...',                    # ellipsis
     '•': '-',                      # bullet
+    '‐': '-', '‑': '-', '‒': '-', '−': '-',  # hyphen variants (U+2010/2011/2012) and minus sign
     ' ': ' ',                      # non-breaking space
 }
 
@@ -174,20 +175,25 @@ def _rgb(hex_color):
 
 
 def _wrapped_lines(draw, text, font, max_width, max_lines):
-    words = text.split()
+    """Greedy word wrap. If the text needs more than max_lines, the last line is cut at a
+    word boundary and ends with "..." instead of silently losing the rest of the sentence."""
     lines, current = [], ''
-    for word in words:
+    for word in text.split():
         candidate = f'{current} {word}'.strip()
         if draw.textlength(candidate, font=font) <= max_width or not current:
             current = candidate
         else:
             lines.append(current)
             current = word
-        if len(lines) == max_lines - 1:
-            break
     if current:
         lines.append(current)
-    return lines[:max_lines]
+    if len(lines) > max_lines:
+        lines = lines[:max_lines]
+        last = lines[-1]
+        while last and draw.textlength(last + '...', font=font) > max_width:
+            last = last.rsplit(' ', 1)[0] if ' ' in last else last[:-1]
+        lines[-1] = last.rstrip(' ,.;:-') + '...'
+    return lines
 
 
 def _horizontal_gradient(size, color, *, left_alpha, right_alpha):
@@ -236,7 +242,12 @@ def _draw_left_content_zone(overlay, *, eyebrow, headline, description, cta, wid
         y += padding
 
     if headline:
-        headline_font = _headline_font('bold', max(30, width // 12))
+        headline_size = max(30, width // 12)
+        headline_font = _headline_font('bold', headline_size)
+        longest_word = max(headline.split(), key=len, default='')
+        while headline_size > 24 and draw.textlength(longest_word, font=headline_font) > max_text_width:
+            headline_size -= 2
+            headline_font = _headline_font('bold', headline_size)
         lines = _wrapped_lines(draw, headline, headline_font, max_text_width, max_lines=4)
         line_height = int(headline_font.size * 1.22)
         for line in lines:

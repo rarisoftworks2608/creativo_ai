@@ -48,7 +48,7 @@ const IN_PROGRESS_STATUSES = ['pending', 'queued', 'processing']
 // credit, so testing/iterating on a brief shouldn't cost 3x by default. Bump it
 // back up to 3 once a brief is confirmed and ready to go live.
 const EMPTY_FORM = {
-  creative_type: 'post', platform: 'instagram', variation_count: 1, include_text_overlay: false,
+  creative_type: 'post', platform: 'instagram', variation_count: 1, include_text_overlay: true,
   content_calendar_item: '', prompt_brief: '', product_info: '',
 }
 
@@ -284,11 +284,11 @@ export default function CreativeGenerationPage() {
                 checked={form.include_text_overlay}
                 onChange={(e) => setForm((p) => ({ ...p, include_text_overlay: e.target.checked }))}
               />
-              <span>Overlay a headline &amp; CTA button onto the image</span>
+              <span>Apply brand layer: logo, brand colors &amp; fonts, headline and CTA on the image</span>
             </label>
             <p className="modal-hint">
-              Off by default - a clean photo only. The headline/caption/CTA copy is generated and shown alongside
-              the image either way; this only controls whether it's also baked into the image itself.
+              On by default so the creative follows your Brand Management settings. Untick it for a clean photo
+              (the logo is still added); the headline/caption/CTA copy is generated either way.
             </p>
             <label className="field">
               <span>Content calendar item</span>
