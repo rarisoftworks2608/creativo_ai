@@ -13,9 +13,14 @@ COPY_SCHEMA = {
         'headline': {'type': 'string', 'description': 'A short headline/hook, if this format uses one.'},
         'description': {'type': 'string', 'description': 'A longer supporting description, if useful.'},
         'cta': {'type': 'string', 'description': 'The call to action, e.g. "Shop now".'},
+        'visual_scene': {
+            'type': 'string',
+            'description': 'For a brief that describes a picture: that picture rewritten as one clear, concrete English '
+                           'description for an image model. Empty string when the brief does not describe a picture.',
+        },
         'hashtags': {'type': 'array', 'items': {'type': 'string'}},
         'keywords': {'type': 'array', 'items': {'type': 'string'}},
     },
-    'required': ['caption', 'eyebrow', 'headline', 'description', 'cta', 'hashtags', 'keywords'],
+    'required': ['caption', 'eyebrow', 'headline', 'description', 'cta', 'visual_scene', 'hashtags', 'keywords'],
     'additionalProperties': False,
 }

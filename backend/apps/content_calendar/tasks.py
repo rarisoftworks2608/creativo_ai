@@ -10,6 +10,8 @@ manual generation already flips status away from DRAFT/SCHEDULED, so this task s
 never picks it up.
 """
 
+import re
+
 from celery import shared_task
 from django.utils import timezone
 
@@ -49,6 +51,23 @@ def _is_video(content_type):
     return any(keyword in normalized for keyword in VIDEO_KEYWORDS)
 
 
+# A calendar item about a festival gets the festive greeting layout even when its free-text
+# content type just says "Post". Sale/offer items are excluded: the festive layout has no room
+# for an offer or CTA.
+FESTIVAL_WORDS = re.compile(
+    r'\b(festival|festive|diwali|deepavali|dussehra|navratri|durga puja|ganesh\w*|raksha bandhan|janmashtami|'
+    r'holi|eid|christmas|pongal|onam|makar sankranti|lohri|baisakhi|ugadi|gudi padwa|independence day|'
+    r'republic day)\b',
+    re.IGNORECASE,
+)
+COMMERCIAL_WORDS = re.compile(r'\b(sale|offers?|discounts?|deals?|launch|off)\b|%', re.IGNORECASE)
+
+
+def _is_festival_item(item):
+    text = ' '.join(filter(None, [item.topic, item.category, item.campaign, item.weekly_theme]))
+    return bool(FESTIVAL_WORDS.search(text)) and not COMMERCIAL_WORDS.search(text)
+
+
 def _pick_creative_type(item):
     """Format/content-category only - platform is a separate GenerationRequest field
     now (see _pick_platform), not bundled into the type itself."""
@@ -56,6 +75,8 @@ def _pick_creative_type(item):
     for keyword, creative_type in CREATIVE_TYPE_KEYWORDS:
         if keyword in normalized:
             return creative_type
+    if _is_festival_item(item):
+        return GenerationRequest.CreativeType.FESTIVAL_CREATIVE
     return GenerationRequest.CreativeType.POST
 
 
@@ -134,7 +155,7 @@ def auto_generate_due_content():
     immediately, so a slow run can't double-queue it and a manually-generated item is
     never touched here.
 
-    Runs every 15 minutes (see CELERY_BEAT_SCHEDULE) rather than once a day, since a
+    Runs every minute (see CELERY_BEAT_SCHEDULE) rather than once a day, since a
     scheduled_time on today's date needs to actually be honored - a once-daily run can
     only ever be "close enough", firing hours early or a full day late depending on
     whether an item's time falls before or after that one daily slot.

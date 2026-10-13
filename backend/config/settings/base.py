@@ -465,17 +465,20 @@ CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TASK_TRACK_STARTED = True
 CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
+# Crontab schedules below (e.g. "every day at 09:00") are evaluated in this zone, so it has to
+# be the same one calendar times are entered in.
+CELERY_TIMEZONE = env('CELERY_TIMEZONE', default=TIME_ZONE)
 
 # Scheduled jobs (Epic 12/13/22) - requires `celery -A config beat` running alongside
 # the worker, or these schedules never fire.
 CELERY_BEAT_SCHEDULE = {
     'auto-generate-due-content': {
-        # Every 15 minutes rather than a single daily slot, so a calendar item's actual
-        # scheduled_time (not just scheduled_date) is honored reasonably promptly - see
-        # apps.content_calendar.tasks.auto_generate_due_content for why a once-daily run
-        # can't do that.
+        # Every minute (a cheap query; each item is flipped to GENERATING the moment it is
+        # picked up, so overlapping sweeps can't double-queue it), so a calendar item starts
+        # generating in the minute of its scheduled_time instead of waiting for the next
+        # quarter-hour - see apps.content_calendar.tasks.auto_generate_due_content.
         'task': 'apps.content_calendar.tasks.auto_generate_due_content',
-        'schedule': crontab(minute='*/15'),
+        'schedule': crontab(minute='*'),
     },
     'send-content-reminders': {
         'task': 'apps.notifications.tasks.send_content_reminders',

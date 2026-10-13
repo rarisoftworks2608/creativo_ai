@@ -196,6 +196,163 @@ class GenerationRequestCreateTests(BaseCreativeGenerationTestCase):
         self.assertEqual(mock_compose.call_args.kwargs['headline'], COPY_RESULT['headline'])
         self.assertEqual(mock_compose.call_args.kwargs['cta'], COPY_RESULT['cta'])
 
+    @patch('apps.creative_generation.tasks.compose_creative')
+    @patch('apps.creative_generation.tasks.get_text_provider')
+    @patch('apps.creative_generation.tasks.get_image_provider')
+    def test_festival_creative_uses_the_festive_layout_and_others_the_standard_one(
+        self, mock_get_image, mock_get_text, mock_compose,
+    ):
+        mock_get_image.return_value = FakeImageProvider()
+        mock_get_text.return_value = FakeTextProvider()
+        mock_compose.return_value = (fake_png_bytes(), 'image/png')
+
+        self.create_request(variation_count=1, include_text_overlay=True, creative_type='festival_creative')
+        self.assertEqual(mock_compose.call_args.kwargs['layout'], 'festive')
+
+        self.create_request(variation_count=1, include_text_overlay=True, creative_type='post')
+        self.assertEqual(mock_compose.call_args.kwargs['layout'], 'standard')
+
+    @patch('apps.creative_generation.tasks.compose_creative')
+    @patch('apps.creative_generation.tasks.get_text_provider')
+    @patch('apps.creative_generation.tasks.get_image_provider')
+    def test_the_text_placement_and_aspect_follow_the_creative_type(self, mock_get_image, mock_get_text, mock_compose):
+        mock_get_image.return_value = FakeImageProvider()
+        mock_get_text.return_value = FakeTextProvider()
+        mock_compose.return_value = (fake_png_bytes(), 'image/png')
+
+        for creative_type, placement, aspect in (('post', 'below', 1.25), ('event_creative', 'top', 1.25), ('story', 'below', 16 / 9)):
+            self.create_request(variation_count=1, include_text_overlay=True, creative_type=creative_type)
+            kwargs = mock_compose.call_args.kwargs
+            self.assertEqual((kwargs['layout'], kwargs['placement']), ('standard', placement), creative_type)
+            self.assertAlmostEqual(kwargs['aspect'], aspect, msg=creative_type)
+            self.assertEqual(kwargs['background'], 'plain', creative_type)
+
+    @patch('apps.creative_generation.tasks.compose_creative')
+    @patch('apps.creative_generation.tasks.get_text_provider')
+    @patch('apps.creative_generation.tasks.get_image_provider')
+    def test_a_post_written_with_the_festive_template_gets_the_festive_layout(
+        self, mock_get_image, mock_get_text, mock_compose,
+    ):
+        mock_get_image.return_value = FakeImageProvider()
+        mock_get_text.return_value = FakeTextProvider()
+        mock_compose.return_value = (fake_png_bytes(), 'image/png')
+
+        self.create_request(
+            variation_count=1, include_text_overlay=True, creative_type='post',
+            prompt_brief='Festival: Diwali\nMain Greeting: Happy Diwali\nWish/Quote: Light and joy.',
+        )
+
+        self.assertEqual(mock_compose.call_args.kwargs['layout'], 'festive')
+        self.assertEqual(mock_compose.call_args.kwargs['headline'], 'Diwali')
+
+    @patch('apps.creative_generation.tasks.get_text_provider')
+    @patch('apps.creative_generation.tasks.get_image_provider')
+    def test_the_image_model_is_given_the_scene_the_text_ai_wrote_and_the_text_ai_goes_first(
+        self, mock_get_image, mock_get_text,
+    ):
+        calls = []
+
+        class RecordingText(FakeTextProvider):
+            def generate_json(self, *, system, prompt, json_schema):
+                calls.append('text')
+                return {**COPY_RESULT, 'visual_scene': 'A grand Ganesha idol being immersed into the open sea at sunset'}
+
+        class RecordingImage(FakeImageProvider):
+            prompts = []
+
+            def generate_image(self, *, prompt, reference_images=None):
+                calls.append('image')
+                self.prompts.append(prompt)
+                return super().generate_image(prompt=prompt, reference_images=reference_images)
+
+        mock_get_image.return_value = RecordingImage()
+        mock_get_text.return_value = RecordingText()
+
+        self.create_request(
+            variation_count=1, include_text_overlay=True, creative_type='festival_creative',
+            prompt_brief='create realistic creative for anant chaturth darshi with lord ganesh murti visrajan in sea like lal baug cha raja',
+        )
+
+        self.assertEqual(calls, ['text', 'image'])
+        self.assertIn('A grand Ganesha idol being immersed into the open sea at sunset', RecordingImage.prompts[0])
+        self.assertNotIn('visrajan', RecordingImage.prompts[0])
+
+    @patch('apps.creative_generation.tasks.get_text_provider')
+    @patch('apps.creative_generation.tasks.get_image_provider')
+    def test_a_text_failure_stops_before_any_image_is_requested(self, mock_get_image, mock_get_text):
+        image = FakeImageProvider()
+        image.generate_image = lambda **kwargs: (_ for _ in ()).throw(AssertionError('the image model must not be called'))
+        mock_get_image.return_value = image
+        mock_get_text.return_value = FakeTextProvider(error=AIProviderError('rate limited'))
+
+        response = self.create_request(variation_count=1)
+
+        self.assertEqual(response.data['status'], 'failed')
+        self.assertIn('rate limited', response.data['error_message'])
+
+    @patch('apps.creative_generation.tasks.compose_creative')
+    @patch('apps.creative_generation.tasks.get_text_provider')
+    @patch('apps.creative_generation.tasks.get_image_provider')
+    def test_a_festival_creative_named_in_free_text_still_gets_a_greeting_and_wish(
+        self, mock_get_image, mock_get_text, mock_compose,
+    ):
+        mock_get_image.return_value = FakeImageProvider()
+        mock_get_text.return_value = FakeTextProvider()
+        mock_compose.return_value = (fake_png_bytes(), 'image/png')
+
+        self.create_request(
+            variation_count=1, include_text_overlay=True, creative_type='festival_creative',
+            prompt_brief='create realistic creative for ganesh chaturthi with a golden ganesh murti on a plain background',
+        )
+
+        kwargs = mock_compose.call_args.kwargs
+        self.assertEqual(kwargs['layout'], 'festive')
+        self.assertEqual(kwargs['background'], 'scene')  # the brief describes a picture, so that picture is shown
+        self.assertEqual(kwargs['headline'], COPY_RESULT['headline'])
+        self.assertEqual(kwargs['description'], COPY_RESULT['description'])
+        self.assertEqual(kwargs['cta'], '')
+
+    @patch('apps.creative_generation.tasks.compose_creative')
+    @patch('apps.creative_generation.tasks.get_text_provider')
+    @patch('apps.creative_generation.tasks.get_image_provider')
+    def test_no_wording_is_invented_when_the_festive_brief_provides_none(
+        self, mock_get_image, mock_get_text, mock_compose,
+    ):
+        mock_get_image.return_value = FakeImageProvider()
+        mock_get_text.return_value = FakeTextProvider()  # would write "New Season, New You" / "Shop now"
+        mock_compose.return_value = (fake_png_bytes(), 'image/png')
+
+        response = self.create_request(
+            variation_count=1, include_text_overlay=True, creative_type='festival_creative',
+            prompt_brief='Festive Element: a polished brass lamp on a lotus',
+        )
+
+        kwargs = mock_compose.call_args.kwargs
+        self.assertEqual((kwargs['eyebrow'], kwargs['headline'], kwargs['description'], kwargs['cta']), ('', '', '', ''))
+        # The stored copy (caption, hashtags) is still generated for the post itself.
+        variation = GenerationVariation.objects.get(generation_request_id=response.data['id'])
+        self.assertEqual(variation.caption, COPY_RESULT['caption'])
+
+    @patch('apps.creative_generation.tasks.compose_creative')
+    @patch('apps.creative_generation.tasks.get_text_provider')
+    @patch('apps.creative_generation.tasks.get_image_provider')
+    def test_festival_wording_from_the_brief_goes_on_the_image_exactly_as_written(
+        self, mock_get_image, mock_get_text, mock_compose,
+    ):
+        mock_get_image.return_value = FakeImageProvider()
+        mock_get_text.return_value = FakeTextProvider()  # would write "New Season, New You" / "Shop now"
+        mock_compose.return_value = (fake_png_bytes(), 'image/png')
+
+        self.create_request(
+            variation_count=1, include_text_overlay=True, creative_type='festival_creative',
+            prompt_brief='Festival: Diwali\nMain Greeting: Happy Diwali\nWish/Quote: May this Diwali bring light.',
+        )
+
+        kwargs = mock_compose.call_args.kwargs
+        self.assertEqual((kwargs['eyebrow'], kwargs['headline']), ('Happy', 'Diwali'))
+        self.assertEqual(kwargs['description'], 'May this Diwali bring light.')
+        self.assertEqual(kwargs['cta'], '')
+
     @patch('apps.creative_generation.tasks.get_text_provider')
     @patch('apps.creative_generation.tasks.get_image_provider')
     def test_platform_is_independent_of_creative_type(self, mock_get_image, mock_get_text):
@@ -263,7 +420,11 @@ class GenerationRequestCreateTests(BaseCreativeGenerationTestCase):
         response = self.client.post(url, {'creative_type': 'instagram_post'})
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
-    def test_client_can_list_and_retrieve_their_own_companys_requests(self):
+    @patch('apps.creative_generation.tasks.get_text_provider')
+    @patch('apps.creative_generation.tasks.get_image_provider')
+    def test_client_can_list_and_retrieve_their_own_companys_requests(self, mock_get_image, mock_get_text):
+        mock_get_image.return_value = FakeImageProvider()
+        mock_get_text.return_value = FakeTextProvider()
         created = self.create_request()
         request_id = created.data['id']
 

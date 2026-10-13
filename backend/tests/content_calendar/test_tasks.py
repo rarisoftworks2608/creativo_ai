@@ -141,6 +141,20 @@ class CreativeTypeMappingTests(TestCase):
         item = make_item(self.company, content_type='Static Post', platforms=['linkedin'])
         self.assertEqual(_pick_creative_type(item), GenerationRequest.CreativeType.POST)
 
+    def test_a_post_about_a_festival_gets_the_festival_creative_type(self):
+        for topic in ('Diwali greetings', 'Ganesh Chaturthi wishes', 'Eid Mubarak', 'Happy Holi'):
+            item = make_item(self.company, topic=topic, content_type='Post')
+            self.assertEqual(_pick_creative_type(item), GenerationRequest.CreativeType.FESTIVAL_CREATIVE, topic)
+
+    def test_festival_words_inside_other_words_do_not_count(self):
+        for topic in ('Video guide', 'Holistic health tips', 'Holiday schedule update'):
+            item = make_item(self.company, topic=topic, content_type='Post')
+            self.assertEqual(_pick_creative_type(item), GenerationRequest.CreativeType.POST, topic)
+
+    def test_a_festival_sale_stays_a_normal_post_because_the_festive_layout_has_no_room_for_an_offer(self):
+        item = make_item(self.company, topic='Diwali sale - 30% off', content_type='Post')
+        self.assertEqual(_pick_creative_type(item), GenerationRequest.CreativeType.POST)
+
     def test_pick_platform_prefers_linkedin(self):
         item = make_item(self.company, platforms=['instagram', 'linkedin'])
         self.assertEqual(_pick_platform(item), GenerationRequest.Platform.LINKEDIN)

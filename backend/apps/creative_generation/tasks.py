@@ -91,26 +91,38 @@ def generate_creative_variations(self, generation_request_id):
 
     image_count = 0
     for variation_number in range(1, request.variation_count + 1):
-        image_prompt = prompts.build_image_prompt(
-            company, brand_profile, request.creative_type, request.platform, request.prompt_brief,
-            request.product_info, variation_number, request.variation_count, extra_guidance=image_guidance,
-        )
         copy_prompt = prompts.build_copy_prompt(
             company, brand_profile, brand_context, request.creative_type, request.platform,
             request.prompt_brief, request.product_info, extra_guidance=copy_guidance,
         )
 
         try:
-            image_bytes, mime_type = image_provider.generate_image(prompt=image_prompt)
+            # The copy comes first because it also rewrites a described scene as a clear visual
+            # description (visual_scene) that the image model is then given - same single request.
             copy_data = text_provider.generate_json(
                 system=prompts.COPY_SYSTEM_PROMPT, prompt=copy_prompt, json_schema=COPY_SCHEMA,
             )
+            image_prompt = prompts.build_image_prompt(
+                company, brand_profile, request.creative_type, request.platform, request.prompt_brief,
+                request.product_info, variation_number, request.variation_count, extra_guidance=image_guidance,
+                scene_description=copy_data.get('visual_scene', ''),
+            )
+            image_bytes, mime_type = image_provider.generate_image(prompt=image_prompt)
         except AIProviderError as exc:
             _fail(request, f'Failed on variation {variation_number}: {exc}')
             return
         except Exception as exc:  # noqa: BLE001 - guarantee the request never gets stuck "processing"
             _fail(request, f'Unexpected error on variation {variation_number}: {exc}')
             return
+
+        from .festive import apply_provided_wording, parse_festive_details
+        from .layouts import layout_for
+
+        spec = layout_for(request.creative_type, request.prompt_brief)
+        if spec['style'] == 'festive':
+            # Wording the admin wrote in the brief (Main Greeting / Wish) goes on the creative exactly
+            # as written; nothing is invented when the brief gives none.
+            copy_data = apply_provided_wording(copy_data, parse_festive_details(request.prompt_brief), request.prompt_brief)
 
         # The full copy is always generated and saved on the variation below regardless
         # (it's the real caption/eyebrow/headline/description/CTA text used when
@@ -123,6 +135,7 @@ def generate_creative_variations(self, generation_request_id):
             description=copy_data.get('description', '') if request.include_text_overlay else '',
             cta=copy_data.get('cta', '') if request.include_text_overlay else '',
             logo_bytes=logo_bytes, symbol_bytes=symbol_bytes, brand_profile=brand_profile,
+            layout=spec['style'], placement=spec['placement'], aspect=spec['aspect'], background=spec['background'],
         )
         ext = MIME_EXTENSIONS.get(mime_type, 'png')
         variation = GenerationVariation(

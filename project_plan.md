@@ -39,250 +39,120 @@ Waiting on external accounts (code complete, needs credentials):
 - WhatsApp Business number + approved templates
 - OpenAI key (to switch image generation from Cloudflare)
 
+ Festive Creative Plan 
+ 
+Create a premium, minimal festive social media creative in Instagram portrait size 1080 × 1350 px (4:5).
 
-creative plan 
+Layout:
 
-*2. Instagram Post Generation Prompt — Complete Creative*
+- Use a plain, light-coloured background with a clean and elegant feel.
+- Place one central festive element related to the occasion, such as a diya, lantern, flower, moon, festive symbol, etc.
+- Below the central element, add the main festive greeting in elegant, prominent typography.
+- Below the greeting, add a short 1–2 line festive wish or quote.
+- Place the brand logo at the top-right corner, maintaining consistent margins and size.
+- Keep the composition spacious, balanced, premium and uncluttered.
 
-This is the more important prompt for your Instagram post generator.
+Editable Details:
+Festival: [FESTIVAL NAME]
+Main Greeting: [GREETING]
+Wish/Quote: [WISH OR QUOTE]
+Festive Element: [FESTIVE ELEMENT]
+Brand Logo: [LOGO]
 
-Create a premium luxury real-estate Instagram post using the supplied background/property image and the provided brand assets and content.
+Example:
+Festival: Diwali
+Main Greeting: Happy Diwali
+Wish/Quote: May this Diwali bring light, joy and new beginnings.
+Festive Element: Elegant golden diya
 
-FORMAT:
-- Instagram portrait post.
-- 4:5 aspect ratio.
-- Premium editorial advertising layout.
-- The design must feel professionally art-directed and manually designed rather than AI-generated.
+Reference design (approved): docs/festive-design-flow.jpg - the "Festive Design Flow" sheet with a finished
+"Happy Diwali" example. Every festival creative must follow this exact structure, top to bottom:
 
-CORE LAYOUT:
-The composition must follow this fixed structure:
+1. Background   - clean, plain, light-coloured background; minimal and premium.
+2. Festive element - ONE relevant festive visual prominently at the centre (diya, lantern, flowers, moon...).
+3. Main greeting - the festival name / greeting in bold, elegant typography BELOW the element
+                   (small light "Happy" above a large bold "Diwali", with an ornament divider under it).
+4. Wish / quote  - a short, meaningful festive message BELOW the greeting (1-2 lines, letter-spaced).
+5. Logo          - the brand logo neatly at the TOP-RIGHT corner with consistent spacing, no plate/box.
+Output: Instagram portrait 4:5 (1080 x 1350). Clear, sharp, uncluttered.
 
-1. RIGHT SIDE — HERO VISUAL
-- The main property, architecture, lifestyle image or campaign visual must occupy the RIGHT side of the composition.
-- This is the primary visual focal point.
-- Preserve the architectural subject clearly and prominently.
-- Do not crop or cover important architectural features with text.
-- Allow the image to extend naturally toward the edges of the canvas.
-
-2. LEFT SIDE — CONTENT / TYPOGRAPHY
-- The LEFT side must contain the primary communication and marketing copy.
-- Use the left side as the main typography zone.
-- Maintain generous negative space around the copy.
-- Text should be aligned cleanly and intentionally.
-- Do not overcrowd the left section.
-- Use a clear hierarchy:
-  small eyebrow/kicker → large headline → supporting copy → CTA/tagline.
-
-3. TOP RIGHT — BRAND LOGO
-- Place the supplied official brand logo in the TOP RIGHT corner.
-- Keep the logo clearly visible and proportionally sized.
-- Maintain comfortable padding from the top and right edges.
-- Never recreate, redraw, distort, recolor or modify the supplied logo.
-- Do not place the logo over a visually busy area if a cleaner placement is possible.
-
-4. VISUAL BALANCE
-- The detailed visual weight should remain on the RIGHT.
-- The typography should balance the visual weight from the LEFT.
-- The overall composition should feel spacious, premium and symmetrical in visual weight without being literally symmetrical.
-- Maintain intentional breathing room.
-- Do not fill every available area.
-
-TYPOGRAPHY:
-- Use sophisticated luxury/editorial typography.
-- Headlines should use an elegant high-contrast serif or premium display typeface.
-- Supporting copy should use a clean modern sans-serif.
-- Create strong contrast between headline and body copy.
-- Use uppercase typography selectively for premium emphasis.
-- Avoid playful, cartoonish, generic or overly decorative fonts.
-- Typography must be crisp, refined and highly legible.
-
-COLOUR SYSTEM:
-- Follow the supplied brand identity.
-- Prefer sophisticated combinations such as deep navy, forest/deep green, warm white/ivory and restrained champagne/gold accents where appropriate.
-- Use gold only as a subtle premium accent.
-- Do not use excessive gradients or unnecessary colours.
-- Ensure sufficient contrast between typography and background.
-
-GRAPHIC DETAILS:
-- Use minimal premium graphic elements such as:
-  thin divider lines,
-  subtle gold rules,
-  small geometric separators,
-  understated decorative marks,
-  restrained architectural/editorial details.
-- These elements should support the design rather than become the focus.
-- Avoid excessive boxes, badges, stickers, icons, shadows or decorative elements.
-
-CONTENT:
-Use the supplied content exactly.
-Do not invent facts, prices, amenities, locations, specifications or claims.
-Do not change important numbers, names, dates or contact information.
-Do not add unnecessary text.
-
-CONTENT HIERARCHY:
-- Brand/eyebrow: small and refined.
-- Main headline: largest and strongest element.
-- Supporting message: readable and concise.
-- CTA/tagline: clearly visible but understated.
-- Contact information, if provided, should be incorporated naturally.
-
-IMAGE TREATMENT:
-- Keep the property realistic and premium.
-- Preserve the original architectural proportions.
-- Do not introduce unrealistic buildings or architectural elements.
-- Do not distort windows, doors, balconies, floors or structures.
-- Maintain realistic lighting and material textures.
-- Apply subtle cinematic colour grading where appropriate.
-
-DESIGN CHARACTER:
-The final creative should communicate:
-- luxury
-- exclusivity
-- architectural sophistication
-- confidence
-- premium lifestyle
-- understated elegance
-
-REFERENCE COMPOSITION:
-Use the supplied reference creative as a layout reference, particularly:
-- hero image concentrated on the RIGHT
-- typography/content concentrated on the LEFT
-- logo at TOP RIGHT
-- generous negative space
-- premium editorial typography
-- restrained gold detailing
-- sophisticated dark navy/deep green brand tones
-- clean luxury-real-estate advertising aesthetic
-
-IMPORTANT:
-Do not copy the reference image's exact text, property, architecture or artwork.
-Replicate the DESIGN SYSTEM and COMPOSITION LOGIC only.
-
-The result should look like a professionally designed luxury real-estate campaign creative ready for Instagram publication.
-
-
-*3. Better Version for Your Tool — Dynamic Template*
-
-If you're actually building a generation tool, I'd recommend making the prompt variable-based rather than hardcoding the content.
-
-Create a premium luxury real-estate Instagram creative.
-
-BRAND:
-[BRAND NAME]
-
-BRAND LOGO:
-[SUPPLIED LOGO]
-
-POST OBJECTIVE:
-[POST OBJECTIVE]
-
-HEADLINE:
-[HEADLINE]
-
-SUPPORTING COPY:
-[SUPPORTING COPY]
-
-CTA:
-[CTA]
-
-CONTACT:
-[CONTACT DETAILS]
-
-PROPERTY / VISUAL:
-[PROPERTY IMAGE OR IMAGE DESCRIPTION]
-
-BRAND COLOURS:
-[BRAND COLOURS]
-
-FIXED DESIGN SYSTEM:
-
-CANVAS:
-- Instagram portrait 4:5.
-- Premium editorial real-estate advertising aesthetic.
-
-COMPOSITION:
-- RIGHT 55–60%: primary hero/property visual.
-- LEFT 40–45%: typography and content zone.
-- TOP RIGHT: official brand logo.
-- LEFT side must retain sufficient negative space for readable copy.
-- Do not allow the hero visual to compete with or overlap the main text.
-- Maintain strong visual balance between the detailed right side and quieter left side.
-
-TYPOGRAPHY:
-- Luxury editorial serif for major headlines.
-- Clean contemporary sans-serif for supporting copy.
-- Strong typographic hierarchy.
-- Generous line spacing.
-- Refined alignment and spacing.
-- Avoid excessive text.
-
-COLOUR:
-- Use brand colours.
-- Deep, sophisticated tones with restrained premium accents.
-- Gold/champagne accents may be used sparingly.
-- Maintain excellent readability.
-
-GRAPHIC LANGUAGE:
-- Minimal divider lines.
-- Subtle gold accents.
-- Elegant geometric or architectural details.
-- No unnecessary badges, stickers, boxes or decorative clutter.
-
-LOGO:
-- Use the supplied logo exactly.
-- Position at top right.
-- Preserve proportions and colours.
-- Do not recreate or alter the logo.
-
-IMAGE:
-- Photorealistic.
-- Premium architectural photography.
-- Natural materials and lighting.
-- No distortion.
-- No artificial architecture.
-- No random people, signs, text or logos.
-
-CONTENT RULES:
-- Use only the supplied information.
-- Never invent facts.
-- Never modify names, prices, dates, locations, numbers or contact details.
-- Ensure all text is spelled correctly.
-- Keep copy concise and visually digestible.
-
-DESIGN GOAL:
-Create a sophisticated, minimal, premium luxury real-estate Instagram post that feels individually art-directed while maintaining this consistent layout system:
-
-RIGHT = HERO IMAGE
-LEFT = CONTENT
-TOP RIGHT = LOGO
-OVERALL = PREMIUM + MINIMAL + EDITORIAL + ARCHITECTURAL
-
-
-*FINAL PROMPT — this is the one prompt to use (already implemented in prompts.py / compositor.py):*
-
-Create a premium luxury real-estate Instagram creative for [BRAND NAME] using the supplied property/lifestyle image, brand logo and content.
-
-FORMAT: Instagram portrait, 4:5 aspect ratio. The result must look professionally art-directed, never AI-generated.
-
-LAYOUT (fixed, always follow):
-- RIGHT 55–60%: hero photo (property/architecture/lifestyle) as the visual focal point. Do not crop key architectural features. Let it bleed naturally to the edges.
-- LEFT 40–45%: all typography/content, generous negative space, clean hierarchy — small eyebrow → large serif headline → short supporting copy → understated CTA.
-- TOP RIGHT: the exact supplied brand logo, never redrawn/recolored/distorted, with comfortable padding.
-- Visual weight stays on the right; typography balances it on the left. Composition should feel spacious and premium, never cluttered.
-
-TYPOGRAPHY: elegant high-contrast serif for the headline, clean modern sans-serif for supporting copy. Strong contrast between the two. Crisp and legible — no playful/cartoonish fonts.
-
-COLOUR: follow the brand's own colours; when unspecified use deep navy/forest green + warm ivory + a restrained gold/champagne accent used sparingly. Always keep strong contrast between text and background.
-
-GRAPHIC DETAIL: only minimal premium touches — a thin divider line, a subtle gold rule, understated geometric marks. No badges, stickers, boxes, heavy shadows or clutter.
-
-IMAGE TREATMENT: photorealistic, realistic proportions and lighting, no invented architecture, no distortion, no random people/signs/text/logos baked into the photo itself. Subtle cinematic colour grading is fine.
-
-CONTENT RULES: use only the supplied headline/copy/CTA/contact info exactly as given — never invent facts, prices, names, dates or numbers. Keep copy short and legible.
-
-DESIGN CHARACTER: the result must read as luxurious, exclusive, architecturally sophisticated, confident and understated — never loud, generic, or cluttered.
-
-Use the reference creative only for its composition (right-hero / left-copy / top-right-logo / negative space / gold detailing) — never copy its exact text, property or artwork.
+How the platform implements it (no manual step - runs on every festival creative):
+- Which creatives: creative_type = festival_creative (picked on the Generate form), or automatically for a
+  calendar item whose content type / topic / category / campaign names a festival (Diwali, Eid, Christmas,
+  Holi, Ganesh Chaturthi, Navratri, Pongal, Onam ...). Sale / offer items stay normal posts - the festive
+  layout has no room for an offer or CTA.
+- Image AI (creative_generation/prompts.py, _build_festive_image_prompt): asked for steps 1-2 only - a plain
+  light background, exactly one sharp, photorealistic festive element at the centre, the lowest 38% left empty
+  for the text, the top-right corner left empty for the logo, and no text/logo/brand name drawn in the image.
+- Copy AI (build_copy_prompt): eyebrow = greeting word ("Happy"), headline = festival name ("Diwali"),
+  description = the wish (<= 18 words), cta = empty.
+- Compositor (creative_generation/compositor.py, _draw_festive_layout, layout='festive'): crops to 4:5, then
+  draws "Happy" / festival name / ornament divider / wish centred in the lower part, in the brand fonts and
+  brand colours (colours are only darkened or lightened as far as needed to stay legible), and places the real
+  logo, background removed, top-right. No dark footer on festive creatives.
+- WORDING RULE - no extra wording on the image: the only words on a festive creative are the ones the admin
+  provides in the brief (the "Editable Details" above: Main Greeting, Wish/Quote - see creative_generation/
+  festive.py) and they are drawn exactly as written. The copy AI only fills in a part the admin left out
+  ("Happy" + festival name, a short wish) and never adds a headline, kicker or CTA of its own. The image AI is
+  never asked to draw any words: its prompt describes only the plain background, the single element and the
+  empty areas (it does not even contain the words text/logo/greeting/festival name, because naming them makes
+  models like FLUX paint them), and whatever lettering it paints anyway in the greeting area is erased by the
+  compositor (_clear_greeting_zone) before the real wording is drawn.
+- WHEN IT APPLIES: creative type "Festival Creative", OR any brief written with the template labels (Festival:,
+  Main Greeting:, Festive Element:, Wish/Quote:) even if the form was left on "Post" (festive.is_festive_request).
+- NO INVENTED WORDING: if the brief gives no greeting, no wish and does not even name the festival (e.g. only a
+  "Festive Element:" line), no words are drawn at all - only the picture and the logo. Naming the festival lets the
+  copy AI fill in a greeting/wish; wording the admin wrote is always used exactly.
+- NEVER CUT THE SUBJECT: image models do not reliably leave the lower area empty. The compositor finds where the
+  subject ends (_content_bottom), puts the greeting stack below it, and if there is not enough room it extends the
+  canvas downward with plain background (up to 1 : 1.45) instead of covering or cutting the subject. Only the area
+  the text sits on is smoothed (_clear_stray_marks, a median filter - no flat panel, no seam).
+- HINDI / MARATHI: Devanagari greetings are supported (Noto Serif / Sans Devanagari in creative_generation/fonts,
+  SIL OFL licence in NotoDevanagari-OFL.txt); shaping needs Pillow's raqm engine, which the Docker image has.
+- Lakshmi Pujan: without a Festive Element the default is a small brass idol of Goddess Lakshmi on a lotus with gold
+  coins and a diya; with an admin-written element, gold coins and pink lotus petals are added around it.
+DESIGN SYSTEM FOR EVERY CREATIVE TYPE (decided after the festive design; applies to ALL types, not only festivals):
+- Same skeleton on every creative: a PLAIN light background, ONE hero subject, and the brand LOGO LARGE (about 32% of
+  the width) in the TOP-RIGHT corner, no plate or box behind it. Nothing else differs between types except where the
+  text goes (apps/creative_generation/layouts.py - change PLACEMENT_BY_TYPE to move a type):
+    below - text stack centred under the subject, subject in the upper-middle:
+            festival, post, carousel, story, product (and the legacy instagram/facebook/linkedin post types)
+    top   - text stack left-aligned at the top-left beside the logo, subject in the lower-middle:
+            promotional, event, announcement, educational, testimonial
+- Text styles: festival = small greeting word + large festival name + ornament divider + wish (no CTA);
+  every other type = kicker + headline + body + CTA pill, in the brand fonts and colours.
+- Sizes: 4:5 portrait (1080 x 1350) for everything except stories, which are 9:16 (1080 x 1920). A square image
+  from the image AI is extended with plain background on the side the text goes; a taller one is centre-cropped.
+- BRIEF vs NO BRIEF (the rule that decides the picture - applies to EVERY creative type, festivals included):
+    * The prompt DESCRIBES a picture ("create realistic creative for anant chaturdashi with lord ganesh murti
+      visarjan in sea like lalbaugcha raja"): make exactly that scene. festive.describes_scene = 4+ words of real
+      content once the festival's own name and filler ("create", "realistic", "post", "wishes"...) are removed, and no
+      template labels. The image AI gets the description as the scene (prompts._build_scene_image_prompt) and the
+      result is shown whole - never extended, cropped (except to the 4:5 ratio) or smoothed.
+    * NO description (just the festival / a short topic / the template labels): the template design - plain light
+      background, ONE hero subject (festival -> its element: Diwali diya, Ganesh -> idol, Eid -> crescent lantern...).
+  In BOTH cases the logo and the text are in the SAME PLACE and style for the type (large logo top-right; festival =
+  greeting + festival name + divider + wish below; other types per layouts.py). Only the background differs:
+  on the plain template the text sits on the bare background; on a described scene it sits on a soft gradient of
+  the brand colour (white text, brand-accent name/CTA) and the logo picks the best-contrast tone (own colours /
+  white / brand dark). layouts.layout_for(...)['background'] is 'plain' or 'scene'.
+- HOW A DESCRIBED SCENE REACHES THE IMAGE MODEL: briefs are often misspelt ("visrajan", "lal baug cha raja") or insider
+  shorthand a small model cannot read, and the model then draws only part of it (just the idol, no sea). So the text AI
+  call that already writes the caption/headline ALSO returns `visual_scene` - the brief rewritten as one clear English
+  description ("a very large, grand Ganesha idol ... being immersed into the open sea, waves rising around it ...").
+  That is what the image model receives (no extra request: the copy call runs first, then the image). If the AI
+  returns nothing, festive.clean_scene_brief strips the "create a ... for" instruction, fixes the common terms
+  (visarjan -> idol being immersed, murti -> idol, "in sea" -> open sea with waves, Lalbaugcha Raja -> a very large
+  gold-crowned Ganesha idol) and drops festival names, so the idol AND the sea still reach the model.
+- Wording on a festive creative: the admin's own Main Greeting / Wish/Quote lines verbatim; a festival named in free
+  text (festive.names_a_festival) lets the copy AI write the greeting and wish for it; no festival named and no
+  wording given = no words drawn (picture + logo only).
+- The image AI is asked for the background + subject + the empty area only, in purely visual wording; the compositor
+  draws the logo and all text. The layout adapts to the picture (text goes where there is no subject; the canvas
+  grows rather than covering or cutting the subject).
+- Festive Element: taken from the brief if given, otherwise chosen from the festival (Diwali -> golden diya,
+  Eid -> crescent lantern, Christmas -> bauble, Holi -> gulal plate, ...), otherwise one generic iconic object.
+- Tests: tests/creative_generation (FestiveLayoutTests, FestivePromptTests, test_festive.py), tests/content_calendar/test_tasks.py.
 
 
 

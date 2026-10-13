@@ -2033,11 +2033,63 @@ textarea {
 
 .variation-image {
   width: 100%;
-  /* Vertical 4:5 - matches the platform's fixed creative layout system
-     (project_plan.md's "creative plan"); the generated image itself is 4:5. */
-  aspect-ratio: 4 / 5;
-  object-fit: cover;
+  /* Natural aspect ratio, never cropped: the generated creative can be portrait, square or
+     landscape, and its bottom edge carries the brand footer (logo, headline, CTA). */
+  height: auto;
+  display: block;
   background: var(--surface-2);
+}
+
+.variation-image-zoom {
+  cursor: zoom-in;
+}
+
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px 16px;
+  background: rgba(10, 10, 16, 0.86);
+  cursor: zoom-out;
+}
+
+.lightbox-image {
+  max-width: min(100%, 1100px);
+  max-height: calc(100vh - 110px);
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5);
+  cursor: default;
+}
+
+.lightbox-close {
+  position: absolute;
+  top: 12px;
+  right: 18px;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+  font-size: 28px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.lightbox-close:hover {
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.lightbox-open {
+  color: #fff;
+  font-size: 13px;
+  opacity: 0.8;
 }
 
 .variation-body {
