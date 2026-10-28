@@ -15,8 +15,8 @@ COPY_SCHEMA = {
         'cta': {'type': 'string', 'description': 'The call to action, e.g. "Shop now".'},
         'visual_scene': {
             'type': 'string',
-            'description': 'For a brief that describes a picture: that picture rewritten as one clear, concrete English '
-                           'description for an image model. Empty string when the brief does not describe a picture.',
+            'description': 'The creative brief and calendar entry rewritten as one clear, concrete English description '
+                           'of the full scene an image model should draw: subject, setting, props, light and mood.',
         },
         'hashtags': {'type': 'array', 'items': {'type': 'string'}},
         'keywords': {'type': 'array', 'items': {'type': 'string'}},

@@ -39,120 +39,41 @@ Waiting on external accounts (code complete, needs credentials):
 - WhatsApp Business number + approved templates
 - OpenAI key (to switch image generation from Cloudflare)
 
- Festive Creative Plan 
- 
-Create a premium, minimal festive social media creative in Instagram portrait size 1080 × 1350 px (4:5).
+Creative Generation Rules (every creative type)
 
-Layout:
+The old "Festive Creative Plan" (plain cream background, one festive element, fixed greeting layout) was removed.
+Every creative - festival, promotional, product, event, story, ... - is now made the same way:
 
-- Use a plain, light-coloured background with a clean and elegant feel.
-- Place one central festive element related to the occasion, such as a diya, lantern, flower, moon, festive symbol, etc.
-- Below the central element, add the main festive greeting in elegant, prominent typography.
-- Below the greeting, add a short 1–2 line festive wish or quote.
-- Place the brand logo at the top-right corner, maintaining consistent margins and size.
-- Keep the composition spacious, balanced, premium and uncluttered.
+1. Follows the calendar instruction: the picture and the copy come from the calendar entry (topic, creative
+   requirements = the visual brief, caption requirements, CTA - plus its category, weekly theme, objective, campaign
+   and date). A manual generation follows the brief typed on the Generate form.
+2. A full scene, never a blank or plain background: the image AI is asked for one complete, richly detailed scene
+   (subject, setting, props, light, mood) - the kind of finished picture a ChatGPT-style image tool gives - not a
+   cream backdrop with a single object on it.
+3. Follows the brand guidelines: brand colours, visual style, tone and do's / don'ts go into the image prompt; the
+   copy follows the brand voice, tone and restricted words.
+4. Follows the brand alignment template (apps/creative_generation/layouts.py): the brand LOGO is placed LARGE in the
+   TOP-RIGHT corner, same margin and size, on every type. Only the text stack moves:
+     below - centred along the bottom, subject in the upper-middle:
+             post, carousel, story, festival, product (and the legacy instagram/facebook/linkedin post types)
+     top   - left-aligned at the top-left beside the logo, subject in the lower-middle:
+             promotional, event, announcement, educational, testimonial
+   Sizes: 4:5 portrait (1080 x 1350) for everything except stories, 9:16 (1080 x 1920).
 
-Editable Details:
-Festival: [FESTIVAL NAME]
-Main Greeting: [GREETING]
-Wish/Quote: [WISH OR QUOTE]
-Festive Element: [FESTIVE ELEMENT]
-Brand Logo: [LOGO]
-
-Example:
-Festival: Diwali
-Main Greeting: Happy Diwali
-Wish/Quote: May this Diwali bring light, joy and new beginnings.
-Festive Element: Elegant golden diya
-
-Reference design (approved): docs/festive-design-flow.jpg - the "Festive Design Flow" sheet with a finished
-"Happy Diwali" example. Every festival creative must follow this exact structure, top to bottom:
-
-1. Background   - clean, plain, light-coloured background; minimal and premium.
-2. Festive element - ONE relevant festive visual prominently at the centre (diya, lantern, flowers, moon...).
-3. Main greeting - the festival name / greeting in bold, elegant typography BELOW the element
-                   (small light "Happy" above a large bold "Diwali", with an ornament divider under it).
-4. Wish / quote  - a short, meaningful festive message BELOW the greeting (1-2 lines, letter-spaced).
-5. Logo          - the brand logo neatly at the TOP-RIGHT corner with consistent spacing, no plate/box.
-Output: Instagram portrait 4:5 (1080 x 1350). Clear, sharp, uncluttered.
-
-How the platform implements it (no manual step - runs on every festival creative):
-- Which creatives: creative_type = festival_creative (picked on the Generate form), or automatically for a
-  calendar item whose content type / topic / category / campaign names a festival (Diwali, Eid, Christmas,
-  Holi, Ganesh Chaturthi, Navratri, Pongal, Onam ...). Sale / offer items stay normal posts - the festive
-  layout has no room for an offer or CTA.
-- Image AI (creative_generation/prompts.py, _build_festive_image_prompt): asked for steps 1-2 only - a plain
-  light background, exactly one sharp, photorealistic festive element at the centre, the lowest 38% left empty
-  for the text, the top-right corner left empty for the logo, and no text/logo/brand name drawn in the image.
-- Copy AI (build_copy_prompt): eyebrow = greeting word ("Happy"), headline = festival name ("Diwali"),
-  description = the wish (<= 18 words), cta = empty.
-- Compositor (creative_generation/compositor.py, _draw_festive_layout, layout='festive'): crops to 4:5, then
-  draws "Happy" / festival name / ornament divider / wish centred in the lower part, in the brand fonts and
-  brand colours (colours are only darkened or lightened as far as needed to stay legible), and places the real
-  logo, background removed, top-right. No dark footer on festive creatives.
-- WORDING RULE - no extra wording on the image: the only words on a festive creative are the ones the admin
-  provides in the brief (the "Editable Details" above: Main Greeting, Wish/Quote - see creative_generation/
-  festive.py) and they are drawn exactly as written. The copy AI only fills in a part the admin left out
-  ("Happy" + festival name, a short wish) and never adds a headline, kicker or CTA of its own. The image AI is
-  never asked to draw any words: its prompt describes only the plain background, the single element and the
-  empty areas (it does not even contain the words text/logo/greeting/festival name, because naming them makes
-  models like FLUX paint them), and whatever lettering it paints anyway in the greeting area is erased by the
-  compositor (_clear_greeting_zone) before the real wording is drawn.
-- WHEN IT APPLIES: creative type "Festival Creative", OR any brief written with the template labels (Festival:,
-  Main Greeting:, Festive Element:, Wish/Quote:) even if the form was left on "Post" (festive.is_festive_request).
-- NO INVENTED WORDING: if the brief gives no greeting, no wish and does not even name the festival (e.g. only a
-  "Festive Element:" line), no words are drawn at all - only the picture and the logo. Naming the festival lets the
-  copy AI fill in a greeting/wish; wording the admin wrote is always used exactly.
-- NEVER CUT THE SUBJECT: image models do not reliably leave the lower area empty. The compositor finds where the
-  subject ends (_content_bottom), puts the greeting stack below it, and if there is not enough room it extends the
-  canvas downward with plain background (up to 1 : 1.45) instead of covering or cutting the subject. Only the area
-  the text sits on is smoothed (_clear_stray_marks, a median filter - no flat panel, no seam).
-- HINDI / MARATHI: Devanagari greetings are supported (Noto Serif / Sans Devanagari in creative_generation/fonts,
-  SIL OFL licence in NotoDevanagari-OFL.txt); shaping needs Pillow's raqm engine, which the Docker image has.
-- Lakshmi Pujan: without a Festive Element the default is a small brass idol of Goddess Lakshmi on a lotus with gold
-  coins and a diya; with an admin-written element, gold coins and pink lotus petals are added around it.
-DESIGN SYSTEM FOR EVERY CREATIVE TYPE (decided after the festive design; applies to ALL types, not only festivals):
-- Same skeleton on every creative: a PLAIN light background, ONE hero subject, and the brand LOGO LARGE (about 32% of
-  the width) in the TOP-RIGHT corner, no plate or box behind it. Nothing else differs between types except where the
-  text goes (apps/creative_generation/layouts.py - change PLACEMENT_BY_TYPE to move a type):
-    below - text stack centred under the subject, subject in the upper-middle:
-            festival, post, carousel, story, product (and the legacy instagram/facebook/linkedin post types)
-    top   - text stack left-aligned at the top-left beside the logo, subject in the lower-middle:
-            promotional, event, announcement, educational, testimonial
-- Text styles: festival = small greeting word + large festival name + ornament divider + wish (no CTA);
-  every other type = kicker + headline + body + CTA pill, in the brand fonts and colours.
-- Sizes: 4:5 portrait (1080 x 1350) for everything except stories, which are 9:16 (1080 x 1920). A square image
-  from the image AI is extended with plain background on the side the text goes; a taller one is centre-cropped.
-- BRIEF vs NO BRIEF (the rule that decides the picture - applies to EVERY creative type, festivals included):
-    * The prompt DESCRIBES a picture ("create realistic creative for anant chaturdashi with lord ganesh murti
-      visarjan in sea like lalbaugcha raja"): make exactly that scene. festive.describes_scene = 4+ words of real
-      content once the festival's own name and filler ("create", "realistic", "post", "wishes"...) are removed, and no
-      template labels. The image AI gets the description as the scene (prompts._build_scene_image_prompt) and the
-      result is shown whole - never extended, cropped (except to the 4:5 ratio) or smoothed.
-    * NO description (just the festival / a short topic / the template labels): the template design - plain light
-      background, ONE hero subject (festival -> its element: Diwali diya, Ganesh -> idol, Eid -> crescent lantern...).
-  In BOTH cases the logo and the text are in the SAME PLACE and style for the type (large logo top-right; festival =
-  greeting + festival name + divider + wish below; other types per layouts.py). Only the background differs:
-  on the plain template the text sits on the bare background; on a described scene it sits on a soft gradient of
-  the brand colour (white text, brand-accent name/CTA) and the logo picks the best-contrast tone (own colours /
-  white / brand dark). layouts.layout_for(...)['background'] is 'plain' or 'scene'.
-- HOW A DESCRIBED SCENE REACHES THE IMAGE MODEL: briefs are often misspelt ("visrajan", "lal baug cha raja") or insider
-  shorthand a small model cannot read, and the model then draws only part of it (just the idol, no sea). So the text AI
-  call that already writes the caption/headline ALSO returns `visual_scene` - the brief rewritten as one clear English
-  description ("a very large, grand Ganesha idol ... being immersed into the open sea, waves rising around it ...").
-  That is what the image model receives (no extra request: the copy call runs first, then the image). If the AI
-  returns nothing, festive.clean_scene_brief strips the "create a ... for" instruction, fixes the common terms
-  (visarjan -> idol being immersed, murti -> idol, "in sea" -> open sea with waves, Lalbaugcha Raja -> a very large
-  gold-crowned Ganesha idol) and drops festival names, so the idol AND the sea still reach the model.
-- Wording on a festive creative: the admin's own Main Greeting / Wish/Quote lines verbatim; a festival named in free
-  text (festive.names_a_festival) lets the copy AI write the greeting and wish for it; no festival named and no
-  wording given = no words drawn (picture + logo only).
-- The image AI is asked for the background + subject + the empty area only, in purely visual wording; the compositor
-  draws the logo and all text. The layout adapts to the picture (text goes where there is no subject; the canvas
-  grows rather than covering or cutting the subject).
-- Festive Element: taken from the brief if given, otherwise chosen from the festival (Diwali -> golden diya,
-  Eid -> crescent lantern, Christmas -> bauble, Holi -> gulal plate, ...), otherwise one generic iconic object.
-- Tests: tests/creative_generation (FestiveLayoutTests, FestivePromptTests, test_festive.py), tests/content_calendar/test_tasks.py.
+How the platform implements it:
+- Copy AI (prompts.build_copy_prompt): writes eyebrow / headline / description / CTA and `visual_scene` - the brief and
+  the calendar entry rewritten as one clear description of the scene (misspelt or insider briefs such as "ganesh
+  visrajan in sea like lalbaugcha raja" become a concrete picture). It runs first, in the same single request.
+- Image AI (prompts.build_image_prompt): draws that scene in the brand palette and style, keeping the part of the frame
+  where the text goes - and the top-right corner - calm. Its prompt never contains the words text / logo / lettering /
+  caption (image models paint any such word into the picture).
+- Compositor (compositor.compose_creative): draws the real logo and the real text over the scene on a soft gradient
+  of the brand colour. The scene itself is never extended, stretched or smoothed (a taller picture is centre-cropped
+  to the ratio). Hindi / Marathi text is supported (Noto Devanagari fonts in creative_generation/fonts).
+- Picture quality depends on the image provider: gpt-image-1 (the OpenAI provider, same family as ChatGPT's image tool)
+  gives the closest result; Cloudflare FLUX is the free fallback.
+- Tests: tests/creative_generation (test_prompts, test_layouts, test_compositor, test_creative_generation),
+  tests/content_calendar/test_tasks.py.
 
 
 

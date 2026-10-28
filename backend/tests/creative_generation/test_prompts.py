@@ -1,8 +1,14 @@
+import datetime
+import re
+
 from django.test import TestCase
 
 from apps.authentication.models import User
+from apps.brand.models import BrandProfile
 from apps.companies.models import Company
+from apps.content_calendar.models import ContentCalendarItem
 from apps.creative_generation.prompts import build_copy_prompt, build_image_prompt
+from apps.creative_generation.schemas import COPY_SCHEMA
 
 
 class ExtraGuidanceTests(TestCase):
@@ -40,246 +46,134 @@ class ExtraGuidanceTests(TestCase):
         self.assertNotIn('ADDITIONAL GUIDANCE', prompt)
 
 
-class FestivePromptTests(TestCase):
-    def setUp(self):
-        admin = User.objects.create_superuser(email='admin@example.com', password='StrongPass123!')
-        self.company = Company.objects.create(name='Acme Retail', industry='Retail', created_by=admin)
+class ImagePromptTests(TestCase):
+    ALL_TYPES = (
+        'post', 'carousel', 'story', 'promotional_creative', 'festival_creative', 'product_creative',
+        'educational_creative', 'event_creative', 'announcement_creative', 'testimonial_creative',
+    )
 
-    def image_prompt(self, brief='Diwali greeting', profile=None, **kwargs):
-        return build_image_prompt(self.company, profile, 'festival_creative', 'instagram', brief, '', 1, 1, **kwargs)
-
-    def test_festival_image_prompt_describes_the_flow_visually(self):
-        prompt = self.image_prompt()
-        self.assertIn('plain, light cream-ivory background', prompt)
-        self.assertIn('One single subject', prompt)
-        self.assertIn('golden brass diya', prompt)  # element chosen from the festival, Diwali
-        self.assertIn('lowest 40% of the frame is a calm, empty', prompt)
-        self.assertIn('top-right corner is empty', prompt)
-
-    def test_festival_image_prompt_never_mentions_lettering_so_the_model_has_nothing_to_paint(self):
-        prompt = self.image_prompt('Festival: Diwali\nMain Greeting: Happy Diwali\nWish/Quote: May this Diwali bring light.').lower()
-        for word in ('text', 'letter', 'word', 'logo', 'caption', 'greeting', 'wish', 'headline', 'watermark', 'diwali', 'acme'):
-            self.assertNotIn(word, prompt, word)
-
-    def test_the_admins_own_festive_element_is_used(self):
-        prompt = self.image_prompt('Festival: Diwali\nFestive Element: a hand-painted terracotta lamp')
-        self.assertIn('a hand-painted terracotta lamp', prompt)
-        self.assertNotIn('golden brass diya', prompt)
-
-    def test_unknown_festival_still_gets_one_iconic_object(self):
-        prompt = self.image_prompt('Festival: Hanukkah')
-        self.assertIn('one single, beautifully crafted, iconic object that symbolises Hanukkah', prompt)
-
-    def test_festival_image_prompt_fits_cloudflare_flux_and_ignores_the_everyday_brand_style(self):
-        from apps.brand.models import BrandProfile
-        from apps.creative_generation.image_client import CloudflareImageProvider
-
-        profile = BrandProfile.objects.create(
-            company=self.company,
-            brand_colors=[{'name': 'Primary', 'hex': '#83430B'}, {'name': 'Secondary', 'hex': '#D97706'}],
-            visual_style='professional photography of teams and projects, busy offices',
-            tone='Warm and confident', dos=['Show people'] * 8, donts=['Avoid empty space'] * 8,
-        )
-        prompt = self.image_prompt(profile=profile)
-        self.assertLessEqual(len(prompt), CloudflareImageProvider.MAX_PROMPT_CHARS)  # nothing gets truncated away
-        self.assertIn('#83430B', prompt)
-        self.assertNotIn('teams and projects', prompt)
-        self.assertNotIn('Show people', prompt)
-
-    def test_laxmi_prompt_adds_festival_props_around_the_admins_element_and_keeps_it_large(self):
-        prompt = self.image_prompt('Festival: Laxmi Pujan\nFestive Element: Elegant golden diya on a subtle lotus')
-        self.assertIn('Elegant golden diya on a subtle lotus, with a few gold coins and fresh pink lotus petals', prompt)
-        self.assertIn('filling about half the width of the frame', prompt)
-
-    def test_festival_image_prompt_has_no_line_art_ornaments_which_the_model_draws_as_random_squiggles(self):
-        prompt = self.image_prompt().lower()
-        self.assertNotIn('ornament', prompt)
-        self.assertNotIn('line-art', prompt)
-
-    def test_festival_image_prompt_still_appends_admin_guidance(self):
-        self.assertIn('Prefer warm gold.', self.image_prompt(extra_guidance='Prefer warm gold.'))
-
-    def test_other_creative_types_get_the_plain_design_not_the_festive_flow(self):
-        prompt = build_image_prompt(self.company, None, 'post', 'instagram', 'A brief', '', 1, 1)
-        self.assertIn('One single hero subject', prompt)
-        self.assertIn('plain, light cream-ivory background', prompt)
-        self.assertNotIn('golden brass diya', prompt)
-
-    def test_festival_copy_prompt_asks_for_greeting_name_and_wish_with_no_cta(self):
-        prompt = build_copy_prompt(self.company, None, None, 'festival_creative', 'instagram', 'Diwali', '')
-        self.assertIn('festive greeting layout', prompt)
-        self.assertIn('festival name', prompt)
-        self.assertIn('cta: return an empty string', prompt)
-        self.assertNotIn('already written', prompt)
-
-    def test_festival_copy_prompt_tells_the_ai_which_wording_is_already_provided(self):
-        prompt = build_copy_prompt(
-            self.company, None, None, 'festival_creative', 'instagram',
-            'Main Greeting: Happy Diwali\nWish/Quote: May this Diwali bring light.', '',
-        )
-        self.assertIn('already written', prompt)
-        self.assertIn('greeting = "Happy Diwali"', prompt)
-        self.assertIn('wish = "May this Diwali bring light."', prompt)
-
-    def test_standard_copy_prompt_is_unchanged(self):
-        prompt = build_copy_prompt(self.company, None, None, 'post', 'instagram', 'A brief', '')
-        self.assertIn('cta: a short, understated call to action', prompt)
-        self.assertNotIn('festive greeting layout', prompt)
-
-
-class PlainPromptTests(TestCase):
     def setUp(self):
         admin = User.objects.create_superuser(email='admin@example.com', password='StrongPass123!')
         self.company = Company.objects.create(name='Acme Retail', products=['Oak sofa', 'Coffee table'], created_by=admin)
 
-    def prompt(self, creative_type, brief='A cosy sofa', **kwargs):
-        return build_image_prompt(self.company, None, creative_type, 'instagram', brief, '', 1, 1, **kwargs)
+    def prompt(self, creative_type='post', brief='A cosy living room', profile=None, **kwargs):
+        return build_image_prompt(self.company, profile, creative_type, 'instagram', brief, '', 1, 1, **kwargs)
 
-    def test_every_type_asks_for_a_plain_background_one_subject_and_an_empty_corner(self):
-        for creative_type in ('post', 'promotional_creative', 'product_creative', 'event_creative', 'testimonial_creative', 'story'):
+    def profile(self, **fields):
+        return BrandProfile.objects.create(company=self.company, **fields)
+
+    def test_every_type_asks_for_a_full_detailed_scene_never_a_plain_backdrop(self):
+        for creative_type in self.ALL_TYPES:
             prompt = self.prompt(creative_type)
-            self.assertIn('plain, light cream-ivory background', prompt, creative_type)
-            self.assertIn('One single hero subject', prompt, creative_type)
-            self.assertIn('calm, empty, perfectly plain cream area', prompt, creative_type)
+            self.assertIn('richly detailed environment fills the whole frame edge to edge', prompt, creative_type)
+            for banned in ('plain', 'cream', 'single subject', 'single hero', 'minimal'):
+                self.assertNotIn(banned, prompt.lower(), f'{creative_type}: {banned}')
 
-    def test_the_empty_area_follows_the_text_placement(self):
-        self.assertIn('lowest 40%', self.prompt('post'))
-        self.assertIn('top-right corner is empty', self.prompt('post'))
-        self.assertIn('The top 40% of the frame', self.prompt('event_creative'))
-        self.assertIn('lower-middle', self.prompt('event_creative'))
-        self.assertIn('upper-middle', self.prompt('post'))
+    def test_the_scene_is_the_text_ais_description_else_the_cleaned_calendar_brief(self):
+        written = self.prompt(brief='visrajan in sea lal baug', scene_description='A grand idol being lowered into the sea')
+        self.assertIn('A grand idol being lowered into the sea', written)
+        self.assertNotIn('visrajan', written)
 
-    def test_the_subject_comes_from_the_type_the_brief_and_the_products(self):
-        prompt = self.prompt('product_creative', 'a walnut finish')
-        self.assertIn('the product itself, shown whole', prompt)
-        self.assertIn('a walnut finish', prompt)
-        self.assertIn('Oak sofa, Coffee table', prompt)
-
-    def test_the_company_name_and_layout_words_are_kept_out_of_the_prompt(self):
-        prompt = self.prompt('post', brief='').lower()
-        for word in ('acme', 'logo', 'headline', 'caption', 'watermark', 'footer'):
-            self.assertNotIn(word, prompt, word)
-
-    def test_a_long_brief_still_fits_cloudflare_flux(self):
-        from apps.creative_generation.image_client import CloudflareImageProvider
-
-        prompt = self.prompt('promotional_creative', brief='A very detailed description. ' * 80)
-        self.assertLessEqual(len(prompt), CloudflareImageProvider.MAX_PROMPT_CHARS)
-
-    def test_admin_guidance_is_still_appended(self):
-        self.assertIn('Prefer warm gold.', self.prompt('post', extra_guidance='Prefer warm gold.'))
-
-
-class ScenePromptTests(TestCase):
-    VISARJAN = 'create realistic creative for anant chaturdashi with lord ganesh murti visarjan in sea like lalbaugcha raja'
-
-    def setUp(self):
-        admin = User.objects.create_superuser(email='admin@example.com', password='StrongPass123!')
-        self.company = Company.objects.create(name='Acme Retail', created_by=admin)
-
-    def prompt(self, creative_type='post', brief=None, **kwargs):
-        return build_image_prompt(self.company, None, creative_type, 'instagram', brief or self.VISARJAN, '', 1, 1, **kwargs)
-
-    def test_a_scene_brief_is_followed_not_reduced_to_one_subject_on_a_plain_background(self):
-        for creative_type in ('post', 'event_creative', 'product_creative'):
-            prompt = self.prompt(creative_type)
-            self.assertIn('idol being immersed', prompt, creative_type)
-            self.assertIn('open sea with waves', prompt, creative_type)
-            self.assertIn('realistic, professionally photographed scene', prompt, creative_type)
-            self.assertNotIn('plain, light cream-ivory background', prompt, creative_type)
-            self.assertNotIn('simplify', prompt, creative_type)
-
-    def test_a_festival_creative_with_a_scene_brief_makes_that_scene(self):
-        prompt = self.prompt('festival_creative')
-        self.assertIn('idol being immersed', prompt)
-        self.assertIn('open sea with waves', prompt)
-        self.assertIn('realistic, professionally photographed scene', prompt)
-        self.assertNotIn('plain, light cream-ivory background', prompt)
-        self.assertNotIn('One single subject', prompt)
-
-    def test_a_festival_creative_without_a_brief_gets_the_festive_template(self):
-        for brief in ('Anant Chaturdashi', 'Ganesh Chaturthi wishes', 'Diwali greeting for our followers'):
-            prompt = self.prompt('festival_creative', brief)
-            self.assertIn('plain, light cream-ivory background', prompt, brief)
-            self.assertIn('One single subject', prompt, brief)
-            self.assertNotIn('professionally photographed scene', prompt, brief)
-        self.assertIn('handcrafted Lord Ganesha idol', self.prompt('festival_creative', 'Anant Chaturdashi wishes'))
-
-    def test_the_templates_own_wording_is_not_mistaken_for_a_scene(self):
-        brief = 'Festival: Diwali\nFestive Element: a hand-painted terracotta lamp with marigold petals and gold coins'
-        prompt = self.prompt('festival_creative', brief)
-        self.assertIn('One single subject', prompt)
-        self.assertNotIn('professionally photographed scene', prompt)
-
-    def test_a_scene_still_keeps_the_text_area_and_the_logo_corner_calm(self):
-        below = self.prompt('post')
-        self.assertIn('lowest 40% of the frame is calm, simple and uncluttered', below)
-        self.assertIn('top-right corner is calm and uncluttered', below)
-        self.assertIn('top 40% of the frame is calm, simple and uncluttered', self.prompt('event_creative'))
-
-    def test_brand_colours_and_admin_guidance_are_added_to_a_scene(self):
-        from apps.brand.models import BrandProfile
-
-        profile = BrandProfile.objects.create(company=self.company, brand_colors=[{'name': 'Primary', 'hex': '#83430B'}])
-        prompt = build_image_prompt(
-            self.company, profile, 'post', 'instagram', self.VISARJAN, '', 1, 1, extra_guidance='Golden hour light.',
+        fallback = self.prompt(
+            brief='Create a post for lakeside sunset yoga retreat. Include the CTA "Book now".', scene_description='  ',
         )
-        self.assertIn('#83430B', prompt)
-        self.assertIn('Golden hour light.', prompt)
+        self.assertIn('lakeside sunset yoga retreat', fallback)
+        self.assertNotIn('Create a post', fallback)
+        self.assertNotIn('Book now', fallback)  # a CTA is wording, not a picture
 
-    def test_a_scene_prompt_fits_cloudflare_flux(self):
-        from apps.creative_generation.image_client import CloudflareImageProvider
+    def test_the_calm_areas_follow_the_text_placement(self):
+        below = self.prompt('post')
+        self.assertIn('upper-middle', below)
+        self.assertIn('lowest 35%', below)
+        self.assertIn('top-right corner is calm', below)
+        top = self.prompt('event_creative')
+        self.assertIn('lower-middle', top)
+        self.assertIn('top 40%', top)
 
-        self.assertLessEqual(len(self.prompt(brief='A very detailed scene description. ' * 60)), CloudflareImageProvider.MAX_PROMPT_CHARS)
-        self.assertLessEqual(len(self.prompt('festival_creative', 'Diwali ' + 'a very detailed scene description. ' * 60)), CloudflareImageProvider.MAX_PROMPT_CHARS)
+    def test_the_type_sets_the_mood_and_a_product_creative_falls_back_to_the_companys_products(self):
+        self.assertIn('celebratory', self.prompt('festival_creative'))
+        self.assertIn('shown whole', self.prompt('product_creative'))
+        self.assertIn('Oak sofa, Coffee table', self.prompt('product_creative'))
+        self.assertNotIn('Oak sofa', self.prompt('post'))
+        self.assertIn('Also: a walnut finish', build_image_prompt(
+            self.company, None, 'product_creative', 'instagram', 'A sofa', 'a walnut finish', 1, 1,
+        ))
 
-    def test_short_topics_and_template_briefs_still_get_the_plain_design(self):
-        self.assertIn('plain, light cream-ivory background', self.prompt('festival_creative', 'Diwali greeting'))
-        self.assertIn('One single subject', self.prompt('festival_creative', 'Festival: Diwali\nFestive Element: a brass lamp'))
+    def test_the_brand_guidelines_shape_the_scene(self):
+        profile = self.profile(
+            brand_colors=[{'name': 'Primary', 'hex': '#83430B'}, {'name': 'Secondary', 'hex': '#D97706'}],
+            visual_style='Warm editorial photography', tone='Calm and confident',
+            dos=['Use natural light', 'Show real materials'], donts=['No stock-photo smiles'],
+        )
+        prompt = self.prompt(profile=profile)
+        for expected in (
+            '#83430B', '#D97706', 'Warm editorial photography', 'Calm and confident',
+            'Use natural light', 'Show real materials', 'No stock-photo smiles',
+        ):
+            self.assertIn(expected, prompt)
+
+    def test_an_empty_brand_profile_adds_no_brand_lines(self):
+        prompt = self.prompt(profile=self.profile())
+        for absent in ('Brand palette', 'Brand visual style', 'Brand mood', "Brand do's", "Brand don'ts"):
+            self.assertNotIn(absent, prompt)
+
+    def test_the_words_models_paint_into_pictures_are_kept_out(self):
+        prompt = self.prompt('post', brief='A cosy living room', profile=self.profile(visual_style='Warm photography')).lower()
+        for word in ('text', 'logo', 'lettering', 'caption', 'headline', 'acme'):
+            self.assertIsNone(re.search(rf'\b{word}\b', prompt), word)
+
+    def test_the_scene_and_layout_survive_a_provider_with_a_short_prompt_limit(self):
+        profile = self.profile(
+            brand_colors=[{'name': 'Primary', 'hex': '#83430B'}], visual_style='v' * 400, tone='t' * 300,
+            dos=['d' * 200] * 6, donts=['n' * 200] * 6,
+        )
+        prompt = self.prompt('post', brief='b ' * 3000, profile=profile, scene_description='s ' * 1000)
+        cut = prompt[:2048]  # Cloudflare FLUX cuts everything after 2048 characters
+        self.assertIn('richly detailed environment', cut)
+        self.assertIn('lowest 35%', cut)
+        self.assertIn('#83430B', cut)
 
 
-class VisualSceneTests(TestCase):
-    BRIEF = 'create realistic creative for anant chaturth darshi with lord ganesh murti visrajan in sea like lal baug cha raja'
-    AI_SCENE = 'A very large decorated Ganesha idol being immersed into the open sea, waves rising around it, golden evening light'
-
+class CopyPromptTests(TestCase):
     def setUp(self):
         admin = User.objects.create_superuser(email='admin@example.com', password='StrongPass123!')
         self.company = Company.objects.create(name='Acme Retail', created_by=admin)
 
-    def image_prompt(self, creative_type='festival_creative', **kwargs):
-        return build_image_prompt(self.company, None, creative_type, 'instagram', self.BRIEF, '', 1, 1, **kwargs)
+    def copy_prompt(self, creative_type='post', brief='A brief', calendar_item=None):
+        return build_copy_prompt(
+            self.company, None, None, creative_type, 'instagram', brief, '', calendar_item=calendar_item,
+        )
 
-    def test_the_text_ai_s_description_is_what_the_image_model_gets(self):
-        prompt = self.image_prompt(scene_description=self.AI_SCENE)
-        self.assertIn(self.AI_SCENE, prompt)
-        for raw in ('create realistic creative', 'visrajan', 'lal baug cha raja', 'chaturth'):
-            self.assertNotIn(raw, prompt, raw)
+    def item(self, **fields):
+        return ContentCalendarItem.objects.create(
+            company=self.company, topic='Summer Launch', content_type='Static Post', platforms=['instagram'],
+            scheduled_date=datetime.date(2026, 6, 1), **fields,
+        )
 
-    def test_without_it_the_cleaned_brief_is_used_so_idol_and_sea_still_reach_the_model(self):
-        prompt = self.image_prompt()
-        self.assertIn('idol being immersed', prompt)
-        self.assertIn('open sea with waves', prompt)
-        self.assertNotIn('visrajan', prompt)
+    def test_every_type_gets_the_same_copy_roles_and_always_a_visual_scene(self):
+        for creative_type in ('post', 'festival_creative', 'event_creative'):
+            prompt = self.copy_prompt(creative_type)
+            self.assertIn('cta: a short, understated call to action', prompt, creative_type)
+            self.assertIn('visual_scene: ONE clear, concrete English description', prompt, creative_type)
+            self.assertIn('richly detailed scene', prompt, creative_type)
+            self.assertNotIn('festive greeting layout', prompt, creative_type)
 
-    def test_a_blank_description_falls_back_to_the_cleaned_brief(self):
-        self.assertIn('open sea with waves', self.image_prompt(scene_description='   '))
+    def test_the_calendar_entrys_planning_details_are_part_of_the_instruction(self):
+        prompt = self.copy_prompt(calendar_item=self.item(
+            category='Seasonal', weekly_theme='Community', objective='Brand awareness', campaign='Summer 2026',
+        ))
+        self.assertIn('Content calendar entry (follow it closely):', prompt)
+        for expected in (
+            '- Category: Seasonal', '- Weekly theme: Community', '- Objective: Brand awareness',
+            '- Campaign: Summer 2026', '- Scheduled for: 01 June 2026',
+        ):
+            self.assertIn(expected, prompt)
 
-    def test_the_description_is_ignored_when_the_brief_is_not_a_scene(self):
-        prompt = build_image_prompt(self.company, None, 'festival_creative', 'instagram', 'Diwali', '', 1, 1, scene_description=self.AI_SCENE)
-        self.assertNotIn(self.AI_SCENE, prompt)
-        self.assertIn('One single subject', prompt)
-
-    def test_the_copy_prompt_asks_for_a_visual_scene_only_for_a_scene_brief(self):
-        scene = build_copy_prompt(self.company, None, None, 'festival_creative', 'instagram', self.BRIEF, '')
-        self.assertIn('visual_scene: rewrite the creative brief', scene)
-        self.assertIn('being immersed into the open sea', scene)  # the worked example for the AI
-        for creative_type, brief in (('festival_creative', 'Diwali wishes'), ('post', 'New sofa launch')):
-            plain = build_copy_prompt(self.company, None, None, creative_type, 'instagram', brief, '')
-            self.assertIn('visual_scene: return an empty string', plain)
-            self.assertNotIn('rewrite the creative brief', plain)
+    def test_an_ad_hoc_generation_or_no_calendar_item_adds_no_calendar_lines(self):
+        self.assertNotIn('Content calendar entry', self.copy_prompt())
+        ad_hoc = self.item(source=ContentCalendarItem.Source.AD_HOC)
+        self.assertNotIn('Content calendar entry', self.copy_prompt(calendar_item=ad_hoc))
 
     def test_the_schema_requires_visual_scene(self):
-        from apps.creative_generation.schemas import COPY_SCHEMA
-
-        self.assertIn('visual_scene', COPY_SCHEMA['properties'])
         self.assertIn('visual_scene', COPY_SCHEMA['required'])
+        self.assertIn('visual_scene', COPY_SCHEMA['properties'])
