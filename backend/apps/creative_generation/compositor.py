@@ -273,6 +273,13 @@ def _ensure_contrast(color, background, minimum):
 
 # --- text
 
+def _spaced_width(draw, text, font, spacing):
+    """Width of `text` as _draw_spaced sets it."""
+    if _has_devanagari(text):
+        return draw.textlength(text, font=font)
+    return sum(draw.textlength(char, font=font) for char in text) + spacing * (len(text) - 1)
+
+
 def _draw_spaced(draw, x, top, text, font, fill, spacing, centered=True):
     """Text with extra letter spacing (Pillow has no built-in tracking), centred on x or starting at x."""
     if _has_devanagari(text):
@@ -306,7 +313,11 @@ def _build_text_parts(draw, *, centered, text_width, width, eyebrow, headline, d
     if description:
         font = _brand_font(brand_profile, 'regular', max(16, int(width * 0.03)), description)
         lines = _wrapped_lines(draw, description, font, text_width if not centered else int(width * 0.74), max_lines=3)
-        parts.append(('lines', (lines, font, int(font.size * 1.55)), len(lines) * int(font.size * 1.55), int(width * 0.025) if parts else 0))
+        gap = int(width * 0.025) if parts else 0
+        if centered and headline:
+            parts.append(('divider', None, 2 * max(4, int(width * 0.008)), int(width * 0.02)))  # ornament between headline and body
+            gap = int(width * 0.02)
+        parts.append(('lines', (lines, font, int(font.size * 1.55)), len(lines) * int(font.size * 1.55), gap))
     if cta:
         font = _brand_font(brand_profile, 'semibold', max(15, int(width * 0.03)), cta)
         pill_h = int(font.size * 2.3)
@@ -336,10 +347,38 @@ def _crop_taller_than(base, aspect):
     return base.crop((0, top, width, top + target))
 
 
+VEIL_STRENGTHS = (0.35, 0.5, 0.65, 0.8)  # how opaque the veil behind the text may get, gentlest first
+
+
+def _text_style(backdrop_hex, primary, accent):
+    """How the text reads best on the part of the picture it sits on, as (veil_color, veil_strength, ink,
+    accent_color). The gentlest veil that gives readable contrast wins: a pale veil with dark brand-coloured
+    text on a light picture (the usual look of a premium greeting: dark type straight onto a bright wall), or a
+    deep brand-coloured veil with white text on a dark one. If nothing reaches the target even at the strongest
+    veil, the better of the two at that strength is used."""
+    deep = _mix(primary, (0, 0, 0), 0.62)
+    pale = _mix(backdrop_hex, (255, 255, 255), 0.6)
+    best = None
+    for strength in VEIL_STRENGTHS:
+        options = []
+        light_bg = _mix(backdrop_hex, _rgb(pale), strength)
+        if _relative_luminance(light_bg) > 0.4:
+            ink = _ensure_contrast(_mix(primary, (0, 0, 0), 0.35), light_bg, 4.5)
+            options.append((_contrast_ratio(ink, light_bg), pale, light_bg, ink))
+        dark_bg = _mix(backdrop_hex, _rgb(deep), strength)
+        options.append((_contrast_ratio('#FFFFFF', dark_bg), deep, dark_bg, '#FFFFFF'))
+        contrast, veil, background, ink = max(options, key=lambda option: option[0])
+        best = (veil, strength, ink, _ensure_contrast(accent, background, 3.0))
+        if contrast >= 4.5:
+            break
+    return best
+
+
 def _draw_layout(base, *, placement, eyebrow, headline, description, cta, primary, accent, mark, brand_profile):
-    """The text stack and the logo, drawn over the full scene: white text with the brand accent on a
-    soft gradient of the (darkened) brand colour at the edge the text sits on, and the logo large in
-    the top-right corner. Nothing is extended, cropped away or smoothed, so the scene is shown whole."""
+    """The text stack and the logo, drawn over the full scene: the text in the colour that reads best on
+    the picture (dark brand colour on a light one, white on a dark one) over a soft, feathered veil only as
+    strong as it needs to be, and the logo large in the top-right corner. Nothing is extended, cropped away
+    or smoothed, so the scene is shown whole."""
     width, height = base.size
     pad = int(width * 0.06)
     top_anchored = placement == 'top'
@@ -352,31 +391,44 @@ def _draw_layout(base, *, placement, eyebrow, headline, description, cta, primar
     )
     if parts:
         total = sum(part_height + gap for _kind, _data, part_height, gap in parts)
-        deep = _mix(primary, (0, 0, 0), 0.62)  # dark brand tone: white text on it always reads
-        scrim_height = min(int(height * 0.7), edge_margin + total + pad * 3)
-        scrim = _vertical_gradient((width, scrim_height), deep, 225)
+        block_top = edge_margin if top_anchored else height - edge_margin - total
+        zone = base.crop((0, block_top, width, block_top + total)).convert('RGB')
+        backdrop_hex = '#%02X%02X%02X' % tuple(int(v) for v in ImageStat.Stat(zone).mean)
+        veil_color, strength, ink, accent_color = _text_style(backdrop_hex, primary, accent)
+        veil_height = min(int(height * 0.7), edge_margin + total + pad * 3)
+        veil = _vertical_gradient((width, veil_height), veil_color, int(255 * strength))
         if top_anchored:
-            base.alpha_composite(scrim.transpose(Image.Transpose.FLIP_TOP_BOTTOM), (0, 0))
-            block_top = edge_margin
+            base.alpha_composite(veil.transpose(Image.Transpose.FLIP_TOP_BOTTOM), (0, 0))
         else:
-            base.alpha_composite(scrim, (0, height - scrim_height))
-            block_top = height - edge_margin - total
+            base.alpha_composite(veil, (0, height - veil_height))
         _paint_parts(
             ImageDraw.Draw(base), parts, x=width // 2 if centered else pad, y=block_top, centered=centered,
-            ink='#FFFFFF', accent_color=_ensure_contrast(accent, deep, 3.0),
+            width=width, ink=ink, accent_color=accent_color,
         )
     if mark is not None:
         _place_logo(base, mark, primary, pad)
     return base
 
 
-def _paint_parts(draw, parts, *, x, y, centered, ink, accent_color):
+def _paint_parts(draw, parts, *, x, y, centered, width, ink, accent_color):
     """Draws the text stack top to bottom starting at y, centred on x or left-aligned at x."""
     anchor = 'ma' if centered else 'la'
     for kind, data, part_height, gap in parts:
         y += gap
         if kind == 'eyebrow':
-            _draw_spaced(draw, x, y, data[0].upper(), data[1], _rgb(accent_color), spacing=3, centered=centered)
+            text, font = data[0].upper(), data[1]
+            _draw_spaced(draw, x, y, text, font, _rgb(accent_color), spacing=3, centered=centered)
+            if centered:  # thin rules either side of the kicker
+                half = _spaced_width(draw, text, font, 3) / 2
+                rule, gap_x, mid = int(width * 0.1), int(width * 0.02), y + int(font.size * 0.55)
+                draw.line([(x - half - gap_x - rule, mid), (x - half - gap_x, mid)], fill=_rgb(accent_color), width=2)
+                draw.line([(x + half + gap_x, mid), (x + half + gap_x + rule, mid)], fill=_rgb(accent_color), width=2)
+        elif kind == 'divider':
+            half, notch, d = int(width * 0.1), int(width * 0.018), max(4, int(width * 0.008))
+            mid = y + d
+            draw.line([(x - half, mid), (x - notch, mid)], fill=_rgb(accent_color), width=2)
+            draw.line([(x + notch, mid), (x + half, mid)], fill=_rgb(accent_color), width=2)
+            draw.polygon([(x, mid - d), (x + d, mid), (x, mid + d), (x - d, mid)], fill=_rgb(accent_color))
         elif kind == 'lines':
             lines, font, line_height = data
             for index, line in enumerate(lines):
@@ -410,7 +462,10 @@ def _place_logo(base, mark, primary, pad):
     own_hex = '#%02X%02X%02X' % tuple(int(v) for v in own)
     dark_hex = _mix(primary, (0, 0, 0), 0.55)
     light_logo = False
-    if _contrast_ratio(own_hex, backdrop_hex) >= 4.0:
+    # A logo that kept its own opaque background (it could not be keyed out) is shown as it is: recolouring
+    # it to one solid colour would turn the whole box into a block.
+    keeps_background = ImageStat.Stat(mark.getchannel('A').point(lambda v: 255 if v > 128 else 0)).mean[0] > 0.9 * 255
+    if keeps_background or _contrast_ratio(own_hex, backdrop_hex) >= 4.0:
         pass
     elif _contrast_ratio('#FFFFFF', backdrop_hex) >= _contrast_ratio(dark_hex, backdrop_hex):
         mark = _silhouette(mark, '#FFFFFF')

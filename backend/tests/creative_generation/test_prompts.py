@@ -69,6 +69,12 @@ class ImagePromptTests(TestCase):
             for banned in ('plain', 'cream', 'single subject', 'single hero', 'minimal'):
                 self.assertNotIn(banned, prompt.lower(), f'{creative_type}: {banned}')
 
+    def test_the_prompt_is_written_as_an_editorial_photograph_with_depth(self):
+        prompt = self.prompt()
+        self.assertIn('premium editorial advertising photograph', prompt)
+        self.assertIn('50mm', prompt)
+        self.assertIn('softly blurred', prompt)
+
     def test_the_scene_is_the_text_ais_description_else_the_cleaned_calendar_brief(self):
         written = self.prompt(brief='visrajan in sea lal baug', scene_description='A grand idol being lowered into the sea')
         self.assertIn('A grand idol being lowered into the sea', written)
@@ -157,6 +163,12 @@ class CopyPromptTests(TestCase):
             self.assertIn('visual_scene: ONE clear, concrete English description', prompt, creative_type)
             self.assertIn('richly detailed scene', prompt, creative_type)
             self.assertNotIn('festive greeting layout', prompt, creative_type)
+
+    def test_the_scene_is_set_in_the_companys_world(self):
+        self.company.industry = 'Real Estate'
+        prompt = self.copy_prompt()
+        self.assertIn('(industry: Real Estate)', prompt)
+        self.assertIn('Set it in a world that suits the business and its audience', prompt)
 
     def test_the_calendar_entrys_planning_details_are_part_of_the_instruction(self):
         prompt = self.copy_prompt(calendar_item=self.item(

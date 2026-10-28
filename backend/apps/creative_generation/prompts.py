@@ -159,11 +159,11 @@ def build_image_prompt(
         context = ', '.join(str(p) for p in (company.products or [])[:3])
 
     lines = [
-        f'A premium, professionally photographed scene, portrait 4:5: {scene[:700].rstrip(" .")}.' if scene else
-        'A premium, professionally photographed scene, portrait 4:5, that suits the brand and its audience.',
+        f'A premium editorial advertising photograph, portrait 4:5: {scene[:700].rstrip(" .")}.' if scene else
+        'A premium editorial advertising photograph, portrait 4:5, that suits the brand and its audience.',
         'A complete, richly detailed environment fills the whole frame edge to edge, with depth, layered foreground and '
-        'background, true-to-life materials and natural cinematic light. Photorealistic and razor-sharp, with the main '
-        'subject large and clear.',
+        'background, true-to-life materials and warm, natural cinematic light. Shot on a full-frame camera with a 50mm '
+        'lens: photorealistic and razor-sharp, with the main subject large and clear and the background softly blurred.',
     ]
     if mood:
         lines.append(f'Mood and styling: {mood}.')
@@ -225,7 +225,10 @@ def build_copy_prompt(
         '- visual_scene: ONE clear, concrete English description (30-70 words) of the finished picture an image '
         'model should draw for this brief - a full, richly detailed scene: the main subject, the setting and '
         'background, props, what is happening, the light and the mood, in the brand\'s visual style and colour '
-        'palette. Follow the creative brief and the calendar entry exactly, fix any spelling, and spell out place, '
+        'palette. Set it in a world that suits the business and its audience (for a property brand, a refined '
+        'modern interior or entrance dressed with the occasion\'s decor against a softly lit, uncluttered wall; for a food '
+        'brand, a beautifully laid table) so the picture feels made for this brand, not generic. Follow the creative '
+        'brief and the calendar entry exactly, fix any spelling, and spell out place, '
         'festival and insider references as what they look like - for example "Ganesh visarjan in the sea like '
         'Lalbaugcha Raja" becomes "a very large, grand Ganesha idol with a tall golden crown, decorated with '
         'marigold garlands, being immersed into the open sea, waves rising around it, devotees in the shallow '
@@ -233,7 +236,8 @@ def build_copy_prompt(
         'names, no mention of text, letters or logos.',
     ]
     lines = [
-        f'Write the copy for {format_guidance} for "{company.name}".',
+        f'Write the copy for {format_guidance} for "{company.name}"'
+        + (f' (industry: {company.industry}).' if company.industry else '.'),
         platform_guidance,
         *role_lines,
         f'Creative brief: {prompt_brief or "Use your best judgement."}',

@@ -369,22 +369,68 @@ class SceneLayoutTests(SimpleTestCase):
             for actual, expected in zip(image.getpixel(point), original.getpixel(point)):
                 self.assertLessEqual(abs(actual - expected), 10, point)
 
-    def test_text_sits_below_on_a_gradient_for_the_below_placement(self):
-        photo = self.scene()
-        original = Image.open(io.BytesIO(photo)).convert('RGB')
-        image = self.compose(photo, placement='below', headline='Big news', description='Read all about it.', cta='Learn more')
-        low = (0, 1000, 1024, 1280)
-        self.assertLess(ImageStat.Stat(image.crop(low)).mean[2], ImageStat.Stat(original.crop(low)).mean[2] - 40)  # darkened by the gradient
-        self.assertGreater(self.white_pixels(image, low), 400)  # white text
+    def flat(self, color, size=(1024, 1280)):
+        buf = io.BytesIO()
+        Image.new('RGB', size, color).save(buf, format='PNG')
+        return buf.getvalue()
+
+    def count(self, image, box, predicate):
+        return sum(1 for px in image.crop(box).getdata() if predicate(px))
+
+    def dark_ink(self, px):
+        return sum(px) < 330  # the brand's darkened primary (#83430B)
+
+    LIGHT = (246, 238, 224)  # a sunlit cream wall
+    DARK = (24, 32, 64)      # a night sky
+
+    def test_a_light_picture_gets_dark_brand_coloured_text_straight_onto_it(self):
+        image = self.compose(
+            self.flat(self.LIGHT), placement='below', eyebrow='Happy', headline='Diwali', description='May this season bring light and joy.',
+        )
+        low = (0, 900, 1024, 1280)
+        self.assertGreater(self.count(image, low, self.dark_ink), 600)  # dark text ...
+        self.assertGreater(ImageStat.Stat(image.crop(low).convert('L')).mean[0], 200)  # ... on a picture that stays light, not a dark panel
+
+    def test_a_dark_picture_gets_white_text(self):
+        image = self.compose(self.flat(self.DARK), placement='below', headline='Big news', description='Read all about it.', cta='Learn more')
+        self.assertGreater(self.white_pixels(image, (0, 1000, 1024, 1280)), 400)
         self.assertEqual(self.white_pixels(image, (0, 0, 600, 200)), 0)
 
-    def test_text_sits_at_the_top_left_on_a_gradient_for_the_top_placement(self):
-        photo = self.scene()
-        original = Image.open(io.BytesIO(photo)).convert('RGB')
-        image = self.compose(photo, placement='top', eyebrow='Event', headline='Annual summit', description='Join us in Pune.')
-        self.assertLess(ImageStat.Stat(image.crop((0, 0, 1024, 260))).mean[2], ImageStat.Stat(original.crop((0, 0, 1024, 260))).mean[2] - 40)
-        self.assertGreater(self.white_pixels(image, (0, 0, 620, 330)), 400)
-        self.assertEqual(self.white_pixels(image, (0, 1000, 1024, 1280)), 0)
+    def test_text_sits_at_the_top_left_for_the_top_placement_in_both_styles(self):
+        for color, is_text in ((self.LIGHT, self.dark_ink), (self.DARK, lambda px: min(px) > 235)):
+            image = self.compose(self.flat(color), placement='top', eyebrow='Event', headline='Annual summit', description='Join us in Pune.')
+            self.assertGreater(self.count(image, (0, 0, 620, 330), is_text), 400, color)
+            self.assertEqual(self.count(image, (0, 1000, 1024, 1280), is_text), 0, color)
+
+    def test_a_centred_kicker_gets_thin_rules_either_side(self):
+        from PIL import ImageDraw
+
+        from apps.creative_generation.compositor import _spaced_width
+
+        brand = FakeBrandProfile()
+        font = _brand_font(brand, 'semibold', max(14, int(1024 * 0.026)), 'HAPPY')
+        text_width = _spaced_width(ImageDraw.Draw(Image.new('RGB', (10, 10))), 'HAPPY', font, 3)
+        image = self.compose(self.flat(self.LIGHT), placement='below', eyebrow='Happy')
+        band_height = int(font.size * 1.7)
+        band = (0, 1280 - int(1024 * 0.09) - band_height, 1024, 1280 - int(1024 * 0.09))
+        xs = [x for x in range(1024) if self.count(image, (x, band[1], x + 1, band[3]), lambda px: sum(px) < 600)]
+        self.assertGreater(max(xs) - min(xs), text_width + 2 * 1024 * 0.1)  # the rules extend well past the text
+
+    def test_a_centred_stack_has_a_divider_between_headline_and_body_and_a_left_aligned_one_does_not(self):
+        from PIL import ImageDraw
+
+        from apps.creative_generation.compositor import _build_text_parts
+
+        draw = ImageDraw.Draw(Image.new('RGB', (1024, 1280)))
+
+        def kinds(centered, **copy):
+            parts = _build_text_parts(draw, centered=centered, text_width=900, width=1024, cta='', brand_profile=None, **copy)
+            return [part[0] for part in parts]
+
+        copy = {'eyebrow': 'Happy', 'headline': 'Diwali', 'description': 'A wish.'}
+        self.assertEqual(kinds(True, **copy), ['eyebrow', 'lines', 'divider', 'lines'])
+        self.assertEqual(kinds(False, **copy), ['eyebrow', 'lines', 'lines'])
+        self.assertEqual(kinds(True, eyebrow='', headline='', description='Only a body'), ['lines'])
 
     def test_the_logo_is_large_and_in_the_same_top_right_corner_whichever_way_the_text_goes(self):
         photo = self.scene()
@@ -404,6 +450,26 @@ class SceneLayoutTests(SimpleTestCase):
             self.assertGreater(changed(corner), 8000, placement)  # a big mark (about 327 x 82 px of artwork) that stands out from the sky
             self.assertLess(changed((0, 0, width // 2, 200)), 50, placement)  # and nothing at the top-left
 
+    def test_a_logo_that_keeps_its_own_background_is_not_turned_into_a_solid_block(self):
+        # A shaded (non-flat) background cannot be keyed out, so the logo stays an opaque rectangle.
+        from PIL import ImageDraw
+
+        artwork = Image.new('RGB', (300, 100))
+        for x in range(300):
+            ImageDraw.Draw(artwork).line([(x, 0), (x, 99)], fill=(255 - x // 5, 255 - x // 5, 255 - x // 5))
+        ImageDraw.Draw(artwork).rectangle((60, 30, 240, 70), fill=(123, 20, 20))
+        buf = io.BytesIO()
+        artwork.save(buf, format='PNG')
+
+        image = self.compose(self.flat(self.LIGHT), logo_bytes=buf.getvalue())
+        width = image.width
+        box = (width - int(width * 0.06) - int(width * 0.32), int(width * 0.06), width - int(width * 0.06), int(width * 0.06) + 100)
+        light = self.count(image, box, lambda px: min(px) > 180)
+        dark = self.count(image, box, lambda px: sum(px) < 330)
+        total = (box[2] - box[0]) * (box[3] - box[1])
+        self.assertGreater(light, total * 0.3)  # its background is still there
+        self.assertGreater(dark, total * 0.1)   # and so is its artwork
+
     def test_a_taller_picture_is_cropped_to_the_ratio_and_a_shorter_one_is_kept(self):
         tall = self.compose(self.scene(size=(1000, 1500)), headline='Hello')
         self.assertEqual(tall.size, (1000, 1250))
@@ -411,9 +477,8 @@ class SceneLayoutTests(SimpleTestCase):
         self.assertEqual(square.size, (1000, 1000))  # not invented, not stretched
 
     def test_a_hindi_greeting_is_drawn_over_a_scene(self):
-        image = self.compose(self.scene(), placement='below', headline='\u0936\u0941\u092d \u0932\u0915\u094d\u0937\u094d\u092e\u0940 \u092a\u0942\u091c\u0928')
-        self.assertGreater(self.white_pixels(image, (0, 1000, 1024, 1280)) + sum(
-            1 for px in image.crop((0, 1000, 1024, 1280)).getdata() if px[0] > 170 and px[2] < 120), 300)
+        image = self.compose(self.flat(self.DARK), placement='below', headline='\u0936\u0941\u092d \u0932\u0915\u094d\u0937\u094d\u092e\u0940 \u092a\u0942\u091c\u0928')
+        self.assertGreater(self.white_pixels(image, (0, 1000, 1024, 1280)), 300)
 
     def test_logo_only_over_a_scene_adds_no_gradient(self):
         photo = self.scene()
@@ -421,3 +486,25 @@ class SceneLayoutTests(SimpleTestCase):
         image = self.compose(photo, logo_bytes=self.logo())
         for actual, expected in zip(image.getpixel((500, 1200)), original.getpixel((500, 1200))):
             self.assertLessEqual(abs(actual - expected), 8)
+
+
+class TextStyleTests(SimpleTestCase):
+    def test_the_text_is_readable_on_any_picture_with_the_gentlest_veil_that_works(self):
+        from apps.creative_generation.compositor import VEIL_STRENGTHS, _contrast_ratio, _mix, _rgb, _text_style
+
+        for backdrop in ('#FFFFFF', '#F6EEE0', '#D8C7A0', '#9A9A9A', '#6B7F99', '#C46A1B', '#2A3A5C', '#000000'):
+            veil, strength, ink, accent = _text_style(backdrop, '#83430B', '#D97706')
+            shown = _mix(backdrop, _rgb(veil), strength)
+            self.assertGreaterEqual(_contrast_ratio(ink, shown), 4.5, backdrop)
+            self.assertGreaterEqual(_contrast_ratio(accent, shown), 3.0, backdrop)
+            self.assertIn(strength, VEIL_STRENGTHS)
+
+    def test_light_pictures_get_dark_text_and_dark_pictures_white_text_without_a_heavy_veil(self):
+        from apps.creative_generation.compositor import _text_style
+
+        _veil, strength, ink, _accent = _text_style('#F6EEE0', '#83430B', '#D97706')
+        self.assertEqual(strength, 0.35)
+        self.assertNotEqual(ink, '#FFFFFF')
+        _veil, strength, ink, _accent = _text_style('#2A3A5C', '#83430B', '#D97706')
+        self.assertEqual(strength, 0.35)
+        self.assertEqual(ink, '#FFFFFF')
