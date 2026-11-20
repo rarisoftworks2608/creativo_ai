@@ -4,14 +4,13 @@ from apps.creative_generation.layouts import layout_for
 
 
 class LayoutForTests(SimpleTestCase):
-    def test_text_goes_below_for_most_types_and_at_the_top_for_the_ones_that_carry_more_copy(self):
-        for creative_type in ('post', 'carousel', 'story', 'product_creative', 'festival_creative', 'instagram_post'):
-            self.assertEqual(layout_for(creative_type)['placement'], 'below', creative_type)
+    def test_every_type_places_its_text_automatically_on_the_calmest_part_of_the_picture(self):
         for creative_type in (
+            'post', 'carousel', 'story', 'product_creative', 'festival_creative', 'instagram_post',
             'promotional_creative', 'event_creative', 'announcement_creative', 'educational_creative',
             'testimonial_creative',
         ):
-            self.assertEqual(layout_for(creative_type)['placement'], 'top', creative_type)
+            self.assertEqual(layout_for(creative_type)['placement'], 'auto', creative_type)
 
     def test_a_festival_creative_has_no_layout_of_its_own(self):
         self.assertEqual(layout_for('festival_creative'), layout_for('post'))

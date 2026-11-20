@@ -18,9 +18,22 @@ COPY_SCHEMA = {
             'description': 'The creative brief and calendar entry rewritten as one clear, concrete English description '
                            'of the full scene an image model should draw: subject, setting, props, light and mood.',
         },
+        'highlights': {
+            'type': 'array', 'items': {'type': 'string'},
+            'description': '3-4 short labels (1-3 words) of the company services or strengths for the services strip, '
+                           'e.g. "Web Development"; empty for a greeting or testimonial.',
+        },
+        'tagline': {
+            'type': 'string',
+            'description': 'A 2-5 word company sign-off for the footer, e.g. "Your Technology Partner"; empty for a '
+                           'greeting or testimonial.',
+        },
         'hashtags': {'type': 'array', 'items': {'type': 'string'}},
         'keywords': {'type': 'array', 'items': {'type': 'string'}},
     },
-    'required': ['caption', 'eyebrow', 'headline', 'description', 'cta', 'visual_scene', 'hashtags', 'keywords'],
+    'required': [
+        'caption', 'eyebrow', 'headline', 'description', 'cta', 'visual_scene', 'highlights', 'tagline', 'hashtags',
+        'keywords',
+    ],
     'additionalProperties': False,
 }

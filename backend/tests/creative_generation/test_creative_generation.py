@@ -200,19 +200,113 @@ class GenerationRequestCreateTests(BaseCreativeGenerationTestCase):
     @patch('apps.creative_generation.tasks.compose_creative')
     @patch('apps.creative_generation.tasks.get_text_provider')
     @patch('apps.creative_generation.tasks.get_image_provider')
-    def test_the_text_placement_and_aspect_follow_the_creative_type(self, mock_get_image, mock_get_text, mock_compose):
+    def test_the_text_is_placed_automatically_for_every_type_and_only_the_aspect_follows_the_type(
+        self, mock_get_image, mock_get_text, mock_compose,
+    ):
         mock_get_image.return_value = FakeImageProvider()
         mock_get_text.return_value = FakeTextProvider()
         mock_compose.return_value = (fake_png_bytes(), 'image/png')
 
         for creative_type, placement, aspect in (
-            ('post', 'below', 1.25), ('festival_creative', 'below', 1.25), ('event_creative', 'top', 1.25),
-            ('story', 'below', 16 / 9),
+            ('post', 'auto', 1.25), ('festival_creative', 'auto', 1.25), ('event_creative', 'auto', 1.25),
+            ('story', 'auto', 16 / 9),
         ):
             self.create_request(variation_count=1, include_text_overlay=True, creative_type=creative_type)
             kwargs = mock_compose.call_args.kwargs
             self.assertEqual(kwargs['placement'], placement, creative_type)
             self.assertAlmostEqual(kwargs['aspect'], aspect, msg=creative_type)
+            self.assertEqual(kwargs['creative_type'], creative_type)  # the typography presets follow the type
+
+    @patch('apps.creative_generation.tasks.compose_creative')
+    @patch('apps.creative_generation.tasks.get_text_provider')
+    @patch('apps.creative_generation.tasks.get_image_provider')
+    def test_every_variation_and_every_request_gets_its_own_seed_so_layouts_do_not_repeat(
+        self, mock_get_image, mock_get_text, mock_compose,
+    ):
+        mock_get_image.return_value = FakeImageProvider()
+        mock_get_text.return_value = FakeTextProvider()
+        mock_compose.return_value = (fake_png_bytes(), 'image/png')
+
+        seeds = []
+        for _ in range(2):
+            mock_compose.reset_mock()
+            self.create_request(variation_count=3, include_text_overlay=True)
+            seeds += [call.kwargs['variation_seed'] for call in mock_compose.call_args_list]
+        self.assertEqual(len(seeds), 6)
+        self.assertEqual(len(set(seeds)), 6)  # three variations of two requests: six different seeds
+
+    @patch('apps.creative_generation.tasks.compose_creative')
+    @patch('apps.creative_generation.tasks.get_text_provider')
+    @patch('apps.creative_generation.tasks.get_image_provider')
+    def test_every_variation_is_composed_differently_and_the_layout_follows_the_picture_it_was_asked_for(
+        self, mock_get_image, mock_get_text, mock_compose,
+    ):
+        class RecordingImage(FakeImageProvider):
+            prompts = []
+
+            def generate_image(self, *, prompt, reference_images=None):
+                self.prompts.append(prompt)
+                return super().generate_image(prompt=prompt, reference_images=reference_images)
+
+        mock_get_image.return_value = RecordingImage()
+        mock_get_text.return_value = FakeTextProvider()
+        mock_compose.return_value = (fake_png_bytes(), 'image/png')
+
+        self.create_request(variation_count=3, include_text_overlay=True)
+
+        compositions = [call.kwargs['composition'] for call in mock_compose.call_args_list]
+        self.assertEqual(len(set(compositions)), 3)  # the three variations differ
+        markers = {
+            'bottom': 'upper 60% of the frame', 'top': 'lower 60% of the frame',
+            'left': 'right 55% of the frame', 'right': 'left 55% of the frame',
+        }
+        for composition, prompt in zip(compositions, RecordingImage.prompts):
+            self.assertIn(markers[composition], prompt)  # the picture was asked for the composition the layout expects
+
+    @patch('apps.creative_generation.tasks.compose_creative')
+    @patch('apps.creative_generation.tasks.get_text_provider')
+    @patch('apps.creative_generation.tasks.get_image_provider')
+    def test_the_creative_is_delivered_in_hd_at_the_configured_width(self, mock_get_image, mock_get_text, mock_compose):
+        mock_get_image.return_value = FakeImageProvider()
+        mock_get_text.return_value = FakeTextProvider()
+        mock_compose.return_value = (fake_png_bytes(), 'image/png')
+
+        self.create_request(variation_count=1, include_text_overlay=True)
+        self.assertEqual(mock_compose.call_args.kwargs['output_width'], 2048)
+
+        with self.settings(CREATIVE_OUTPUT_WIDTH=1620):
+            self.create_request(variation_count=1, include_text_overlay=True)
+        self.assertEqual(mock_compose.call_args.kwargs['output_width'], 1620)
+
+    @patch('apps.creative_generation.tasks.compose_creative')
+    @patch('apps.creative_generation.tasks.get_text_provider')
+    @patch('apps.creative_generation.tasks.get_image_provider')
+    def test_the_poster_fields_reach_the_compositor_only_when_the_text_overlay_is_on(
+        self, mock_get_image, mock_get_text, mock_compose,
+    ):
+        self.company.website = 'https://acme.example/'
+        self.company.save(update_fields=['website'])
+        mock_get_image.return_value = FakeImageProvider()
+        mock_get_text.return_value = FakeTextProvider({**COPY_RESULT, 'highlights': ['Sofas', 'Tables'], 'tagline': 'Made to live in'})
+        mock_compose.return_value = (fake_png_bytes(), 'image/png')
+
+        self.create_request(variation_count=1, include_text_overlay=True)
+        kwargs = mock_compose.call_args.kwargs
+        self.assertEqual(kwargs['highlights'], ['Sofas', 'Tables'])  # the services strip comes from the copy AI's pick of the company's services
+        self.assertEqual(kwargs['tagline'], 'Made to live in')
+        self.assertEqual(kwargs['brand_name'], 'Acme Retail')        # the footer: the company's real name and website
+        self.assertEqual(kwargs['website'], 'https://acme.example/')
+
+        # An image kept clean of text gets none of it, but the copy is still generated and stored.
+        self.create_request(variation_count=1)
+        kwargs = mock_compose.call_args.kwargs
+        self.assertEqual((kwargs['highlights'], kwargs['tagline'], kwargs['brand_name'], kwargs['website']), ([], '', '', ''))
+
+        # A copy AI that sends no services or sign-off (a greeting, or an older response) is not an error.
+        mock_get_text.return_value = FakeTextProvider()
+        self.create_request(variation_count=1, include_text_overlay=True)
+        kwargs = mock_compose.call_args.kwargs
+        self.assertEqual((kwargs['highlights'], kwargs['tagline']), ([], ''))
 
     @patch('apps.creative_generation.tasks.get_text_provider')
     @patch('apps.creative_generation.tasks.get_image_provider')

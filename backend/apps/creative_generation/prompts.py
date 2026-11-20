@@ -52,6 +52,35 @@ TYPE_MOOD = {
 }
 
 
+# Greetings and testimonials are warm and bright; every other creative gets the dark, rich luxury look of a premium
+# tech or business poster (deep tones, luminous accent light), unless the brand's own style asks for light.
+LIGHT_LOOK_TYPES = ('festival_creative', 'testimonial_creative')
+# Only a style that is itself described as light-filled counts: "bright orange" or "soft tones" are accents, not a mood.
+LIGHT_STYLE_WORDS = ('airy', 'pastel', 'high-key', 'light-filled', 'light and bright', 'bright and light', 'bright and airy')
+LOOKS = {
+    'dark': {
+        'light': 'luminous accent light and deep soft shadows',
+        'finish': 'a dark, rich, low-key luxury grade - deep near-black and the brand\'s darkest tone lit by luminous '
+                  'accent light, glowing edges and glossy reflections, dramatic yet refined, with calm dark areas',
+        'copy': 'rich, low-key light - a deep, dark luxury grade lit by luminous accent light and glowing reflections',
+    },
+    'light': {
+        'light': 'warm golden light with long soft shadows',
+        'finish': 'bright, airy and never dark or moody',
+        'copy': 'warm, bright, airy light (never dark or moody)',
+    },
+}
+
+
+def look_for(creative_type, brand_profile=None):
+    """'dark' or 'light': the look of the picture. Business creatives are dark and rich, like a premium poster;
+    greetings and testimonials, and brands whose own visual style asks for a bright one, are light."""
+    if creative_type in LIGHT_LOOK_TYPES:
+        return 'light'
+    style = str(getattr(brand_profile, 'visual_style', '') or '').lower()
+    return 'light' if any(word in style for word in LIGHT_STYLE_WORDS) else 'dark'
+
+
 def _joined(values, empty='not specified'):
     return ', '.join(v for v in values if v) or empty
 
@@ -89,17 +118,33 @@ def _scene_from_brief(brief):
     return re.sub(r'\s+', ' ', text).strip(' .,')
 
 
-def _composition_sentence(placement):
-    if placement == 'top':
+def _composition_sentence(composition='bottom'):
+    """Which part of the frame is left calm for the text and the logo: 'bottom' (the default), 'top', 'left' or
+    'right'. The creative's layout then follows the picture (art_direction.py), so each variation is composed
+    differently, not poured into one template. The top-right corner always stays calm - the logo sits there.
+
+    The calm areas are real surfaces of the scene (a sunlit wall, soft drapes, a polished floor), never an empty
+    gradient: an instruction to leave space "clear" makes image models draw one object on a blank backdrop. The
+    8% margin is because the portrait picture is centre-cropped to 4:5."""
+    if composition == 'top':
         return (
-            'Composition: the main subject sits in the lower-middle of the frame, and the top 40% of the frame eases '
-            'into a calm, softly lit, uncluttered part of the same scene (open sky, a quiet wall or an out-of-focus '
-            'backdrop - whatever suits it).'
+            'Composition: the main subject and all of its decor sit in the lower 60% of the frame, within the '
+            'centre 8-92% of its height. The top 40% is only a calm, evenly lit wall, sky or soft background with '
+            'gentle light and shadow, with nothing hanging into it, the top-right corner included.'
+        )
+    if composition in ('left', 'right'):
+        subject_side, calm_side = ('right', 'left') if composition == 'left' else ('left', 'right')
+        corner = 'The top-right corner is part of this calm area. ' if calm_side == 'right' else 'The top-right corner stays calm too. '
+        return (
+            f'Composition: the main subject and all of its decor sit in the {subject_side} 55% of the frame, within the '
+            f'centre 8-92% of its height. The {calm_side} 45% of the frame is calm: a softly lit wall, soft drapes or an '
+            f'out-of-focus background with gentle light and shadow, with nothing standing in it. {corner}'.rstrip()
         )
     return (
-        'Composition: the main subject sits in the upper-middle of the frame, and the lowest 35% of the frame eases '
-        'into a calm, softly lit, uncluttered part of the same scene (soft ground, water, sky or an out-of-focus '
-        'backdrop - whatever suits it); the top-right corner is calm and uncluttered too.'
+        'Composition: the main subject and all of its decor sit in the upper 60% of the frame, within the centre '
+        '8-92% of its height. The lowest 40% shows only the smooth, softly lit floor or ground in front of the scene, '
+        'with gentle reflections and nothing standing on it; the top-right corner stays calm, a softly lit part of '
+        'the background wall or sky.'
     )
 
 
@@ -112,8 +157,8 @@ def _brand_style_lines(brand_profile):
     colors = [c['hex'] for c in (getattr(brand_profile, 'brand_colors', None) or []) if c.get('hex')][:4]
     if colors:
         lines.append(
-            f'Brand palette: {", ".join(colors)} - let it guide the colour grade, lighting, props and surfaces so the '
-            'whole picture feels on-brand.'
+            f'Brand palette: {", ".join(colors)} - these are the dominant colours of the picture (walls, surfaces, '
+            'decor, light); no strong colours outside it.'
         )
     if (brand_profile.visual_style or '').strip():
         lines.append(f'Brand visual style: {brand_profile.visual_style.strip()[:250]}.')
@@ -130,23 +175,28 @@ def _brand_style_lines(brand_profile):
 
 def build_image_prompt(
     company, brand_profile, creative_type, platform, prompt_brief, product_info, variation_number, variation_count=3,
-    extra_guidance='', scene_description='',
+    extra_guidance='', scene_description='', composition='bottom',
 ):
     """A full, richly detailed scene for the calendar entry, in the brand's palette and visual style.
 
     `scene_description` is the brief rewritten by the text AI as a clear visual description (see
     build_copy_prompt); the raw brief - often misspelt and full of "create a ... for" - is only the
-    fallback. The brand alignment template (layouts.py) adds one composition rule: the part of the
-    frame where the text goes, and the top-right corner where the logo goes, stay calm.
+    fallback. `composition` adds one rule: which part of the frame (bottom, top, left or right) stays calm for
+    the text, with the top-right corner, where the logo goes, calm too.
 
     The prompt is written in purely visual, positive terms. The words text / lettering / logo /
     caption are kept out of it: image models, FLUX especially, tend to paint any such word into the
     picture - "do not draw text" is the surest way to get text. The compositor draws the real text
     and logo afterwards.
     """
-    from .layouts import layout_for
-
     scene = (scene_description or '').strip() or _scene_from_brief(prompt_brief)
+    # The image model paints any name it is given onto a screen, a notebook or a sign (and misspells it): the brand's
+    # name never goes into the picture prompt - the real logo is composited afterwards.
+    name = (getattr(company, 'name', '') or '').strip()
+    if name:
+        scene = re.sub(re.escape(name), '', scene, flags=re.IGNORECASE)
+        scene = re.sub(r'\s{2,}', ' ', scene).strip(' ,')
+    look = LOOKS[look_for(creative_type, brand_profile)]
     mood = TYPE_MOOD.get(creative_type, '')
     variation_note = (
         f'This is variation {variation_number} of {variation_count} - make it visually distinct from the '
@@ -159,17 +209,20 @@ def build_image_prompt(
         context = ', '.join(str(p) for p in (company.products or [])[:3])
 
     lines = [
-        f'A premium editorial advertising photograph, portrait 4:5: {scene[:700].rstrip(" .")}.' if scene else
+        f'A premium editorial advertising photograph, portrait 4:5: {scene[:600].rstrip(" .")}.' if scene else
         'A premium editorial advertising photograph, portrait 4:5, that suits the brand and its audience.',
-        'A complete, richly detailed environment fills the whole frame edge to edge, with depth, layered foreground and '
-        'background, true-to-life materials and warm, natural cinematic light. Shot on a full-frame camera with a 50mm '
-        'lens: photorealistic and razor-sharp, with the main subject large and clear and the background softly blurred.',
+        'A complete, richly detailed environment fills the whole frame edge to edge, never one object on an empty '
+        'backdrop: a real place with depth - a framing element in the foreground (architecture, foliage or decor), a '
+        f'clear focal subject in the middle ground, and a distant background with atmosphere (a skyline, a landscape or '
+        f'interior depth) under {look["light"]}. Wide cinematic composition, photorealistic, '
+        'ultra-high-resolution full-frame 50mm photograph with crisp fine detail and natural deep focus (nothing '
+        f'smeared into bokeh), true-to-life materials, a refined luxurious finish, {look["finish"]}.',
     ]
     if mood:
         lines.append(f'Mood and styling: {mood}.')
     # The layout needs come before the brand lines: a provider with a short prompt limit (Cloudflare
     # FLUX, 2048) cuts from the end, and the calm areas for the text and logo matter most after the scene.
-    lines.append(_composition_sentence(layout_for(creative_type)['placement']))
+    lines.append(_composition_sentence(composition))
     lines += _brand_style_lines(brand_profile)
     if context:
         lines.append(f'Also: {context}')
@@ -212,26 +265,49 @@ def build_copy_prompt(
 ):
     format_guidance = CREATIVE_TYPE_GUIDANCE.get(creative_type, 'a social media creative')
     platform_guidance = PLATFORM_GUIDANCE.get(platform, PLATFORM_GUIDANCE['general'])
+    look_phrase = LOOKS[look_for(creative_type, brand_profile)]['copy']
     role_lines = [
         # Matches the fixed layout system's typography hierarchy (see compositor) - each
         # field has a distinct, non-overlapping job.
         'This copy fills a premium editorial layout with a strict typographic hierarchy - write '
         'each field to match its exact role, not just a variation of the same sentence:',
-        '- eyebrow: a very short (1-4 word) small-caps kicker/label above the headline, e.g. "THE" '
-        'or a short category/campaign label.',
-        '- headline: the single large, high-impact statement - short, punchy, the main hook.',
-        '- description: 1-2 short sentences of supporting copy beneath the headline.',
+        '- eyebrow: a very short kicker above the headline - a category or campaign label of 1-4 words, or up to '
+        'three keywords separated by " / " (for example "Strategy / Technology / Growth").',
+        '- headline: the single large, high-impact statement - short and punchy, at most 8 words, as one line or as '
+        'two short parallel sentences ("Ideas Into Innovation. Technology Into Growth."). The word that closes the '
+        'headline - and each of its sentences - is set in emphasis, so end each on the word that carries the idea '
+        '("Building Tomorrow\'s Businesses, Today").',
+        '- description: ONE short sentence (at most 12 words) of supporting copy beneath the headline, set in small '
+        'widely spaced capitals like a sub-line ("Modern solutions for a smarter tomorrow.").',
         '- cta: a short, understated call to action (2-4 words).',
-        '- visual_scene: ONE clear, concrete English description (30-70 words) of the finished picture an image '
-        'model should draw for this brief - a full, richly detailed scene: the main subject, the setting and '
-        'background, props, what is happening, the light and the mood, in the brand\'s visual style and colour '
-        'palette. Set it in a world that suits the business and its audience (for a property brand, a refined '
-        'modern interior or entrance dressed with the occasion\'s decor against a softly lit, uncluttered wall; for a food '
-        'brand, a beautifully laid table) so the picture feels made for this brand, not generic. Follow the creative '
-        'brief and the calendar entry exactly, fix any spelling, and spell out place, '
-        'festival and insider references as what they look like - for example "Ganesh visarjan in the sea like '
-        'Lalbaugcha Raja" becomes "a very large, grand Ganesha idol with a tall golden crown, decorated with '
-        'marigold garlands, being immersed into the open sea, waves rising around it, devotees in the shallow '
+        '- highlights: for a business, product, event or announcement creative, 3 or 4 of the company\'s services or '
+        'strengths as labels of 1-3 words each, taken from the company services listed below ("Web Development", '
+        '"ERP Solutions", "AI & Automation"); an empty array for a greeting or a testimonial.',
+        '- tagline: a 2-5 word sign-off for the company shown in the footer ("Your Technology Partner"); an empty '
+        'string for a greeting or a testimonial.',
+        'If the brief or calendar entry is a greeting for a festival or occasion, write a greeting, not a sales '
+        'pitch: the eyebrow a short greeting word ("Happy", "Wishing you a"), the headline the occasion\'s name, the '
+        'description one warm line in the brand voice, and cta an empty string.',
+        '- visual_scene: ONE clear, concrete English description (40-80 words) of the finished picture an image '
+        'model should draw for this brief - a cinematic, location-based, richly detailed scene built in layers: a '
+        'real place with a clear focal subject (a person seen naturally from behind, a building, a product in '
+        f'context), a framing element in the foreground and real depth behind, with {look_phrase}, in the brand\'s '
+        'visual style and colour palette. Never a lone object on an empty or '
+        'gradient background and never a tabletop still life of small objects. Set it in a world that suits the '
+        'business and its audience (for a property brand, a refined modern entrance or living space with real wood, '
+        'stone and glass, dressed with the occasion\'s decor and warm sun falling across a wall; for a corporate or '
+        'events brand, a real venue such as a skyline terrace, a grand hall or an architectural lobby at golden '
+        'hour; for a software, digital or marketing brand, a dark polished stone podium ringed by a thin glowing line '
+        'of light carrying a laptop with an abstract dashboard on its screen, translucent glass panels of abstract '
+        'charts and simple glyph icons floating around it, in front of floor-to-ceiling windows over a city '
+        'skyline at dusk; for a food brand, a beautifully laid table) so the picture feels made for this brand, not '
+        'generic. Every screen, panel, book and object in the scene shows only abstract charts and shapes, never '
+        'any writing, numbers or brand marks. '
+        'Follow the creative brief and the calendar entry exactly, fix any spelling, and ignore anything in the '
+        'brief about layout, typography, text, logos, alignment or website design - describe only the photograph. '
+        'Spell out place, festival and insider references as what they look like - for example "Ganesh visarjan in '
+        'the sea like Lalbaugcha Raja" becomes "a very large, grand Ganesha idol with a tall golden crown, decorated '
+        'with marigold garlands, being immersed into the open sea, waves rising around it, devotees in the shallow '
         'water, golden evening light". Describe only what is visible: no instructions, no festival or brand '
         'names, no mention of text, letters or logos.',
     ]
@@ -244,6 +320,9 @@ def build_copy_prompt(
         *_calendar_lines(calendar_item),
         f'Product information: {product_info or _joined(company.products, empty="not specified")}',
     ]
+    services = [str(s)[:60] for s in (company.services or [])[:8] if s]
+    if services:
+        lines.append(f'Company services: {"; ".join(services)}')
     if brand_context is not None and brand_context.summary:
         lines += ['', 'Brand context:', brand_context.summary]
     elif brand_profile is not None:

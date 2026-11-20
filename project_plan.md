@@ -52,27 +52,61 @@ Every creative - festival, promotional, product, event, story, ... - is now made
    cream backdrop with a single object on it.
 3. Follows the brand guidelines: brand colours, visual style, tone and do's / don'ts go into the image prompt; the
    copy follows the brand voice, tone and restricted words.
-4. Follows the brand alignment template (apps/creative_generation/layouts.py): the brand LOGO is placed LARGE in the
-   TOP-RIGHT corner, same margin and size, on every type. Only the text stack moves:
-     below - centred along the bottom, subject in the upper-middle:
-             post, carousel, story, festival, product (and the legacy instagram/facebook/linkedin post types)
-     top   - left-aligned at the top-left beside the logo, subject in the lower-middle:
-             promotional, event, announcement, educational, testimonial
-   Sizes: 4:5 portrait (1080 x 1350) for everything except stories, 9:16 (1080 x 1920).
+4. Is art-directed for its own picture (apps/creative_generation/art_direction.py), not poured into one template.
+   The ONLY fixed element is the LOGO: the original uploaded file, top-right, on every creative of every type - never
+   redrawn by AI and never recoloured (where its own colours would not stand out from the picture, a clean rounded
+   plate of a contrasting tone goes behind it). Everything else follows the picture:
+   - each variation's picture is asked to leave calm space on a different side (bottom, left, right or top), so the
+     variations of one request are composed differently;
+   - the text stack (kicker, headline, body, optional CTA) is placed where that picture is really calm: left, right,
+     in a narrow editorial column or - only when nothing else fits - centred; never on the subject;
+   - typography is a premium editorial hierarchy, not bold text dropped on a picture: a small, widely spaced, soft kicker
+     (a category or up to three keywords, "Strategy / Technology / Growth"), a large LIGHT serif headline whose last
+     word is set in italic (so the copy AI ends it on the key word), softer regular-weight body copy, and a quiet
+     underlined link with an arrow instead of a heavy button. Body and kicker are a softer tone of the headline ink,
+     graded towards the picture behind them. Curly quotes, real italics and nothing cut off with an ellipsis (the body
+     copy shrinks to fit its column). The look comes from a preset chosen for the creative type and the brand's tone
+     (web_editorial, editorial_serif, quiet_luxury, gold_serif, serif_caps, modern_caps; the heavy bold_sans only for
+     promotions), varied by a per-generation seed. Only the brand's fonts and colours and the bundled type set are used;
+   - a business creative (every type except greetings and testimonials) that has services and/or a website is dressed
+     as a designed POSTER, like the ChatGPT reference: the kicker in a header row opposite the logo (with a short accent
+     rule), a large light headline of one or two short sentences with the word that closes each sentence in the accent
+     colour (tech_luxe, brand sans) or in italic (luxe_frame, serif), a small widely spaced capitals sub-line with a
+     short rule under it, then - along the bottom - a strip of 3-4 of the company's services (numbered, hairline
+     dividers) and a footer: the company name and sign-off on the left, the website after an accent rule on the right.
+     The website is the call to action, so the CTA button is dropped. The text stack is placed in the calm space between
+     the header and the strip, and may be a wide flush-left or flush-right block as well as a column;
+   - all text is set by the compositor from the real copy, so spelling is always exact;
+   - delivered in HD: the picture is enlarged to CREATIVE_OUTPUT_WIDTH (default 2048 px; 2048 x 2560 for a 4:5 post)
+     BEFORE the text and logo are drawn, so they are set sharp at the final size. JPEGs stay under 4.5 MB.
+   Sizes: 4:5 portrait for everything except stories, 9:16.
 
 How the platform implements it:
-- Copy AI (prompts.build_copy_prompt): writes eyebrow / headline / description / CTA and `visual_scene` - the brief and
+- Copy AI (prompts.build_copy_prompt): writes eyebrow / headline (up to 8 words, one or two short sentences) / description
+  (a sub-line) / CTA, the poster's `highlights` (3-4 service labels taken from Company.services) and `tagline`, and
+  `visual_scene` - the brief and
   the calendar entry rewritten as one clear description of the scene (misspelt or insider briefs such as "ganesh
   visrajan in sea like lalbaugcha raja" become a concrete picture). It runs first, in the same single request.
-- Image AI (prompts.build_image_prompt): draws that scene in the brand palette and style, keeping the part of the frame
-  where the text goes - and the top-right corner - calm. Its prompt never contains the words text / logo / lettering /
-  caption (image models paint any such word into the picture).
-- Compositor (compositor.compose_creative): draws the real logo and the real text over the scene on a soft gradient
-  of the brand colour. The scene itself is never extended, stretched or smoothed (a taller picture is centre-cropped
-  to the ratio). Hindi / Marathi text is supported (Noto Devanagari fonts in creative_generation/fonts).
-- Picture quality depends on the image provider: gpt-image-1 (the OpenAI provider, same family as ChatGPT's image tool)
-  gives the closest result; Cloudflare FLUX is the free fallback.
-- Tests: tests/creative_generation (test_prompts, test_layouts, test_compositor, test_creative_generation),
+- Image AI (prompts.build_image_prompt): draws that scene in the brand palette and style as a cinematic LOCATION with a
+  focal subject, a framing foreground and real depth (never a tabletop still life), ultra-sharp, in deep focus and with a
+  refined luxurious finish. Business creatives get the dark, rich, low-key luxury look of a premium tech poster (deep
+  tones, luminous accent light - for a software or digital brand a polished podium with floating glass panels of
+  abstract charts in front of a city skyline at dusk); greetings, testimonials and brands whose own style is light-filled
+  stay warm and bright (prompts.look_for). The company's name is stripped from the scene so the model never paints it
+  on an object, and every screen or panel shows only abstract charts. It leaves calm space on the side the variation's composition names (the top-right corner always
+  stays calm for the logo). Its prompt never contains the words text / logo / lettering / caption (image models paint
+  any such word into the picture).
+- Compositor (compositor.compose_creative, with art_direction.py): measures where the picture is busy, places the text
+  block (family, position) in the calm area - favouring the composition that was asked for, but trusting what the
+  picture really looks like - picks the typography preset, draws the logo top-right, and draws the real text over a
+  veil only as strong as the contrast needs (none when the text already reads). The scene itself is never stretched or
+  smoothed (a taller picture is centre-cropped to the ratio). Hindi / Marathi text is supported (Noto Devanagari fonts
+  in creative_generation/fonts). `placement='below'|'top'` still pins the old fixed layouts.
+- Picture quality depends on the image provider and its settings: gpt-image-1.5 (the OpenAI provider, same family as
+  ChatGPT's image tool) gives the closest result and Cloudflare FLUX is the free fallback. For OpenAI,
+  OPENAI_IMAGE_QUALITY=high draws noticeably finer detail than medium but costs several times more per image.
+- Tests: tests/creative_generation (test_prompts, test_layouts, test_art_direction, test_compositor,
+  test_creative_generation),
   tests/content_calendar/test_tasks.py.
 
 

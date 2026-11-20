@@ -302,6 +302,11 @@ AI_IMAGE_COST_PER_IMAGE_USD = env('AI_IMAGE_COST_PER_IMAGE_USD', default='')
 OPENAI_IMAGE_SIZE = env('OPENAI_IMAGE_SIZE', default='1024x1536')
 OPENAI_IMAGE_QUALITY = env('OPENAI_IMAGE_QUALITY', default='medium')
 
+# Width (px) the finished creative is delivered at. The image models return about 1024 px wide; the picture is
+# enlarged with a high-quality filter to this width before the text and logo are drawn, so they are set sharp
+# at the final size. 2048 = 2048 x 2560 for a 4:5 post. Never reduces a picture already that wide.
+CREATIVE_OUTPUT_WIDTH = env.int('CREATIVE_OUTPUT_WIDTH', default=2048)
+
 
 # AI voice-over provider (Epic 07: AI Video Generation)
 # gTTS is free and needs no API key - it works out of the box.

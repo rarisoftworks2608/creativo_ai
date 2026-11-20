@@ -16,6 +16,7 @@ from apps.prompt_templates.services import get_active_guidance
 from common.ai_errors import AIProviderError
 
 from . import prompts
+from .art_direction import composition_for
 from .compositor import compose_creative
 from .image_client import get_image_provider
 from .layouts import layout_for
@@ -93,6 +94,9 @@ def generate_creative_variations(self, generation_request_id):
     spec = layout_for(request.creative_type)
     image_count = 0
     for variation_number in range(1, request.variation_count + 1):
+        # Each variation is composed differently: the picture is asked to leave calm space at the bottom, left,
+        # right or top, and the layout and typography then follow that picture (art_direction.py).
+        composition = composition_for(request.id, variation_number)
         copy_prompt = prompts.build_copy_prompt(
             company, brand_profile, brand_context, request.creative_type, request.platform,
             request.prompt_brief, request.product_info, extra_guidance=copy_guidance,
@@ -108,7 +112,7 @@ def generate_creative_variations(self, generation_request_id):
             image_prompt = prompts.build_image_prompt(
                 company, brand_profile, request.creative_type, request.platform, request.prompt_brief,
                 request.product_info, variation_number, request.variation_count, extra_guidance=image_guidance,
-                scene_description=copy_data.get('visual_scene', ''),
+                scene_description=copy_data.get('visual_scene', ''), composition=composition,
             )
             image_bytes, mime_type = image_provider.generate_image(prompt=image_prompt)
         except AIProviderError as exc:
@@ -121,7 +125,8 @@ def generate_creative_variations(self, generation_request_id):
         # The full copy is always generated and saved on the variation below regardless
         # (it's the real caption/eyebrow/headline/description/CTA text used when
         # publishing) - this only controls whether it's *also* baked into the image
-        # pixels via the brand alignment template (layouts.py): text per type, logo top-right.
+        # pixels, art-directed for this picture (art_direction.py): the text where it is calm, the original logo
+        # in the calmest corner, typography varied by creative type and by seed.
         image_bytes, mime_type = compose_creative(
             image_bytes, mime_type,
             eyebrow=copy_data.get('eyebrow', '') if request.include_text_overlay else '',
@@ -129,7 +134,15 @@ def generate_creative_variations(self, generation_request_id):
             description=copy_data.get('description', '') if request.include_text_overlay else '',
             cta=copy_data.get('cta', '') if request.include_text_overlay else '',
             logo_bytes=logo_bytes, symbol_bytes=symbol_bytes, brand_profile=brand_profile,
-            placement=spec['placement'], aspect=spec['aspect'],
+            placement=spec['placement'], aspect=spec['aspect'], creative_type=request.creative_type,
+            # Varies the layout and typography between generations and between the variations of one request.
+            variation_seed=request.id * 7 + variation_number, composition=composition,
+            output_width=settings.CREATIVE_OUTPUT_WIDTH,
+            # The poster furniture of a business creative: the services strip and the footer (see compositor).
+            highlights=(copy_data.get('highlights') or []) if request.include_text_overlay else [],
+            tagline=copy_data.get('tagline', '') if request.include_text_overlay else '',
+            brand_name=company.name if request.include_text_overlay else '',
+            website=company.website if request.include_text_overlay else '',
         )
         ext = MIME_EXTENSIONS.get(mime_type, 'png')
         variation = GenerationVariation(

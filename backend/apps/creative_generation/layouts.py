@@ -1,36 +1,25 @@
-"""The brand alignment template shared by every creative: where the logo and the text go.
+"""What every creative type shares: the picture size, and that the composition is art-directed per picture.
 
-Whatever the creative type, the brand logo sits large in the TOP-RIGHT corner at the same margin
-and size. The only thing that differs between types is where the text stack is placed:
+The ONLY fixed thing is the brand logo: the original file, top-right, on every creative of every type.
+Everything else follows the picture. Each variation's picture is asked to leave calm space at the bottom,
+left, right or top (art_direction.COMPOSITIONS), and the compositor measures where the picture is really
+calm and places the text stack (left, right, a narrow column or, only when nothing else fits, centred) there,
+in a typography preset that suits the creative type and the brand - see art_direction.py. The picture
+itself is always a full scene made from the calendar entry and the brand guidelines (prompts.py).
 
-    below - the text stack is centred along the bottom (subject in the upper-middle)
-    top   - the text stack is left-aligned at the top-left, beside the logo (subject in the lower-middle)
-
-The picture itself is always a full scene made from the calendar entry and the brand guidelines
-(see prompts.py); this template only decides which part of it is kept calm for the text and logo.
-
-Change PLACEMENT_BY_TYPE to move a type; everything else (the image prompt that keeps the right
-area calm, the compositor that draws the text and logo) follows from the result.
+`placement` is 'auto' for every type. The compositor still understands 'below' (centred along the
+bottom) and 'top' (left-aligned at the top-left) for anyone who wants to pin the text.
 """
 
-BELOW = 'below'
-TOP = 'top'
-
-PLACEMENT_BY_TYPE = {
-    'promotional_creative': TOP,
-    'event_creative': TOP,
-    'announcement_creative': TOP,
-    'educational_creative': TOP,
-    'testimonial_creative': TOP,
-}  # every other type: BELOW
+AUTO = 'auto'
 
 PORTRAIT_4_5 = 1.25          # Instagram 1080 x 1350
 STORY_9_16 = 16 / 9          # 1080 x 1920
 
 
 def layout_for(creative_type):
-    """{'placement': 'below' | 'top', 'aspect': height / width} for a creative type."""
+    """{'placement': 'auto', 'aspect': height / width} for a creative type."""
     return {
-        'placement': PLACEMENT_BY_TYPE.get(creative_type, BELOW),
+        'placement': AUTO,
         'aspect': STORY_9_16 if creative_type == 'story' else PORTRAIT_4_5,
     }
