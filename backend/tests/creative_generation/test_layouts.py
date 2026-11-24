@@ -20,5 +20,17 @@ class LayoutForTests(SimpleTestCase):
         for creative_type in ('post', 'carousel', 'promotional_creative', 'festival_creative'):
             self.assertAlmostEqual(layout_for(creative_type)['aspect'], 1.25, msg=creative_type)
 
-    def test_the_layout_only_describes_placement_and_size(self):
-        self.assertEqual(set(layout_for('post')), {'placement', 'aspect'})
+    def test_the_layout_only_describes_placement_size_and_safe_areas(self):
+        self.assertEqual(set(layout_for('post')), {'placement', 'aspect', 'ratio', 'safe_top', 'safe_bottom'})
+
+    def test_an_allowed_aspect_ratio_is_used_and_a_disallowed_one_falls_back_to_the_type_default(self):
+        self.assertAlmostEqual(layout_for('post', '1:1')['aspect'], 1.0)
+        self.assertAlmostEqual(layout_for('post', '1.91:1')['aspect'], 1 / 1.91)
+        self.assertEqual(layout_for('story', '1:1')['ratio'], '9:16')  # a story is always vertical
+        self.assertEqual(layout_for('carousel', '1.91:1')['ratio'], '4:5')
+
+    def test_only_a_story_keeps_its_text_out_of_the_app_interface_bands(self):
+        story = layout_for('story')
+        self.assertGreater(story['safe_top'], 0.1)
+        self.assertGreater(story['safe_bottom'], 0.15)
+        self.assertEqual((layout_for('post')['safe_top'], layout_for('post')['safe_bottom']), (0.0, 0.0))

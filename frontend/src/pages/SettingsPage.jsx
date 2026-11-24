@@ -62,7 +62,7 @@ export default function SettingsPage() {
     <div>
       <div className="page-header">
         <div>
-          <h1>My Account</h1>
+          <h1>My account</h1>
           <p className="page-subtitle">Manage your profile, security, and notification preferences.</p>
         </div>
       </div>

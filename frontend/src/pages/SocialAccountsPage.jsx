@@ -12,7 +12,6 @@ import {
 } from '../api/socialAccounts'
 import { extractErrorMessage } from '../api/client'
 import { useAuth } from '../context/AuthContext'
-import { useCompanyWorkspace } from '../context/CompanyWorkspaceContext'
 import Modal from '../components/Modal'
 import { formatCompact, formatDate, formatDateTime, timeAgo } from '../utils/format'
 import { OAUTH_COMPANY_KEY } from '../utils/oauth'
@@ -38,7 +37,6 @@ export default function SocialAccountsPage() {
   const { id: companyId } = useParams()
   const [searchParams, setSearchParams] = useSearchParams()
   const { isAdmin } = useAuth()
-  const workspace = useCompanyWorkspace()
 
   const [accounts, setAccounts] = useState([])
   const [oauth, setOauth] = useState(null)
@@ -173,7 +171,7 @@ export default function SocialAccountsPage() {
         <div>
           <h1>Social accounts</h1>
           <p className="page-subtitle">
-            {workspace?.company?.name ? `${workspace.company.name} · ` : ''}Connect the Instagram, Facebook and LinkedIn accounts content
+            Connect the Instagram, Facebook and LinkedIn accounts content
             is published to.
           </p>
         </div>

@@ -74,7 +74,16 @@ def build_script_prompt(
     return '\n'.join(lines)
 
 
-def build_scene_image_prompt(company, brand_profile, video_type, visual_description):
+# How each video shape is cropped from the picture, so the subject survives the crop.
+FRAME_GUIDANCE = {
+    '9:16': 'The video is vertical (9:16): the picture is cropped to a tall frame, so keep the main subject in the '
+            'central vertical third and avoid important detail near the left and right edges.',
+    '16:9': 'The video is landscape (16:9): the picture is cropped to a wide frame, so keep the main subject in the '
+            'central horizontal band and avoid important detail near the top and bottom edges.',
+}
+
+
+def build_scene_image_prompt(company, brand_profile, video_type, visual_description, aspect_ratio=''):
     format_guidance = VIDEO_TYPE_GUIDANCE.get(video_type, 'a short marketing video')
     lines = [
         f'Create a single still visual for one scene of {format_guidance} for "{company.name}".',
@@ -82,7 +91,10 @@ def build_scene_image_prompt(company, brand_profile, video_type, visual_descript
         *_brand_lines(brand_profile),
         'This still frame will be slowly panned/zoomed in the final video - keep the subject '
         'well-centered with room around the edges. Do not include any text overlay.',
+        'Sharp focus, crisp fine detail, high resolution, clean professional photography.',
     ]
+    if aspect_ratio in FRAME_GUIDANCE:
+        lines.append(FRAME_GUIDANCE[aspect_ratio])
     return '\n'.join(lines)
 
 

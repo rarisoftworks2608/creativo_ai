@@ -1,3 +1,4 @@
+import inspect
 import random
 
 from celery import shared_task
@@ -57,6 +58,22 @@ def _synthesize_voice(request, scenes, voice_provider):
     return ''
 
 
+# height / width of each video shape - an image provider that can draw at a chosen size (Gemini, OpenAI) then
+# draws the scene vertical for a reel instead of a square that has to be cropped and enlarged to fill it.
+VIDEO_ASPECTS = {'9:16': 16 / 9, '1:1': 1.0, '16:9': 9 / 16}
+
+
+def _scene_image(image_provider, prompt, aspect_ratio):
+    aspect = VIDEO_ASPECTS.get(aspect_ratio)
+    try:
+        accepts_aspect = 'aspect' in inspect.signature(image_provider.generate_image).parameters
+    except (TypeError, ValueError):
+        accepts_aspect = False
+    if aspect and accepts_aspect:
+        return image_provider.generate_image(prompt=prompt, aspect=aspect)
+    return image_provider.generate_image(prompt=prompt)
+
+
 def _pick_music(request):
     if not request.music_enabled:
         return None
@@ -98,6 +115,8 @@ def _render_and_save(request, scenes, brand_profile):
             logo_path=logo, include_logo=request.include_logo,
             music_field=music.file if music else None,
             outro=_outro_for(request, brand_profile),
+            # Music on but no track in the library: the built-in synthesised bed, so the video isn't silent.
+            builtin_music=bool(request.music_enabled and music is None), music_seed=request.pk,
         )
     except AIProviderError as exc:
         return str(exc)
@@ -112,7 +131,8 @@ def _render_and_save(request, scenes, brand_profile):
     request.duration_seconds = duration
     request.resolution = resolution
     request.file_size_bytes = len(video_bytes)
-    request.usage = {**(request.usage or {}), 'music_track': music.name if music else None,
+    music_name = music.name if music else ('Built-in ambient bed' if request.music_enabled else None)
+    request.usage = {**(request.usage or {}), 'music_track': music_name,
                      'outro': bool(request.include_outro)}
     return ''
 
@@ -229,10 +249,10 @@ def generate_video(self, video_request_id):
 
     for scene in scenes:
         image_prompt = prompts.build_scene_image_prompt(
-            company, brand_profile, request.video_type, scene.visual_description,
+            company, brand_profile, request.video_type, scene.visual_description, aspect_ratio=request.aspect_ratio,
         )
         try:
-            image_bytes, mime_type = image_provider.generate_image(prompt=image_prompt)
+            image_bytes, mime_type = _scene_image(image_provider, image_prompt, request.aspect_ratio)
         except AIProviderError as exc:
             _fail(request, f'Visual generation failed on scene {scene.scene_number}: {exc}')
             return
@@ -342,8 +362,10 @@ def regenerate_scene_image(scene_id):
     request = scene.video_request
     brand_profile = BrandProfile.objects.filter(company=request.company).first()
     image_provider = get_image_provider()
-    prompt = prompts.build_scene_image_prompt(request.company, brand_profile, request.video_type, scene.visual_description)
-    image_bytes, mime_type = image_provider.generate_image(prompt=prompt)
+    prompt = prompts.build_scene_image_prompt(
+        request.company, brand_profile, request.video_type, scene.visual_description, aspect_ratio=request.aspect_ratio,
+    )
+    image_bytes, mime_type = _scene_image(image_provider, prompt, request.aspect_ratio)
     for field in (scene.image, scene.video_clip):
         if field:
             field.delete(save=False)

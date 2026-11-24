@@ -9,6 +9,7 @@ import ForgotPasswordPage from './pages/ForgotPasswordPage'
 import ResetPasswordPage from './pages/ResetPasswordPage'
 import './App.css'
 import './styles/platform.css'
+import './styles/theme.css'
 
 const AdminDashboardPage = lazy(() => import('./pages/AdminDashboardPage'))
 const CompaniesListPage = lazy(() => import('./pages/CompaniesListPage'))

@@ -330,14 +330,16 @@ AI_VOICE_PROVIDER = env('AI_VOICE_PROVIDER', default='gtts')
 AI_VIDEO_PROVIDER = env('AI_VIDEO_PROVIDER', default='huggingface')
 AI_VIDEO_MODEL = env('AI_VIDEO_MODEL', default='Wan-AI/Wan2.2-TI2V-5B')
 REPLICATE_API_TOKEN = env('REPLICATE_API_TOKEN', default='')
+# 'agnes' (Agnes AI, apihub.agnes-ai.com) reads AGNES_API_KEY from the environment (set it in .env):
+# image-to-video, AI_VIDEO_MODEL=agnes-video-v2.0.
 
 # Video rendering (Epic 07: Processing - FFmpeg, Compression). FFMPEG_BINARY may be a
 # full path (e.g. C:/ffmpeg/bin/ffmpeg.exe); blank = look it up on PATH, then fall back
 # to the binary bundled by the optional `imageio-ffmpeg` pip package if it's installed.
 FFMPEG_BINARY = env('FFMPEG_BINARY', default='')
 # H.264 CRF (lower = better quality/bigger file; 18-28 is sensible) and x264 preset.
-VIDEO_CRF = env.int('VIDEO_CRF', default=23)
-VIDEO_PRESET = env('VIDEO_PRESET', default='veryfast')
+VIDEO_CRF = env.int('VIDEO_CRF', default=18)
+VIDEO_PRESET = env('VIDEO_PRESET', default='medium')
 
 
 # Public URLs (Epic 11: Publishing, Epic 12: WhatsApp)

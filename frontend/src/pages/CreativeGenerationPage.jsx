@@ -1,8 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
-  createGenerationRequest,
+  createCreative,
+  downloadCreativeZip,
+  editVariation,
+  getCreativeOptions,
   listGenerationRequests,
+  regenerateVariation,
   retryGenerationRequest,
   selectVariation,
 } from '../api/creativeGeneration'
@@ -11,45 +15,15 @@ import { getCompany } from '../api/companies'
 import { extractErrorMessage } from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import Modal from '../components/Modal'
-import VariationGrid from '../components/VariationGrid'
 import ContentQueue from '../components/ContentQueue'
+import CreativeForm from '../components/CreativeForm'
+import CreativeResult from '../components/CreativeResult'
 import { isVideoContentType } from '../utils/contentType'
-
-// Legacy platform-bundled types (instagram_post/facebook_post/linkedin_post) are
-// deliberately not offered here anymore - platform is now its own field (PLATFORMS
-// below) so it can be combined with any creative type, e.g. an Instagram Festival
-// Creative or a LinkedIn Announcement Creative. Old requests still display fine
-// via the backend's legacy CreativeType choices.
-const CREATIVE_TYPES = [
-  { value: 'post', label: 'Post' },
-  { value: 'carousel', label: 'Carousel' },
-  { value: 'story', label: 'Story' },
-  { value: 'promotional_creative', label: 'Promotional Creative' },
-  { value: 'festival_creative', label: 'Festival Creative' },
-  { value: 'product_creative', label: 'Product Creative' },
-  { value: 'educational_creative', label: 'Educational Creative' },
-  { value: 'event_creative', label: 'Event Creative' },
-  { value: 'announcement_creative', label: 'Announcement Creative' },
-  { value: 'testimonial_creative', label: 'Testimonial Creative' },
-]
-
-const PLATFORMS = [
-  { value: 'instagram', label: 'Instagram' },
-  { value: 'facebook', label: 'Facebook' },
-  { value: 'linkedin', label: 'LinkedIn' },
-  { value: 'general', label: 'General / Multi-platform' },
-]
-
-const VARIATION_COUNTS = [1, 2, 3]
 
 const IN_PROGRESS_STATUSES = ['pending', 'queued', 'processing']
 
-// Defaults to 1 rather than the max of 3 - each variation burns a real AI image
-// credit, so testing/iterating on a brief shouldn't cost 3x by default. Bump it
-// back up to 3 once a brief is confirmed and ready to go live.
-const EMPTY_FORM = {
-  creative_type: 'post', platform: 'instagram', variation_count: 1, include_text_overlay: true,
-  content_calendar_item: '', prompt_brief: '', product_info: '',
+function isBusy(request) {
+  return IN_PROGRESS_STATUSES.includes(request.status) || request.variations.some((v) => v.status === 'processing')
 }
 
 export default function CreativeGenerationPage() {
@@ -62,8 +36,8 @@ export default function CreativeGenerationPage() {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
 
+  const [options, setOptions] = useState(null)
   const [showCreate, setShowCreate] = useState(false)
-  const [form, setForm] = useState(EMPTY_FORM)
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState('')
 
@@ -79,12 +53,14 @@ export default function CreativeGenerationPage() {
       // Control page's Calendar permission is separate from Creative Generation) -
       // skip that fetch for a client so a missing Calendar grant can't take down
       // a page they otherwise do have access to.
-      const [companyData, requestsData, calendarData] = await Promise.all([
+      const [companyData, requestsData, calendarData, optionsData] = await Promise.all([
         getCompany(companyId),
         listGenerationRequests(companyId),
         isAdmin ? listCalendarItems(companyId) : Promise.resolve({ results: [] }),
+        getCreativeOptions(companyId).catch(() => null),
       ])
       setCompany(companyData)
+      setOptions(optionsData)
       setRequests(requestsData.results)
       setCalendarItems(calendarData.results)
     } catch (err) {
@@ -108,7 +84,7 @@ export default function CreativeGenerationPage() {
   }, [companyId])
 
   useEffect(() => {
-    const hasInProgress = requests.some((r) => IN_PROGRESS_STATUSES.includes(r.status))
+    const hasInProgress = requests.some(isBusy)
     if (!hasInProgress) {
       if (pollRef.current) {
         clearInterval(pollRef.current)
@@ -127,16 +103,17 @@ export default function CreativeGenerationPage() {
     }
   }, [requests, refreshList])
 
-  async function handleCreate(event) {
-    event.preventDefault()
+  function replaceRequest(updated) {
+    setRequests((prev) => prev.map((r) => (r.id === updated.id ? updated : r)))
+  }
+
+  async function handleCreate(payload, photoFile) {
     setCreating(true)
     setCreateError('')
     try {
-      const payload = { ...form, content_calendar_item: form.content_calendar_item || null }
-      const created = await createGenerationRequest(companyId, payload)
+      const created = await createCreative(companyId, payload, photoFile)
       setRequests((prev) => [created, ...prev])
       setShowCreate(false)
-      setForm(EMPTY_FORM)
     } catch (err) {
       setCreateError(extractErrorMessage(err, 'Could not start this generation.'))
     } finally {
@@ -144,10 +121,33 @@ export default function CreativeGenerationPage() {
     }
   }
 
+  async function handleEdit(requestId, variation, payload) {
+    // Errors surface inside the edit dialog, so it stays open with the message.
+    const updated = await editVariation(companyId, requestId, variation.id, payload)
+    replaceRequest(updated)
+  }
+
+  async function handleRegenerate(requestId, variation) {
+    try {
+      const updated = await regenerateVariation(companyId, requestId, variation.id)
+      replaceRequest(updated)
+    } catch (err) {
+      setLoadError(extractErrorMessage(err, 'Could not regenerate this image.'))
+    }
+  }
+
+  async function handleDownload(requestId) {
+    try {
+      await downloadCreativeZip(companyId, requestId)
+    } catch (err) {
+      setLoadError(extractErrorMessage(err, 'Could not download this creative.'))
+    }
+  }
+
   async function handleRetry(requestId) {
     try {
       const updated = await retryGenerationRequest(companyId, requestId)
-      setRequests((prev) => prev.map((r) => (r.id === updated.id ? updated : r)))
+      replaceRequest(updated)
     } catch (err) {
       setLoadError(extractErrorMessage(err, 'Could not retry this generation.'))
     }
@@ -156,7 +156,7 @@ export default function CreativeGenerationPage() {
   async function handleSelectVariation(requestId, variationId) {
     try {
       const updated = await selectVariation(companyId, requestId, variationId)
-      setRequests((prev) => prev.map((r) => (r.id === updated.id ? updated : r)))
+      replaceRequest(updated)
     } catch (err) {
       setLoadError(extractErrorMessage(err, 'Could not select this variation.'))
     }
@@ -186,12 +186,12 @@ export default function CreativeGenerationPage() {
 
       <div className="page-header">
         <div>
-          <h1>AI Creative Generation</h1>
-          <p className="page-subtitle">{company.name}</p>
+          <h1>Image creatives</h1>
+          <p className="page-subtitle">Generate image posts for the planned content, then send them for review.</p>
         </div>
         {isAdmin && (
-          <button type="button" className="btn btn-primary" onClick={() => setShowCreate(true)}>
-            + New generation
+          <button type="button" className="btn btn-primary" onClick={() => setShowCreate(true)} disabled={!options}>
+            + New creative
           </button>
         )}
       </div>
@@ -216,182 +216,32 @@ export default function CreativeGenerationPage() {
       ) : (
         <div className="request-list">
           {requests.map((request) => (
-            <RequestCard
+            <CreativeResult
               key={request.id}
               request={request}
-              canRetry={isAdmin}
+              options={options}
+              canManage={isAdmin}
               onRetry={() => handleRetry(request.id)}
-              onSelectVariation={(variationId) => handleSelectVariation(request.id, variationId)}
+              onSelect={(variationId) => handleSelectVariation(request.id, variationId)}
+              onEdit={(variation, payload) => handleEdit(request.id, variation, payload)}
+              onRegenerate={(variation) => handleRegenerate(request.id, variation)}
+              onDownload={() => handleDownload(request.id)}
             />
           ))}
         </div>
       )}
 
-      {isAdmin && showCreate && (
-        <Modal title="New creative generation" onClose={() => setShowCreate(false)}>
-          <form onSubmit={handleCreate}>
-            {createError && <div className="alert alert-error">{createError}</div>}
-            <div className="field-row">
-              <label className="field">
-                <span>Platform *</span>
-                <select
-                  value={form.platform}
-                  onChange={(e) => setForm((p) => ({ ...p, platform: e.target.value }))}
-                  required
-                >
-                  {PLATFORMS.map((p) => (
-                    <option key={p.value} value={p.value}>
-                      {p.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="field">
-                <span>Creative type *</span>
-                <select
-                  value={form.creative_type}
-                  onChange={(e) => setForm((p) => ({ ...p, creative_type: e.target.value }))}
-                  required
-                >
-                  {CREATIVE_TYPES.map((t) => (
-                    <option key={t.value} value={t.value}>
-                      {t.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-            <label className="field">
-              <span>Number of variations *</span>
-              <select
-                value={form.variation_count}
-                onChange={(e) => setForm((p) => ({ ...p, variation_count: Number(e.target.value) }))}
-                required
-              >
-                {VARIATION_COUNTS.map((n) => (
-                  <option key={n} value={n}>
-                    {n} {n === 1 ? 'variation' : 'variations'}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <p className="modal-hint">
-              Each variation is a separate AI image credit - use 1 while testing a brief, 3 once it's ready to go live.
-            </p>
-            <label className="field-checkbox">
-              <input
-                type="checkbox"
-                checked={form.include_text_overlay}
-                onChange={(e) => setForm((p) => ({ ...p, include_text_overlay: e.target.checked }))}
-              />
-              <span>Apply brand layer: logo, brand colors &amp; fonts, headline and CTA on the image</span>
-            </label>
-            <p className="modal-hint">
-              On by default so the creative follows your Brand Management settings. Untick it for a clean photo
-              (the logo is still added); the headline/caption/CTA copy is generated either way.
-            </p>
-            <label className="field">
-              <span>Content calendar item</span>
-              <select
-                value={form.content_calendar_item}
-                onChange={(e) => setForm((p) => ({ ...p, content_calendar_item: e.target.value }))}
-              >
-                <option value="">None (auto-added to the calendar for approval)</option>
-                {calendarItems.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.topic} ({item.scheduled_date})
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="field">
-              <span>Creative brief</span>
-              <textarea
-                rows={3}
-                value={form.prompt_brief}
-                onChange={(e) => setForm((p) => ({ ...p, prompt_brief: e.target.value }))}
-                placeholder="Visual direction / instructions"
-              />
-            </label>
-            <label className="field">
-              <span>Product information</span>
-              <textarea
-                rows={2}
-                value={form.product_info}
-                onChange={(e) => setForm((p) => ({ ...p, product_info: e.target.value }))}
-                placeholder="Defaults to the company's product list"
-              />
-            </label>
-            <p className="modal-hint">
-              Generates {form.variation_count} brand-aware {form.variation_count === 1 ? 'variation' : 'variations'} (image + copy). This runs in the background.
-            </p>
-            <div className="modal-actions">
-              <button type="button" className="btn btn-ghost" onClick={() => setShowCreate(false)}>
-                Cancel
-              </button>
-              <button type="submit" className="btn btn-primary" disabled={creating}>
-                {creating ? 'Starting…' : 'Generate'}
-              </button>
-            </div>
-          </form>
+      {isAdmin && showCreate && options && (
+        <Modal title="New creative" onClose={() => setShowCreate(false)} width={1040}>
+          <CreativeForm
+            options={options}
+            calendarItems={calendarItems}
+            onSubmit={handleCreate}
+            onCancel={() => setShowCreate(false)}
+            submitting={creating}
+            error={createError}
+          />
         </Modal>
-      )}
-    </div>
-  )
-}
-
-const STATUS_LABELS = {
-  pending: 'Pending',
-  queued: 'Queued',
-  processing: 'Processing',
-  succeeded: 'Succeeded',
-  failed: 'Failed',
-}
-
-function RequestCard({ request, canRetry, onRetry, onSelectVariation }) {
-  const typeLabel = request.creative_type_display
-    || CREATIVE_TYPES.find((t) => t.value === request.creative_type)?.label
-    || request.creative_type
-  const platformLabel = request.platform_display
-    || PLATFORMS.find((p) => p.value === request.platform)?.label
-  const inProgress = IN_PROGRESS_STATUSES.includes(request.status)
-
-  return (
-    <div className="card request-card">
-      <div className="card-header">
-        <div>
-          <h2>{platformLabel ? `${platformLabel} · ${typeLabel}` : typeLabel}</h2>
-          <p className="page-subtitle">
-            {new Date(request.created_at).toLocaleString()}
-            {request.retry_count > 0 ? ` · retried ${request.retry_count}×` : ''}
-          </p>
-        </div>
-        <span className={`badge status-badge gen-status-${request.status}`}>{STATUS_LABELS[request.status]}</span>
-      </div>
-
-      {request.prompt_brief && <p className="modal-hint">{request.prompt_brief}</p>}
-
-      {inProgress && (
-        <div className="empty-state">
-          <p>
-            Generating {request.variation_count} {request.variation_count === 1 ? 'variation' : 'variations'}… this can take a moment.
-          </p>
-        </div>
-      )}
-
-      {request.status === 'failed' && (
-        <>
-          <div className="alert alert-error">{request.error_message}</div>
-          {canRetry && (
-            <button type="button" className="btn btn-ghost" onClick={onRetry}>
-              Retry
-            </button>
-          )}
-        </>
-      )}
-
-      {request.status === 'succeeded' && (
-        <VariationGrid variations={request.variations} onSelect={onSelectVariation} />
       )}
     </div>
   )

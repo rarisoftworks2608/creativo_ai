@@ -1,6 +1,38 @@
 // Small inline icon set shared by AdminDashboardPage and ClientDashboardPage,
 // so both pages draw from the same visual language instead of duplicating SVGs.
 const ICONS = {
+  home: (
+    <svg viewBox="0 0 20 20" fill="none">
+      <path d="M3 9l7-5.5L17 9v7a1 1 0 0 1-1 1h-3.5v-4.5h-5V17H4a1 1 0 0 1-1-1V9Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+    </svg>
+  ),
+  lock: (
+    <svg viewBox="0 0 20 20" fill="none">
+      <rect x="4.5" y="9" width="11" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M7 9V6.5a3 3 0 0 1 6 0V9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  ),
+  arrowRight: (
+    <svg viewBox="0 0 20 20" fill="none">
+      <path d="M4 10h12M11 5l5 5-5 5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+  arrowLeft: (
+    <svg viewBox="0 0 20 20" fill="none">
+      <path d="M16 10H4M9 5l-5 5 5 5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+  settings: (
+    <svg viewBox="0 0 20 20" fill="none">
+      <circle cx="10" cy="10" r="2.5" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M10 2.5v2M10 15.5v2M2.5 10h2M15.5 10h2M4.7 4.7l1.4 1.4M13.9 13.9l1.4 1.4M4.7 15.3l1.4-1.4M13.9 6.1l1.4-1.4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  ),
+  chevronDown: (
+    <svg viewBox="0 0 20 20" fill="none">
+      <path d="M5.5 8l4.5 4.5L14.5 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
   building: (
     <svg viewBox="0 0 20 20" fill="none">
       <path d="M4 17V4.5a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1V17" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />

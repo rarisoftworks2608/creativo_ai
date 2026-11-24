@@ -20,7 +20,7 @@
   overscroll-behavior: contain;
   gap: 18px;
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+  scrollbar-color: var(--border) transparent;
 }
 
 .sidebar-brand {
@@ -54,7 +54,7 @@
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: rgba(190, 178, 214, 0.6);
+  color: var(--muted);
   padding: 4px 12px 4px;
 }
 

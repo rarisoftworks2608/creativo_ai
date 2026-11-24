@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { getDashboardStats } from '../api/dashboard'
+import { listCompanies } from '../api/companies'
 import { extractErrorMessage } from '../api/client'
 import ICONS from '../components/DashboardIcons'
 import { formatCompact, formatPercent } from '../utils/format'
@@ -34,17 +35,9 @@ function StatTile({ icon, tone, value, label, to }) {
   )
 }
 
-const SHORTCUTS = [
-  { to: '/companies', icon: 'building', title: 'Companies', text: 'Clients, brands, calendars and every company module.' },
-  { to: '/approvals', icon: 'clock', title: 'Approvals', text: 'Everything waiting for client review, across companies.' },
-  { to: '/publishing', icon: 'send', title: 'Publishing queue', text: 'Scheduled, published and failed posts.' },
-  { to: '/analytics', icon: 'chart', title: 'Analytics', text: 'Reach and engagement for every company.' },
-  { to: '/reports', icon: 'file', title: 'Reports', text: 'Company, client, AI usage, approval and subscription reports.' },
-  { to: '/subscriptions', icon: 'dollar', title: 'Subscriptions', text: 'Plans, usage limits and manual billing.' },
-]
-
 export default function AdminDashboardPage() {
   const [stats, setStats] = useState(null)
+  const [companies, setCompanies] = useState([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
 
@@ -53,6 +46,9 @@ export default function AdminDashboardPage() {
     setLoadError('')
     try {
       setStats(await getDashboardStats())
+      listCompanies()
+        .then((data) => setCompanies(data.results || []))
+        .catch(() => setCompanies([]))
     } catch (err) {
       setLoadError(extractErrorMessage(err, 'Could not load dashboard stats.'))
     } finally {
@@ -119,15 +115,58 @@ export default function AdminDashboardPage() {
         <StatTile icon="dollar" value={formatNumber(subscriptions.active)} label="Active subscriptions" to="/subscriptions" />
       </div>
 
-      <h2 className="dashboard-section-title">Shortcuts</h2>
-      <div className="quick-link-grid">
-        {SHORTCUTS.map((shortcut) => (
-          <Link className="quick-link-card quick-link-card-link" key={shortcut.to} to={shortcut.to}>
-            <div className="quick-link-icon">{ICONS[shortcut.icon] || ICONS.sparkle}</div>
-            <h2>{shortcut.title}</h2>
-            <p>{shortcut.text}</p>
+      <div className="card">
+        <div className="card-header card-header-wrap">
+          <div>
+            <h2>Your companies</h2>
+            <p className="page-subtitle">Open a company to work through its content workflow.</p>
+          </div>
+          <Link to="/companies" className="btn btn-ghost">
+            All companies
           </Link>
-        ))}
+        </div>
+        {companies.length === 0 ? (
+          <div className="empty-state">
+            <p>No companies yet.</p>
+          </div>
+        ) : (
+          <div className="table-wrapper">
+            <table className="table table-stack">
+              <thead>
+                <tr>
+                  <th>Company</th>
+                  <th>Status</th>
+                  <th>Setup</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {companies.slice(0, 8).map((company) => (
+                  <tr key={company.id}>
+                    <td data-label="Company">
+                      <strong>{company.name}</strong>
+                      <div className="page-subtitle">{company.industry || 'No industry set'}</div>
+                    </td>
+                    <td data-label="Status">
+                      <span className={`badge badge-${company.status}`}>{company.status}</span>
+                    </td>
+                    <td data-label="Setup">
+                      <div className="progress">
+                        <div className="progress-bar" style={{ width: `${company.onboarding?.completion_percentage ?? 0}%` }} />
+                      </div>
+                      <span className="progress-label">{company.onboarding?.completion_percentage ?? 0}%</span>
+                    </td>
+                    <td className="table-actions">
+                      <Link to={`/companies/${company.id}`} className="btn btn-primary btn-sm">
+                        Open workspace
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   )

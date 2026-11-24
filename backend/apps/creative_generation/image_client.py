@@ -29,19 +29,50 @@ __all__ = [
 
 class ImageAIProvider(ABC):
     @abstractmethod
-    def generate_image(self, *, prompt: str, reference_images: list[tuple[bytes, str]] | None = None) -> tuple[bytes, str]:
+    def generate_image(
+        self, *, prompt: str, reference_images: list[tuple[bytes, str]] | None = None, aspect: float | None = None,
+    ) -> tuple[bytes, str]:
         """Generate an image from a text prompt, optionally grounded by reference images
         (e.g. a brand logo) passed as a list of (raw_bytes, mime_type) tuples.
 
+        `aspect` (height / width) is the shape of the finished creative: a provider that can draw at a chosen size
+        asks for the closest one it supports, so the scene is composed for that frame rather than cropped from
+        another. Providers without a size control ignore it (the prompt still names the frame, and the compositor
+        fits the picture exactly).
+
         Returns (image_bytes, mime_type).
         """
+
+
+# The aspect ratios Gemini's image models accept, as height / width.
+GEMINI_RATIOS = {
+    '1:1': 1.0, '4:5': 1.25, '3:4': 4 / 3, '2:3': 1.5, '9:16': 16 / 9,
+    '5:4': 0.8, '4:3': 0.75, '3:2': 2 / 3, '16:9': 9 / 16,
+}
+
+
+def closest_ratio(aspect, ratios):
+    """The key of `ratios` (name -> height/width) nearest `aspect`; ties go to the taller frame, which crops to the
+    target without losing the sides of the scene."""
+    return min(ratios, key=lambda name: (abs(ratios[name] - aspect), -ratios[name]))
+
+
+def openai_size(aspect):
+    """gpt-image-1 draws 1024x1024, 1024x1536 (portrait) or 1536x1024 (landscape)."""
+    if aspect is None:
+        return None
+    if aspect >= 1.1:
+        return '1024x1536'
+    if aspect <= 0.9:
+        return '1536x1024'
+    return '1024x1024'
 
 
 class GeminiImageProvider(ImageAIProvider):
     def __init__(self, model=None):
         self.model = model or get_model_name('image')
 
-    def generate_image(self, *, prompt, reference_images=None):
+    def generate_image(self, *, prompt, reference_images=None, aspect=None):
         if not os.environ.get('GEMINI_API_KEY'):
             raise AIProviderNotConfigured(
                 'Gemini API credentials are not configured. Set GEMINI_API_KEY in the backend environment.'
@@ -54,13 +85,26 @@ class GeminiImageProvider(ImageAIProvider):
         for image_bytes, mime_type in (reference_images or []):
             contents.append(types.Part.from_bytes(data=image_bytes, mime_type=mime_type))
 
-        try:
-            client = genai.Client()
-            response = client.models.generate_content(
+        def request(with_ratio):
+            image_config = (
+                types.ImageConfig(aspect_ratio=closest_ratio(aspect, GEMINI_RATIOS)) if with_ratio and aspect else None
+            )
+            return client.models.generate_content(
                 model=self.model,
                 contents=contents,
-                config=types.GenerateContentConfig(response_modalities=['IMAGE']),
+                config=types.GenerateContentConfig(response_modalities=['IMAGE'], image_config=image_config),
             )
+
+        try:
+            client = genai.Client()
+            try:
+                response = request(with_ratio=True)
+            except Exception:
+                # An older image model that does not take an aspect ratio rejects the whole request: ask again
+                # without it (the compositor still fits the picture to the creative's size).
+                if not aspect:
+                    raise
+                response = request(with_ratio=False)
         except Exception as exc:
             raise AIProviderError(f'Gemini image generation failed: {exc}') from exc
 
@@ -106,7 +150,7 @@ class HuggingFaceImageProvider(ImageAIProvider):
     def __init__(self, model=None):
         self.model = model or get_model_name('image')
 
-    def generate_image(self, *, prompt, reference_images=None):
+    def generate_image(self, *, prompt, reference_images=None, aspect=None):
         import httpx
 
         token = os.environ.get('HF_TOKEN')
@@ -183,7 +227,7 @@ class CloudflareImageProvider(ImageAIProvider):
         budget = self.MAX_PROMPT_CHARS - len(self.CRITICAL_SUFFIX)
         return prompt[:budget].rsplit(' ', 1)[0] + self.CRITICAL_SUFFIX
 
-    def generate_image(self, *, prompt, reference_images=None):
+    def generate_image(self, *, prompt, reference_images=None, aspect=None):
         import httpx
 
         prompt = self._fit_prompt(prompt)
@@ -268,9 +312,10 @@ class OpenAIImageProvider(ImageAIProvider):
     def _is_dalle(self):
         return self.model.startswith('dall-e')
 
-    def generate_image(self, *, prompt, reference_images=None):
+    def generate_image(self, *, prompt, reference_images=None, aspect=None):
         import httpx
 
+        size = openai_size(aspect) or self.size
         api_key = os.environ.get('OPENAI_API_KEY')
         if not api_key:
             raise AIProviderNotConfigured(
@@ -288,16 +333,17 @@ class OpenAIImageProvider(ImageAIProvider):
                 response = httpx.post(
                     f'{self.BASE_URL}/images/edits',
                     headers=headers,
-                    data={'model': self.model, 'prompt': prompt, 'size': self.size, 'quality': self.quality, 'n': '1'},
+                    data={'model': self.model, 'prompt': prompt, 'size': size, 'quality': self.quality, 'n': '1'},
                     files=files,
                     timeout=self.DEFAULT_TIMEOUT_SECONDS,
                 )
             else:
                 payload = {'model': self.model, 'prompt': prompt, 'n': 1}
                 if self._is_dalle():
-                    payload.update({'size': '1024x1792', 'response_format': 'b64_json'})
+                    dalle_size = {'1536x1024': '1792x1024', '1024x1024': '1024x1024'}.get(size, '1024x1792')
+                    payload.update({'size': dalle_size, 'response_format': 'b64_json'})
                 else:
-                    payload.update({'size': self.size, 'quality': self.quality})
+                    payload.update({'size': size, 'quality': self.quality})
                 response = httpx.post(
                     f'{self.BASE_URL}/images/generations', headers=headers, json=payload,
                     timeout=self.DEFAULT_TIMEOUT_SECONDS,

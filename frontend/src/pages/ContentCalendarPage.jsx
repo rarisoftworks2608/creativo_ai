@@ -301,7 +301,7 @@ export default function ContentCalendarPage() {
         <div>
           <h1>Content calendar</h1>
           <p className="page-subtitle">
-            {company?.name} · {count} item{count === 1 ? '' : 's'}
+            {count} planned item{count === 1 ? '' : 's'}
           </p>
         </div>
         {isAdmin && (

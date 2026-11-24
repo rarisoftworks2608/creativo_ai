@@ -74,7 +74,7 @@ export default function ActivityLogPage() {
     <div>
       <div className="page-header">
         <div>
-          <h1>Activity Log</h1>
+          <h1>Activity log</h1>
           <p className="page-subtitle">{count} recorded actions</p>
         </div>
       </div>

@@ -133,9 +133,27 @@ def _in_zone(zone, rect, size):
     return {'bottom': centre_y > 0.58, 'top': centre_y < 0.42, 'left': centre_x < 0.46, 'right': centre_x > 0.54}.get(zone, False)
 
 
+def logo_slots(size, logo_size, *, top_inset=0, bottom_inset=0):
+    """{slot: rect} - the places a designer would set a logo: the four corners and the middle of the top and bottom
+    edges, all on one consistent margin (`top_inset` / `bottom_inset` push them clear of a story's interface bands)."""
+    width, height = size
+    logo_w, logo_h = logo_size
+    pad = int(width * 0.06)
+    top, bottom = pad + top_inset, height - pad - bottom_inset - logo_h
+    centre = (width - logo_w) // 2
+    return {
+        'top_left': (pad, top, pad + logo_w, top + logo_h),
+        'top_center': (centre, top, centre + logo_w, top + logo_h),
+        'top_right': (width - pad - logo_w, top, width - pad, top + logo_h),
+        'bottom_left': (pad, bottom, pad + logo_w, bottom + logo_h),
+        'bottom_center': (centre, bottom, centre + logo_w, bottom + logo_h),
+        'bottom_right': (width - pad - logo_w, bottom, width - pad, bottom + logo_h),
+    }
+
+
 def plan_layout(
     energy, size, *, measure=None, logo_size=None, rng=None, corners_allowed=FIXED_LOGO_CORNERS, prefer=None,
-    margin_top=None, margin_bottom=None,
+    margin_top=None, margin_bottom=None, logo_rects=None, logo_cost=None,
 ):
     """The text block's family and position and the logo's corner for this picture.
 
@@ -145,20 +163,32 @@ def plan_layout(
     the picture - but the measured calm of the picture still decides, so a picture that ignored the request is
     laid out by what it actually looks like. With `rng` (a random.Random) the choice is made among the best few
     distinct combinations; without it, it is the single best. `margin_top` / `margin_bottom` (pixels) keep the text
-    clear of a header row or a footer that is drawn there."""
+    clear of a header row or a footer that is drawn there.
+
+    `logo_rects` ({name: rect}) and `logo_cost(name, rect, family, text_rect)` replace the fixed corners: every candidate place
+    (and logo variant) the compositor offers is scored by it - how calm and how visible the logo would be there, and
+    how it lines up with the text block of `family` - so the logo is placed with the text, not stamped in a corner."""
     width, height = size
     margin_x = int(width * 0.07)
     margin_top = int(width * 0.06) if margin_top is None else margin_top
     margin_bottom = int(width * 0.09) if margin_bottom is None else margin_bottom
     gap = int(width * 0.03)
-    corners = (
-        {name: rect for name, rect in logo_corners(size, logo_size).items() if name in corners_allowed}
-        if logo_size else {}
-    )
+    if logo_rects is not None:
+        corners = dict(logo_rects)
+    else:
+        corners = (
+            {name: rect for name, rect in logo_corners(size, logo_size).items() if name in corners_allowed}
+            if logo_size else {}
+        )
 
-    def best_corner(avoid=None):
+    def cost_of(name, rect, family, text_rect=None):
+        if logo_cost is not None:
+            return logo_cost(name, rect, family, text_rect)
+        return 0.7 * energy.mean(rect) + LOGO_CORNER_BIAS[name]
+
+    def best_corner(avoid=None, family=None, text_rect=None):
         options = [
-            (0.7 * energy.mean(rect) + LOGO_CORNER_BIAS[name], name, rect)
+            (cost_of(name, rect, family, text_rect), name, rect)
             for name, rect in corners.items() if avoid is None or not _intersects(avoid, rect)
         ]
         return min(options) if options else None
@@ -169,7 +199,7 @@ def plan_layout(
         if found:
             candidates = [Plan(None, None, found[1], found[2], found[0])]
             candidates += [
-                Plan(None, None, name, rect, 0.7 * energy.mean(rect) + LOGO_CORNER_BIAS[name])
+                Plan(None, None, name, rect, cost_of(name, rect, None))
                 for name, rect in corners.items() if name != found[1]
             ]
     else:
@@ -193,24 +223,32 @@ def plan_layout(
                 if prefer and _in_zone(prefer, rect, size):
                     score -= 1.5
                 if corners:
-                    found = best_corner(avoid=_inflated(rect, gap))
+                    found = best_corner(avoid=_inflated(rect, gap), family=family, text_rect=rect)
                     if found is None:
                         continue
                     candidates.append(Plan(family, rect, found[1], found[2], score + found[0]))
                 else:
                     candidates.append(Plan(family, rect, None, None, score))
 
-    if not candidates:  # nothing fits (a huge text block): the bottom centre, logo top-right
+    if not candidates:  # nothing fits (a huge text block): the bottom centre, the logo in its best free place
         rect = None
         if measure is not None:
             content_w, block_h = measure(FAMILIES[0])
             rect = ((width - content_w) // 2, max(margin_top, height - margin_bottom - block_h), (width + content_w) // 2, height - margin_bottom)
-        return Plan(FAMILIES[0] if rect else None, rect, 'top_right' if corners else None, corners.get('top_right'), 0.0)
+        found = (
+            best_corner(avoid=_inflated(rect, gap) if rect else None, family=FAMILIES[0] if rect else None, text_rect=rect)
+            if corners else None
+        )
+        if found is None and corners:
+            name = 'top_right' if 'top_right' in corners else next(iter(corners))
+            found = (0.0, name, corners[name])
+        return Plan(FAMILIES[0] if rect else None, rect, found[1] if found else None, found[2] if found else None, 0.0)
 
     candidates.sort(key=lambda plan: plan.score)
     if rng is None:
         return candidates[0]
-    limit = candidates[0].score * 1.3 + 1.0
+    best = candidates[0].score
+    limit = best + abs(best) * 0.3 + 1.0  # near-equal options (scores can be negative once the logo is scored)
     distinct, seen = [], set()
     for plan in candidates:
         key = (plan.family.name if plan.family else None, plan.logo_corner)
@@ -274,6 +312,13 @@ STYLE_PRESETS = {
         'headline_color': 'ink', 'kicker': 'tracked', 'divider': 'line', 'cta': 'underline',
         'body': 'caps', 'body_size': 0.019, 'frame': True,
     },
+}
+# The testimonial look: the client's words are the hero - a light serif set as a quotation, smaller than a
+# headline so a full sentence or two fits, with the attribution beneath it. Never framed.
+STYLE_PRESETS['testimonial_quote'] = {
+    'headline': 'serif', 'weight': 'regular', 'case': 'title', 'size': 0.056, 'italic_tail': False,
+    'headline_color': 'ink', 'kicker': 'tracked', 'divider': 'line', 'cta': 'underline', 'body_size': 0.026,
+    'max_lines': 7, 'quote': True,
 }
 FRAMED_PRESETS = ('tech_luxe', 'luxe_frame')
 # Greetings and testimonials are not adverts for the company's services: no services strip or footer.

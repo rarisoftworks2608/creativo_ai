@@ -104,11 +104,18 @@ def materialize(field, work_dir, name):
         return None
 
 
-def _encoding_args():
-    return [
-        '-c:v', 'libx264', '-preset', str(getattr(settings, 'VIDEO_PRESET', 'veryfast')),
-        '-crf', str(getattr(settings, 'VIDEO_CRF', 23)), '-pix_fmt', 'yuv420p', '-r', str(FPS),
-    ]
+def _encoding_args(intermediate=False):
+    """x264 settings. Scene and outro clips are `intermediate` - they are encoded again in the final pass, so
+    they're kept near-lossless (CRF 14) to avoid stacking compression losses; the final pass uses VIDEO_CRF."""
+    preset = 'veryfast' if intermediate else str(getattr(settings, 'VIDEO_PRESET', 'medium'))
+    crf = '14' if intermediate else str(getattr(settings, 'VIDEO_CRF', 18))
+    return ['-c:v', 'libx264', '-preset', preset, '-crf', crf, '-pix_fmt', 'yuv420p', '-r', str(FPS)]
+
+
+# AI pictures are usually ~1024 px, so filling a 1080 x 1920 frame enlarges them: Lanczos keeps edges crisp
+# where the default bicubic softens them, and a light unsharp mask restores the detail the enlargement blurs.
+SCALE_FLAGS = 'flags=lanczos'
+SHARPEN = 'unsharp=5:5:0.7:5:5:0.0'
 
 
 def _render_scene_clip(ffmpeg, scene, width, height, output_path, work_dir):
@@ -120,14 +127,20 @@ def _render_scene_clip(ffmpeg, scene, width, height, output_path, work_dir):
 
     if clip_path:
         args = [ffmpeg, '-y', '-stream_loop', '-1', '-i', clip_path]
-        video_filter = f'scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height},fps={FPS}'
+        video_filter = (
+            f'scale={width}:{height}:force_original_aspect_ratio=increase:{SCALE_FLAGS},'
+            f'crop={width}:{height},{SHARPEN},fps={FPS}'
+        )
     else:
         zoom_frames = max(int(duration * FPS), 1)
         args = [ffmpeg, '-y', '-loop', '1', '-i', image_path]
+        # The still is laid out at twice the frame size so the slow zoom moves in sub-pixel steps (no judder),
+        # and the zoom is centred on the picture - zoompan's default anchors it to the top-left corner.
         video_filter = (
-            f'scale={width * 2}:{height * 2}:force_original_aspect_ratio=increase,'
+            f'scale={width * 2}:{height * 2}:force_original_aspect_ratio=increase:{SCALE_FLAGS},'
             f'crop={width * 2}:{height * 2},'
-            f"zoompan=z='min(zoom+0.0015,1.2)':d={zoom_frames}:s={width}x{height}:fps={FPS}"
+            f"zoompan=z='min(zoom+0.0010,1.12)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
+            f':d={zoom_frames}:s={width}x{height}:fps={FPS},{SHARPEN}'
         )
 
     audio_path = materialize(scene.voice_over_audio, work_dir, f'scene_{scene.scene_number}_audio')
@@ -137,7 +150,7 @@ def _render_scene_clip(ffmpeg, scene, width, height, output_path, work_dir):
         args += ['-f', 'lavfi', '-i', 'anullsrc=channel_layout=stereo:sample_rate=44100']
 
     args += [
-        '-vf', video_filter, '-t', str(duration), *_encoding_args(),
+        '-vf', video_filter, '-t', str(duration), *_encoding_args(intermediate=True),
         '-c:a', 'aac', '-ar', '44100', '-ac', '2', '-shortest', output_path,
     ]
     _run(args)
@@ -216,7 +229,7 @@ def _render_outro_clip(ffmpeg, outro, width, height, output_path, work_dir):
     _run([
         ffmpeg, '-y', '-loop', '1', '-i', image_path,
         '-f', 'lavfi', '-i', 'anullsrc=channel_layout=stereo:sample_rate=44100',
-        '-vf', f'fade=t=in:st=0:d=0.4,fps={FPS}', '-t', str(OUTRO_SECONDS), *_encoding_args(),
+        '-vf', f'fade=t=in:st=0:d=0.4,fps={FPS}', '-t', str(OUTRO_SECONDS), *_encoding_args(intermediate=True),
         '-c:a', 'aac', '-ar', '44100', '-ac', '2', '-shortest', output_path,
     ])
 
@@ -250,7 +263,7 @@ def _final_pass(ffmpeg, input_path, output_path, *, logo_path, srt_path, music_p
 
     if logo_path:
         args += ['-i', logo_path]
-        filters.append(f'[{next_input}:v]scale={LOGO_WIDTH}:-1[logo]')
+        filters.append(f'[{next_input}:v]scale={LOGO_WIDTH}:-1:{SCALE_FLAGS}[logo]')
         filters.append(f'[{video_label}][logo]overlay=W-w-{LOGO_MARGIN}:H-h-{LOGO_MARGIN}[vlogo]')
         video_label = 'vlogo'
         next_input += 1
@@ -285,11 +298,12 @@ def _extract_thumbnail(ffmpeg, video_path, thumbnail_path, at_seconds):
 
 
 def render_video(*, scenes, aspect_ratio, subtitles_srt='', logo_path=None, include_logo=True,
-                 music_field=None, music_volume=0.15, outro=None):
+                 music_field=None, music_volume=0.15, outro=None, builtin_music=False, music_seed=None):
     """Renders the final video from a list of VideoScene rows (in scene order).
 
     `logo_path` may be a local path or a FieldFile; `music_field` a FieldFile (or path);
-    `outro` a dict {color, title, subtitle, logo_path} or None.
+    `outro` a dict {color, title, subtitle, logo_path} or None. `builtin_music` lays the
+    synthesised bed from music_bed.py under the video when there's no `music_field`.
     Returns (video_bytes, thumbnail_bytes, duration_seconds, resolution_str).
     """
     ffmpeg = check_ffmpeg_available()
@@ -329,12 +343,22 @@ def render_video(*, scenes, aspect_ratio, subtitles_srt='', logo_path=None, incl
             with open(srt_path, 'w', encoding='utf-8') as f:
                 f.write(subtitles_srt)
 
+        music_path = local(music_field, 'music')
+        if music_path is None and builtin_music:
+            from .music_bed import write_music_bed
+
+            music_path = os.path.join(work_dir, 'music_bed.wav')
+            write_music_bed(music_path, seed=music_seed)
+            # The soft pad has few peaks, so it reads quieter than a produced track at the same gain: a little
+            # more keeps it clearly audible on phone speakers while staying ~8 dB under the voice.
+            music_volume = max(music_volume, 0.22)
+
         final_path = os.path.join(work_dir, 'final.mp4')
         _final_pass(
             ffmpeg, concatenated, final_path,
             logo_path=local(logo_path, 'logo') if include_logo else None,
             srt_path=srt_path,
-            music_path=local(music_field, 'music'),
+            music_path=music_path,
             music_volume=music_volume,
             total_duration=total_duration,
             has_voice=any(s.voice_over_audio for s in scenes),

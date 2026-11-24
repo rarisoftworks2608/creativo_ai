@@ -9,28 +9,11 @@ import {
   updateCompany,
   updateCompanyClient,
 } from '../api/companies'
-import { listCalendarItems } from '../api/contentCalendar'
 import { extractErrorMessage } from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import Modal from '../components/Modal'
 import TagsInput from '../components/TagsInput'
-import ICONS from '../components/DashboardIcons'
-
-const COMPANY_MODULES = [
-  { path: 'brand', icon: 'image', title: 'Brand', text: 'Logo, colours, guidelines, assets' },
-  { path: 'ai-strategy', icon: 'sparkle', title: 'AI strategy', text: 'Brand context, ideas, platform strategy' },
-  { path: 'calendar', icon: 'calendar', title: 'Content calendar', text: 'Monthly plan & Excel import' },
-  { path: 'creative-generation', icon: 'wand', title: 'Creatives', text: 'AI image + copy variations' },
-  { path: 'video-generation', icon: 'video', title: 'Videos', text: 'Scripted reels with voice-over' },
-  { path: 'approvals', icon: 'check', title: 'Approvals', text: 'Client review & history' },
-  { path: 'publishing', icon: 'send', title: 'Publishing', text: 'Schedule & track posts' },
-  { path: 'social-accounts', icon: 'users', title: 'Social accounts', text: 'Instagram, Facebook, LinkedIn' },
-  { path: 'whatsapp', icon: 'chat', title: 'WhatsApp', text: 'Notification group & templates' },
-  { path: 'analytics', icon: 'chart', title: 'Analytics', text: 'Reach, engagement, growth' },
-  { path: 'reports', icon: 'file', title: 'Reports', text: 'Monthly PDF / Excel reports' },
-  { path: 'media-library', icon: 'image', title: 'Media library', text: 'Every asset, creative and video' },
-  { path: 'subscription', icon: 'dollar', title: 'Subscription', text: 'Plan, usage & billing' },
-]
+import WorkflowJourney from '../components/WorkflowJourney'
 
 const FIELD_LABELS = {
   name: 'Company name',
@@ -62,7 +45,6 @@ export default function CompanyDetailPage() {
 
   const [company, setCompany] = useState(null)
   const [clients, setClients] = useState([])
-  const [calendarCount, setCalendarCount] = useState(0)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
 
@@ -92,14 +74,9 @@ export default function CompanyDetailPage() {
     setLoading(true)
     setLoadError('')
     try {
-      const [companyData, clientsData, calendarData] = await Promise.all([
-        getCompany(id),
-        listCompanyClients(id),
-        listCalendarItems(id),
-      ])
+      const [companyData, clientsData] = await Promise.all([getCompany(id), listCompanyClients(id)])
       setCompany(companyData)
       setClients(clientsData.results)
-      setCalendarCount(calendarData.count)
     } catch (err) {
       setLoadError(extractErrorMessage(err, 'Could not load this company.'))
     } finally {
@@ -243,6 +220,8 @@ export default function CompanyDetailPage() {
 
       {loadError && <div className="alert alert-error">{loadError}</div>}
 
+      <WorkflowJourney companyId={id} />
+
       <div className="detail-grid">
         <div className="card">
           <div className="card-header">
@@ -360,21 +339,6 @@ export default function CompanyDetailPage() {
             </dl>
           )}
         </div>
-      </div>
-
-      <h2 className="dashboard-section-title">Company modules</h2>
-      <div className="module-grid">
-        {COMPANY_MODULES.map((module) => (
-          <Link key={module.path} to={`/companies/${id}/${module.path}`} className="module-card">
-            <span className="module-icon" aria-hidden="true">
-              {ICONS[module.icon]}
-            </span>
-            <span className="module-text">
-              <strong>{module.title}</strong>
-              <span>{module.path === 'calendar' ? `${calendarCount} item${calendarCount === 1 ? '' : 's'} planned` : module.text}</span>
-            </span>
-          </Link>
-        ))}
       </div>
 
       <div className="card">

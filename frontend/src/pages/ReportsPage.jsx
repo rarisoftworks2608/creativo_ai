@@ -11,7 +11,6 @@ import {
 } from '../api/reports'
 import { extractErrorMessage } from '../api/client'
 import { useAuth } from '../context/AuthContext'
-import { useCompanyWorkspace } from '../context/CompanyWorkspaceContext'
 import Modal from '../components/Modal'
 import ReportList from '../components/ReportList'
 import ReportViewer from '../components/ReportViewer'
@@ -35,7 +34,6 @@ const PERIODS = [
 export default function ReportsPage() {
   const { id: companyId } = useParams()
   const { isAdmin } = useAuth()
-  const workspace = useCompanyWorkspace()
 
   const [reports, setReports] = useState([])
   const [loading, setLoading] = useState(true)
@@ -136,7 +134,7 @@ export default function ReportsPage() {
         <div>
           <h1>Reports</h1>
           <p className="page-subtitle">
-            {workspace?.company?.name ? `${workspace.company.name} · ` : ''}Monthly, engagement, growth, publishing and content reports -
+            Monthly, engagement, growth, publishing and content reports -
             download as PDF, Excel or CSV.
           </p>
         </div>

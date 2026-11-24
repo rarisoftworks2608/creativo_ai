@@ -177,9 +177,9 @@ export default function WhatsAppPage() {
     <div>
       <div className="page-header">
         <div>
-          <h1>WhatsApp automation</h1>
+          <h1>WhatsApp alerts</h1>
           <p className="page-subtitle">
-            {workspace?.company?.name ? `${workspace.company.name} · ` : ''}Approval requests, reminders, publishing updates and
+            Approval requests, reminders, publishing updates and
             monthly reports on WhatsApp.
           </p>
         </div>

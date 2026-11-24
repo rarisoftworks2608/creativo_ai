@@ -192,8 +192,8 @@ export default function AiStrategyPage() {
 
       <div className="page-header">
         <div>
-          <h1>AI Content Strategy</h1>
-          <p className="page-subtitle">{company.name}</p>
+          <h1>AI strategy</h1>
+          <p className="page-subtitle">Brand context, content ideas and platform strategy generated from the brand profile.</p>
         </div>
       </div>
 

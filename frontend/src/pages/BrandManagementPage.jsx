@@ -95,8 +95,8 @@ export default function BrandManagementPage() {
 
       <div className="page-header">
         <div>
-          <h1>Brand Management</h1>
-          <p className="page-subtitle">{company.name}</p>
+          <h1>Brand profile</h1>
+          <p className="page-subtitle">Logo, colours, guidelines and marketing information every creative is built from.</p>
         </div>
       </div>
 

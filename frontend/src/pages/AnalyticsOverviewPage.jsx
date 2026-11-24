@@ -39,7 +39,7 @@ export default function AnalyticsOverviewPage() {
     <div>
       <div className="page-header">
         <div>
-          <h1>Analytics overview</h1>
+          <h1>Analytics</h1>
           <p className="page-subtitle">Performance across every company. Open a company for its full dashboard.</p>
         </div>
       </div>

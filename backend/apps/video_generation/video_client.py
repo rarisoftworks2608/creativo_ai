@@ -23,16 +23,21 @@ voice providers in Epics 05/06/07.
 """
 
 import base64
+import logging
 import os
 import time
 from abc import ABC, abstractmethod
 
+from django.conf import settings
+
 from common.ai_config import get_model_name, get_provider_name
 from common.ai_errors import AIProviderError, AIProviderNotConfigured
 
+logger = logging.getLogger(__name__)
+
 __all__ = [
     'AIProviderError', 'AIProviderNotConfigured', 'VideoAIProvider',
-    'HuggingFaceVideoProvider', 'ReplicateVideoProvider', 'get_video_provider',
+    'HuggingFaceVideoProvider', 'ReplicateVideoProvider', 'AgnesVideoProvider', 'get_video_provider',
 ]
 
 
@@ -192,10 +197,157 @@ class ReplicateVideoProvider(VideoAIProvider):
         return video_response.content, 'video/mp4'
 
 
+class AgnesVideoProvider(VideoAIProvider):
+    """Image-to-video on Agnes AI (https://apihub.agnes-ai.com, model agnes-video-v2.0). Needs AGNES_API_KEY.
+
+    Asynchronous like Replicate: `POST /v1/videos` starts a task and returns a `video_id`, then
+    `GET /agnesapi?video_id=...` is polled until `status` is `completed` (or `failed`); the clip's URL is in
+    `video_url` / `url`. The scene's still is sent as a data URI in `image` so the clip animates the actual
+    picture; if Agnes refuses an inline image, the clip is made from the prompt alone (text-to-video).
+    Clip length is frames / frame rate - 121 frames at 24 fps, about 5 seconds; rendering.py loops or trims it
+    to the scene's duration.
+    """
+
+    BASE_URL = 'https://apihub.agnes-ai.com'
+    NUM_FRAMES = 121  # must be 8n + 1 and <= 441
+    FRAME_RATE = 24
+    POLL_INTERVAL_SECONDS = 10
+    POLL_TIMEOUT_SECONDS = 900
+    REQUEST_TIMEOUT_SECONDS = 120.0
+    # (width, height) per picture shape - Agnes' documented default is 1152 x 768 landscape.
+    SIZES = {'landscape': (1152, 768), 'portrait': (768, 1152), 'square': (960, 960)}
+
+    def __init__(self, model=None):
+        self.model = model or get_model_name('video') or 'agnes-video-v2.0'
+
+    def _token(self):
+        # Read from the environment only (like HF_TOKEN), so the test suite's key-blanking always applies.
+        token = os.environ.get('AGNES_API_KEY', '')
+        if not token:
+            raise AIProviderNotConfigured('Agnes API key is missing. Set AGNES_API_KEY in the backend environment.')
+        return token
+
+    @classmethod
+    def _size_for(cls, image_bytes):
+        try:
+            import io
+
+            from PIL import Image
+
+            width, height = Image.open(io.BytesIO(image_bytes)).size
+        except Exception:  # noqa: BLE001 - unreadable still: Agnes' default landscape size
+            return cls.SIZES['landscape']
+        ratio = width / height if height else 1.0
+        if ratio > 1.15:
+            return cls.SIZES['landscape']
+        if ratio < 0.87:
+            return cls.SIZES['portrait']
+        return cls.SIZES['square']
+
+    def _raise_for(self, exc, action):
+        status_code = exc.response.status_code
+        logger.warning('Agnes video request failed to %s (HTTP %s): %s', action, status_code, exc.response.text[:500])
+        if status_code in (401, 403):
+            raise AIProviderNotConfigured('Agnes API key is invalid. Check AGNES_API_KEY in the backend environment.') from exc
+        if status_code == 429:
+            raise AIProviderError('The AI provider is rate-limiting requests. Try again shortly.') from exc
+        raise AIProviderError(f'Agnes video generation failed to {action}: {exc}') from exc
+
+    @staticmethod
+    def _video_url(data):
+        for key in ('video_url', 'url'):
+            value = data.get(key)
+            if isinstance(value, str) and value.startswith(('http://', 'https://')):
+                return value
+        for item in data.get('data') or []:
+            if isinstance(item, dict):
+                found = AgnesVideoProvider._video_url(item)
+                if found:
+                    return found
+        return ''
+
+    def generate_video_clip(self, *, image_bytes, mime_type, prompt):
+        import httpx
+
+        token = self._token()
+        headers = {'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'}
+        width, height = self._size_for(image_bytes)
+        payload = {
+            'model': self.model, 'prompt': prompt, 'width': width, 'height': height,
+            'num_frames': self.NUM_FRAMES, 'frame_rate': self.FRAME_RATE,
+        }
+        if image_bytes:
+            payload['image'] = f'data:{mime_type};base64,{base64.b64encode(image_bytes).decode("ascii")}'
+
+        try:
+            response = httpx.post(
+                f'{self.BASE_URL}/v1/videos', headers=headers, json=payload, timeout=self.REQUEST_TIMEOUT_SECONDS,
+            )
+            if 'image' in payload and (response.status_code in (400, 413, 422) or response.status_code >= 500):
+                # The inline still was refused (Agnes documents image URLs, and has answered an inline image with a
+                # 500): make the clip from the prompt alone rather than lose the motion.
+                logger.warning(
+                    'Agnes refused the scene image (HTTP %s: %s) - retrying as text-to-video.',
+                    response.status_code, response.text[:300],
+                )
+                payload.pop('image')
+                response = httpx.post(
+                    f'{self.BASE_URL}/v1/videos', headers=headers, json=payload, timeout=self.REQUEST_TIMEOUT_SECONDS,
+                )
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            self._raise_for(exc, 'start')
+        except httpx.HTTPError as exc:
+            raise AIProviderError(f'Could not reach the AI provider: {exc}') from exc
+
+        task = response.json()
+        video_id = task.get('video_id') or ''
+        task_id = task.get('task_id') or task.get('id') or ''
+        if not (video_id or task_id):
+            raise AIProviderError('The AI provider did not return a video task to poll.')
+        if video_id:
+            poll_url, params = f'{self.BASE_URL}/agnesapi', {'video_id': video_id, 'model_name': self.model}
+        else:  # older responses only carry a task id
+            poll_url, params = f'{self.BASE_URL}/v1/videos/{task_id}', None
+
+        deadline = time.monotonic() + self.POLL_TIMEOUT_SECONDS
+        result = task
+        while True:
+            status = str(result.get('status', '')).lower()
+            if result.get('error') or status == 'failed':
+                detail = result.get('error') or 'the task failed'
+                raise AIProviderError(f'Agnes video generation failed: {detail}')
+            if status == 'completed':
+                break
+            if time.monotonic() >= deadline:
+                raise AIProviderError('Timed out waiting for the AI provider to render the video clip.')
+            time.sleep(self.POLL_INTERVAL_SECONDS)
+            try:
+                poll = httpx.get(poll_url, headers=headers, params=params, timeout=self.REQUEST_TIMEOUT_SECONDS)
+                poll.raise_for_status()
+            except httpx.HTTPStatusError as exc:
+                self._raise_for(exc, 'report progress')
+            except httpx.HTTPError as exc:
+                raise AIProviderError(f'Could not reach the AI provider: {exc}') from exc
+            result = poll.json()
+
+        video_url = self._video_url(result)
+        if not video_url:
+            raise AIProviderError('The AI provider returned no video content.')
+        try:
+            video = httpx.get(video_url, timeout=self.REQUEST_TIMEOUT_SECONDS, follow_redirects=True)
+            video.raise_for_status()
+        except httpx.HTTPError as exc:
+            raise AIProviderError(f'Could not download the generated video clip: {exc}') from exc
+        return video.content, 'video/mp4'
+
+
 def get_video_provider() -> VideoAIProvider:
     provider_name = get_provider_name('video') or 'huggingface'
     if provider_name == 'huggingface':
         return HuggingFaceVideoProvider()
     if provider_name == 'replicate':
         return ReplicateVideoProvider()
+    if provider_name == 'agnes':
+        return AgnesVideoProvider()
     raise AIProviderError(f'Unknown AI_VIDEO_PROVIDER "{provider_name}".')

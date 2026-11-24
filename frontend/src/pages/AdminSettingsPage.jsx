@@ -126,7 +126,7 @@ export default function AdminSettingsPage() {
     <div>
       <div className="page-header">
         <div>
-          <h1>Admin settings</h1>
+          <h1>Platform settings</h1>
           <p className="page-subtitle">Platform-wide settings for every company. API keys stay in the server&apos;s .env file.</p>
         </div>
         <Link to="/system-health" className="btn btn-ghost">

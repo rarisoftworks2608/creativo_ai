@@ -37,3 +37,35 @@ COPY_SCHEMA = {
     ],
     'additionalProperties': False,
 }
+
+
+# The whole carousel in one text request: the shared series look and, per slide, its role, copy and picture.
+CAROUSEL_SCHEMA = {
+    'type': 'object',
+    'properties': {
+        'caption': {'type': 'string', 'description': 'The social caption for the whole carousel post.'},
+        'series_look': {
+            'type': 'string',
+            'description': 'The visual world every slide shares: setting, brand palette, lighting, lens and grade.',
+        },
+        'slides': {
+            'type': 'array',
+            'items': {
+                'type': 'object',
+                'properties': {
+                    'role': {'type': 'string', 'enum': ['cover', 'content', 'cta']},
+                    'headline': {'type': 'string'},
+                    'body': {'type': 'string'},
+                    'cta': {'type': 'string'},
+                    'visual_scene': {'type': 'string'},
+                },
+                'required': ['role', 'headline', 'body', 'cta', 'visual_scene'],
+                'additionalProperties': False,
+            },
+        },
+        'hashtags': {'type': 'array', 'items': {'type': 'string'}},
+        'keywords': {'type': 'array', 'items': {'type': 'string'}},
+    },
+    'required': ['caption', 'series_look', 'slides', 'hashtags', 'keywords'],
+    'additionalProperties': False,
+}

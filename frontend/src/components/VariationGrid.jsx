@@ -30,7 +30,7 @@ function ImageLightbox({ variation, onClose }) {
   )
 }
 
-export default function VariationGrid({ variations, onSelect, selecting }) {
+export default function VariationGrid({ variations, onSelect, selecting, onEdit, onRegenerate }) {
   const [preview, setPreview] = useState(null)
 
   return (
@@ -38,16 +38,22 @@ export default function VariationGrid({ variations, onSelect, selecting }) {
       {preview && <ImageLightbox variation={preview} onClose={() => setPreview(null)} />}
       {variations.map((variation) => (
         <div className={`variation-card ${variation.is_selected ? 'variation-card-selected' : ''}`} key={variation.id}>
-          <img
-            src={variation.image}
-            alt={`Variation ${variation.variation_number}`}
-            className="variation-image variation-image-zoom"
-            title="Click to view full size"
-            onClick={() => setPreview(variation)}
-          />
+          <div className="variation-media">
+            <img
+              src={variation.image}
+              alt={`${variation.slide_role ? 'Slide' : 'Variation'} ${variation.variation_number}`}
+              className="variation-image variation-image-zoom"
+              title="Click to view full size"
+              onClick={() => setPreview(variation)}
+            />
+            {variation.status === 'processing' && <div className="slide-busy">Regenerating…</div>}
+          </div>
           <div className="variation-body">
+            {variation.status === 'failed' && (
+              <div className="alert alert-error">{variation.error_message || 'Regeneration failed.'}</div>
+            )}
             <div className="variation-label">
-              Variation {variation.variation_number}
+              {variation.slide_role ? 'Slide' : 'Variation'} {variation.variation_number}
               {variation.is_selected && <span className="variation-selected-tag">Selected</span>}
             </div>
             {variation.eyebrow && <div className="variation-eyebrow">{variation.eyebrow}</div>}
@@ -68,7 +74,24 @@ export default function VariationGrid({ variations, onSelect, selecting }) {
                 ))}
               </div>
             )}
-            {onSelect && (
+            {(onEdit || onRegenerate) && (
+              <div className="variation-actions">
+                <a className="btn btn-ghost btn-sm" href={variation.image} download target="_blank" rel="noreferrer">
+                  Download
+                </a>
+                {onEdit && (
+                  <button type="button" className="btn btn-ghost btn-sm" disabled={variation.status === 'processing'} onClick={() => onEdit(variation)}>
+                    Edit text
+                  </button>
+                )}
+                {onRegenerate && (
+                  <button type="button" className="btn btn-ghost btn-sm" disabled={variation.status === 'processing'} onClick={() => onRegenerate(variation)}>
+                    New image
+                  </button>
+                )}
+              </div>
+            )}
+            {onSelect && !variation.slide_role && (
               <button
                 type="button"
                 className="btn btn-ghost btn-block"

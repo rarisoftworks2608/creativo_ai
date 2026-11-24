@@ -3,7 +3,6 @@ import { useParams } from 'react-router-dom'
 import { getAnalyticsSummary, listAnalyticsSyncLogs, listPostMetrics, syncAnalytics } from '../api/analytics'
 import { extractErrorMessage } from '../api/client'
 import { useAuth } from '../context/AuthContext'
-import { useCompanyWorkspace } from '../context/CompanyWorkspaceContext'
 import BarList from '../components/charts/BarList'
 import ChartTable from '../components/charts/ChartTable'
 import LineChart from '../components/charts/LineChart'
@@ -39,7 +38,6 @@ const TREND_METRICS = [
 export default function AnalyticsPage() {
   const { id: companyId } = useParams()
   const { isAdmin } = useAuth()
-  const workspace = useCompanyWorkspace()
 
   const [preset, setPreset] = useState('30d')
   const [range, setRange] = useState(rangePreset('30d'))
@@ -118,7 +116,7 @@ export default function AnalyticsPage() {
         <div>
           <h1>Analytics</h1>
           <p className="page-subtitle">
-            {workspace?.company?.name ? `${workspace.company.name} · ` : ''}
+            
             {data?.last_synced_at ? `Metrics updated ${timeAgo(data.last_synced_at)}` : 'Metrics sync automatically after publishing'}
           </p>
         </div>

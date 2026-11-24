@@ -13,6 +13,10 @@ def variation_image_upload_path(instance, filename):
     return f'creative_generation/{request.company_id}/{request.id}/{filename}'
 
 
+def request_asset_upload_path(instance, filename):
+    return f'creative_generation/{instance.company_id}/inputs/{filename}'
+
+
 class GenerationRequest(TimeStampedModel):
     """A single request to generate creative variations (Epic 06: Generation Management)."""
 
@@ -71,6 +75,24 @@ class GenerationRequest(TimeStampedModel):
                   'unless this is explicitly turned on.',
     )
 
+    # What makes each creative type its own system (creative_types.py): the type's own inputs, the design style
+    # and the size. Empty for requests made before they existed - those keep their old behaviour.
+    brief_fields = models.JSONField(
+        default=dict, blank=True,
+        help_text='Type-specific inputs, e.g. a testimonial quote, an announcement title, a festival, a story objective.',
+    )
+    design_style = models.CharField(max_length=20, blank=True, help_text='Design style key (creative_types.DESIGN_STYLES).')
+    aspect_ratio = models.CharField(max_length=8, blank=True, help_text="'1:1', '4:5', '1.91:1' or '9:16'; blank = the type's default.")
+    slide_count = models.PositiveSmallIntegerField(default=0, help_text='Carousel only: how many slides (3-10).')
+    customer_photo = models.ImageField(
+        upload_to=request_asset_upload_path, blank=True, null=True,
+        help_text='Testimonial only: an optional photo of the client, supplied by the person - never generated.',
+    )
+    generation_context = models.JSONField(
+        default=dict, blank=True,
+        help_text="Shared art direction kept for re-rendering, e.g. a carousel's series look and typography seed.",
+    )
+
     status = models.CharField(max_length=15, choices=Status.choices, default=Status.PENDING)
     error_message = models.TextField(blank=True)
     retry_count = models.PositiveIntegerField(default=0)
@@ -95,7 +117,13 @@ class GenerationRequest(TimeStampedModel):
 
 
 class GenerationVariation(TimeStampedModel):
-    """One of up to 3 generated creative variations for a GenerationRequest (Epic 06: Variations)."""
+    """One of up to 3 generated creative variations for a GenerationRequest (Epic 06: Variations) - or, for a
+    carousel, one slide of it (publishing already posts every variation of a carousel as its slides)."""
+
+    class Status(models.TextChoices):
+        READY = 'ready', 'Ready'
+        PROCESSING = 'processing', 'Processing'
+        FAILED = 'failed', 'Failed'
 
     generation_request = models.ForeignKey(GenerationRequest, on_delete=models.CASCADE, related_name='variations')
     variation_number = models.PositiveSmallIntegerField()
@@ -114,6 +142,16 @@ class GenerationVariation(TimeStampedModel):
     keywords = models.JSONField(default=list, blank=True)
 
     is_selected = models.BooleanField(default=False)
+
+    slide_role = models.CharField(max_length=20, blank=True, help_text="Carousel only: 'cover', 'content' or 'cta'.")
+    visual_scene = models.TextField(blank=True, help_text='The picture description this image was drawn from.')
+    background = models.ImageField(
+        upload_to=variation_image_upload_path, blank=True, null=True,
+        help_text='The AI picture before text and logo were composited - kept so edited copy re-renders for free.',
+    )
+    render_params = models.JSONField(default=dict, blank=True, help_text='Layout inputs used to composite this image.')
+    status = models.CharField(max_length=12, choices=Status.choices, default=Status.READY)
+    error_message = models.TextField(blank=True)
 
     class Meta:
         ordering = ['variation_number']

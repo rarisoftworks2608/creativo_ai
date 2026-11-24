@@ -13,7 +13,6 @@ import {
 } from '../api/publishing'
 import { extractErrorMessage } from '../api/client'
 import { useAuth } from '../context/AuthContext'
-import { useCompanyWorkspace } from '../context/CompanyWorkspaceContext'
 import KpiTile from '../components/KpiTile'
 import Modal from '../components/Modal'
 import Tabs from '../components/Tabs'
@@ -24,7 +23,6 @@ const QUEUE_STATUSES = 'scheduled,queued,processing'
 export default function PublishingPage() {
   const { id: companyId } = useParams()
   const { isAdmin } = useAuth()
-  const workspace = useCompanyWorkspace()
 
   const [tab, setTab] = useState(isAdmin ? 'ready' : 'queue')
   const [stats, setStats] = useState(null)
@@ -117,7 +115,7 @@ export default function PublishingPage() {
         <div>
           <h1>Publishing</h1>
           <p className="page-subtitle">
-            {workspace?.company?.name ? `${workspace.company.name} · ` : ''}Schedule approved content to Instagram, Facebook and
+            Schedule approved content to Instagram, Facebook and
             LinkedIn, and track every post.
           </p>
         </div>

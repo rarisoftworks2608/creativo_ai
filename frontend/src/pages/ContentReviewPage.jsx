@@ -5,7 +5,6 @@ import { getItemHistory } from '../api/approvals'
 import { selectVariation } from '../api/creativeGeneration'
 import { extractErrorMessage } from '../api/client'
 import { useAuth } from '../context/AuthContext'
-import { useCompanyWorkspace } from '../context/CompanyWorkspaceContext'
 import ContentPreview from '../components/ContentPreview'
 import Modal from '../components/Modal'
 import ReviewTimeline from '../components/ReviewTimeline'
@@ -25,7 +24,6 @@ export default function ContentReviewPage() {
   const [searchParams] = useSearchParams()
   const highlightId = Number(searchParams.get('item')) || null
   const { isAdmin } = useAuth()
-  const workspace = useCompanyWorkspace()
 
   const [tab, setTab] = useState('pending_approval')
   const [items, setItems] = useState([])
@@ -136,9 +134,9 @@ export default function ContentReviewPage() {
     <div>
       <div className="page-header">
         <div>
-          <h1>Content approvals</h1>
+          <h1>Approvals</h1>
           <p className="page-subtitle">
-            {workspace?.company?.name ? `${workspace.company.name} · ` : ''}
+            
             Review generated creatives and videos, approve them for publishing, or request changes (one automatic
             regeneration per item).
           </p>

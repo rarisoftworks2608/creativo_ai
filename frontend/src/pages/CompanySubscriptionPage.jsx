@@ -217,7 +217,7 @@ export default function CompanySubscriptionPage() {
     <div>
       <div className="page-header">
         <div>
-          <h1>Subscription & usage</h1>
+          <h1>Plan &amp; usage</h1>
           <p className="page-subtitle">
             {workspace?.company?.name || data.company_name} · usage period {formatDate(usage.period.start)} – {formatDate(usage.period.end)}
           </p>

@@ -9,6 +9,7 @@ from apps.activity_log.models import ActivityLog
 from apps.activity_log.services import log_activity
 from apps.companies.models import ClientProfile, Company
 from common.permissions import IsAdmin
+from common.queueing import enqueue_or_undo
 
 from .models import BackgroundMusicTrack, VideoGenerationRequest, VideoScene
 from .serializers import (
@@ -140,9 +141,13 @@ class VideoGenerationRequestListCreateView(CompanyScopedMixin, generics.ListCrea
         serializer = self.get_serializer(data=request.data, context={'request': request, 'company': company})
         serializer.is_valid(raise_exception=True)
         video_request = serializer.save(company=company, created_by=request.user)
+        created_item_id = None
         if video_request.content_calendar_item_id is None:
             video_request = _link_adhoc_calendar_item(video_request, request.user)
-        video_request = _enqueue(video_request)
+            created_item_id = video_request.content_calendar_item_id
+        video_request, failure = enqueue_or_undo(_enqueue, video_request, created_calendar_item_id=created_item_id)
+        if failure is not None:
+            return failure
 
         log_activity(
             module=ActivityLog.Module.VIDEO, action='Video generation started',

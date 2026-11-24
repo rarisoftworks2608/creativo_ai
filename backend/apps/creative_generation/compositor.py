@@ -14,13 +14,17 @@ never stretched or smoothed.
 """
 
 import io
+import math
+from dataclasses import dataclass
 import re
 import unicodedata
 from pathlib import Path
 
-from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont, ImageStat
+from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageStat
 
-from .art_direction import STYLE_PRESETS, UNFRAMED_TYPES, EnergyMap, choose_style, logo_corners, plan_layout, seeded
+from .art_direction import (
+    STYLE_PRESETS, UNFRAMED_TYPES, EnergyMap, choose_style, logo_corners, logo_slots, plan_layout, seeded,
+)
 
 FONT_DIR = Path(__file__).resolve().parent / 'fonts'
 
@@ -211,6 +215,8 @@ def compose_creative(
     logo_bytes=None, symbol_bytes=None, brand_profile=None,
     placement='auto', aspect=DEFAULT_ASPECT, creative_type='', variation_seed=None, composition=None,
     output_width=None, highlights=(), tagline='', brand_name='', website='',
+    exact_aspect=False, safe_top=0.0, safe_bottom=0.0, style_presets=None, style_seed=None, headline_scale=1.0,
+    rating=None, portrait_bytes=None, logo_anchor=None, layout_info=None,
 ):
     """Returns (composited_bytes, 'image/jpeg'), or the input unchanged if there is nothing to
     apply. `logo_bytes` (BrandProfile.logo) takes priority over `symbol_bytes`
@@ -231,9 +237,24 @@ def compose_creative(
 
     `highlights` (the company's services as 2-4 short labels), `tagline`, `brand_name` and `website` dress a
     business creative as a designed poster: the kicker moves to a header row opposite the logo and a services strip
-    and a footer are drawn along the bottom (see _paint_frame). Greetings and testimonials never get them."""
+    and a footer are drawn along the bottom (see _paint_frame). Greetings and testimonials never get them.
+
+    The creative-type systems (creative_types.py) add: `exact_aspect` fits the picture to `aspect` exactly (the
+    excess height or width is centre-cropped - nothing is stretched or invented); `safe_top` / `safe_bottom` (shares
+    of the height) keep text and logo out of a story's interface bands; `style_presets` limits the typography to the
+    presets of a design style; `style_seed` picks the typography separately from the layout, so every slide of a
+    carousel shares one look while each slide is laid out for its own picture; `headline_scale` sets a carousel's
+    content slides smaller than its cover; `rating` (1-5, only when one was supplied) draws stars and
+    `portrait_bytes` a round client photo, both under a testimonial's quote.
+
+    The logo is designed into the composition (see _art_direct): of the brand's logo files the variant that reads best
+    on this picture is used (a transparent version of the same logo is preferred to one with its own background
+    box), sized by its visual weight, and placed in the slot - a corner or the middle of the top or bottom edge -
+    that is calm, keeps it visible, lines up with the text and balances it. `logo_anchor` ('top_left:0' - slot and
+    variant) pins that choice, so every slide of a carousel carries the logo in the same place; `layout_info` (a
+    dict) receives the anchor that was used."""
     mark_bytes = logo_bytes or symbol_bytes
-    if not any([eyebrow, headline, description, cta, mark_bytes]):
+    if not any([eyebrow, headline, description, cta, mark_bytes]) and not exact_aspect:
         return image_bytes, mime_type
 
     eyebrow = _sanitize_text(eyebrow)
@@ -245,9 +266,11 @@ def compose_creative(
 
     base = Image.open(io.BytesIO(image_bytes)).convert('RGBA')
     primary, accent = _brand_colors(brand_profile)
-    mark = _prepare_mark(mark_bytes) if mark_bytes else None
+    variants = _logo_variants(logo_bytes, symbol_bytes)
+    mark = variants[0].image if variants else None
 
-    base = _upscale(_crop_taller_than(base, aspect), output_width)
+    base = _upscale(_fit_aspect(base, aspect) if exact_aspect else _crop_taller_than(base, aspect), output_width)
+    portrait = _prepare_portrait(portrait_bytes) if portrait_bytes else None
     if placement in ('top', 'below'):
         base = _draw_layout(
             base, placement=placement, eyebrow=eyebrow, headline=headline, description=description, cta=cta,
@@ -258,6 +281,9 @@ def compose_creative(
             base, eyebrow=eyebrow, headline=headline, description=description, cta=cta, primary=primary,
             accent=accent, mark=mark, brand_profile=brand_profile, creative_type=creative_type, seed=variation_seed,
             composition=composition, highlights=highlights, tagline=tagline, brand_name=brand_name, website=website,
+            safe_top=safe_top, safe_bottom=safe_bottom, style_presets=style_presets, style_seed=style_seed,
+            headline_scale=headline_scale, rating=rating, portrait=portrait, logos=variants, logo_anchor=logo_anchor,
+            layout_info=layout_info,
         )
     return _encode_jpeg(base.convert('RGB')), 'image/jpeg'
 
@@ -287,23 +313,94 @@ def _upscale(base, output_width):
 
 
 def _prepare_mark(mark_bytes):
-    """The logo as RGBA with a transparent background, trimmed to its artwork - or None if
-    the file can't be read. Logos are often uploaded as JPEGs / opaque PNGs with a flat
-    off-white background; that background is keyed out so the logo can sit directly on the
-    creative instead of inside a white box."""
+    """The brand's logo file exactly as it was uploaded - or None if the file can't be read.
+
+    Nothing about the logo is changed: no background is removed, nothing is trimmed, recoloured or redrawn, and no
+    plate is put behind it. It is only converted to RGBA so it can be laid over the picture (a transparent PNG keeps
+    its transparency, a logo with its own background keeps that background) and later resized proportionally."""
     try:
-        mark = Image.open(io.BytesIO(mark_bytes)).convert('RGBA')
+        return Image.open(io.BytesIO(mark_bytes)).convert('RGBA')
     except Exception:  # noqa: BLE001 - a corrupt/unsupported image file should never fail generation
         return None
-    width, height = mark.size
-    if mark.getchannel('A').getextrema()[0] >= 250:  # fully opaque: look for a flat background
-        corners = [mark.getpixel(point)[:3] for point in ((0, 0), (width - 1, 0), (0, height - 1), (width - 1, height - 1))]
-        background = tuple(sum(c[i] for c in corners) // 4 for i in range(3))
-        if all(sum(abs(c[i] - background[i]) for i in range(3)) <= 45 for c in corners):
-            difference = ImageChops.difference(mark.convert('RGB'), Image.new('RGB', mark.size, background)).convert('L')
-            mark.putalpha(difference.point(lambda v: 0 if v < 24 else min(255, (v - 24) * 6)))
-    box = mark.getchannel('A').point(lambda v: 255 if v > 24 else 0).getbbox()
-    return mark.crop(box) if box else None
+
+
+@dataclass(frozen=True)
+class LogoVariant:
+    """One of the brand's own logo files, unchanged: `transparent` when it has no background of its own, and `tone`
+    the colour that meets the picture - its artwork's colour, or its own background's when it has one."""
+    image: Image.Image
+    transparent: bool
+    tone: str
+
+
+def _is_transparent(mark):
+    return mark.getchannel('A').getextrema()[0] < 250
+
+
+def _artwork_aspect(mark):
+    """width / height of the drawn artwork inside the file (its transparent or flat-coloured margin left out) - used
+    only to tell whether two files are the same logo, never to crop it."""
+    if _is_transparent(mark):
+        box = mark.getchannel('A').point(lambda v: 255 if v > 24 else 0).getbbox()
+    else:
+        corner = mark.getpixel((0, 0))[:3]
+        rgb = mark.convert('RGB')
+        flat = Image.new('RGB', mark.size, corner)
+        from PIL import ImageChops
+
+        difference = ImageChops.difference(rgb, flat).convert('L').point(lambda v: 255 if v > 40 else 0)
+        box = difference.getbbox()
+    if not box:
+        return None
+    return (box[2] - box[0]) / max(1, box[3] - box[1])
+
+
+def _variant(mark):
+    transparent = _is_transparent(mark)
+    if transparent:
+        tone = ImageStat.Stat(mark.convert('RGB'), mask=mark.getchannel('A').point(lambda v: 255 if v > 128 else 0)).mean
+    else:
+        width, height = mark.size
+        border = [mark.getpixel((x, y))[:3] for x in (0, width - 1) for y in range(0, height, max(1, height // 12))]
+        border += [mark.getpixel((x, y))[:3] for y in (0, height - 1) for x in range(0, width, max(1, width // 12))]
+        tone = [sum(px[i] for px in border) / len(border) for i in range(3)]
+    return LogoVariant(mark, transparent, '#%02X%02X%02X' % tuple(int(v) for v in tone))
+
+
+def _logo_variants(logo_bytes, symbol_bytes):
+    """The brand's logo files that may be used, best first: the main logo, then the secondary file when it is the
+    same logo (the same artwork proportions - not an icon-only mark) on a transparent background, at a resolution
+    that will not blur. None of them is altered."""
+    main = _prepare_mark(logo_bytes) if logo_bytes else None
+    alternate = _prepare_mark(symbol_bytes) if symbol_bytes else None
+    if main is None:
+        main, alternate = alternate, None
+    if main is None:
+        return []
+    variants = [_variant(main)]
+    if alternate is not None and _is_transparent(alternate) and alternate.width >= 300:
+        main_aspect, alternate_aspect = _artwork_aspect(main), _artwork_aspect(alternate)
+        if main_aspect and alternate_aspect and abs(main_aspect - alternate_aspect) / max(main_aspect, alternate_aspect) <= 0.35:
+            variants.append(_variant(alternate))
+    return variants
+
+
+# The logo's visual weight as a share of the creative's area: present but never competing with the headline - a
+# little quieter on a greeting and quieter still as the signature of a testimonial.
+LOGO_AREA_SHARE = {'testimonial_creative': 0.013, 'festival_creative': 0.015}
+LOGO_AREA_DEFAULT = 0.02
+LOGO_MAX_UPSCALE = 1.6  # beyond this a small logo file would turn soft
+
+
+def _integrated_logo_size(mark, width, height, creative_type=''):
+    """(w, h) for the logo, proportional, set by area rather than width so a round emblem and a long wordmark carry
+    the same visual weight - capped so a wordmark never spans the frame, and never enlarged past what its file holds."""
+    aspect = mark.width / max(1, mark.height)
+    area = LOGO_AREA_SHARE.get(creative_type, LOGO_AREA_DEFAULT) * width * height
+    logo_w = math.sqrt(area * aspect)
+    logo_w = min(logo_w, width * 0.30, width * 0.13 * aspect, mark.width * LOGO_MAX_UPSCALE)
+    logo_w = max(logo_w, min(width * 0.10, mark.width * LOGO_MAX_UPSCALE))
+    return max(1, int(logo_w)), max(1, int(logo_w / aspect))
 
 
 def _mix(hex_color, other_rgb, amount):
@@ -367,7 +464,7 @@ def _kicker_spacing(font, kicker):
 
 def _build_text_parts(
     draw, *, centered=None, align=None, text_width, width, eyebrow, headline, description, cta, brand_profile,
-    style=None,
+    style=None, headline_scale=1.0, rating=None, portrait=None,
 ):
     """The text stack, top to bottom, as (kind, data, height, gap_before) tuples: kicker, headline, a divider,
     body copy and a CTA - each only if there is text for it. `align` is 'center', 'left' or 'right'. `style` is
@@ -379,6 +476,8 @@ def _build_text_parts(
     align = align or ('left' if centered is False else 'center')
     centered = align == 'center'
     eyebrow, headline, description, cta = (_typographic(value) for value in (eyebrow, headline, description, cta))
+    if headline and style is not None and style.get('quote'):
+        headline = f'\u201c{headline.strip(chr(34) + chr(39) + chr(0x201C) + chr(0x201D))}\u201d'
     pinned = style is None
     style = style or DEFAULT_STYLE
     kicker = ('rules' if centered else 'plain') if pinned else style['kicker']
@@ -404,7 +503,7 @@ def _build_text_parts(
         # A headline of two short sentences ("Ideas Into Innovation. Technology Into Growth.") keeps one sentence to
         # a line, and the word that closes each sentence is set in the accent colour (the 'accent_words' presets).
         by_sentence = bool(style.get('accent_words')) and not _has_devanagari(text)
-        max_lines = 4 if by_sentence else 3
+        max_lines = style.get('max_lines') or (4 if by_sentence else 3)
 
         def headline_lines(font, limit):
             if not by_sentence:
@@ -414,7 +513,7 @@ def _build_text_parts(
                 for line in _wrapped_lines(draw, sentence, font, text_width, max_lines=99)
             ]
 
-        size = max(30, int(width * style['size']))
+        size = max(30, int(width * style['size'] * headline_scale))
         font = font_at(size)
         longest = max(text.split(), key=len)
         # Shrink until the longest word fits and the headline needs no more than three (four) lines.
@@ -435,6 +534,9 @@ def _build_text_parts(
             'lines', (lines, font, int(font.size * 1.2), 'headline', tail, emphasis),
             len(lines) * int(font.size * 1.2), 0,
         ))
+    if portrait is not None:
+        diameter = max(48, int(width * 0.12))
+        parts.append(('portrait', _round_portrait(portrait, diameter), diameter, int(width * 0.035) if parts else 0))
     if description and style.get('body') == 'caps' and not _has_devanagari(description):
         # The sub-line of the poster look: small, widely spaced capitals with a short rule under them.
         font, spacing, lines = _caps_lines(draw, description, brand_profile, width, text_width, style.get('body_size', 0.019))
@@ -457,6 +559,9 @@ def _build_text_parts(
             parts.append(('divider', divider, 2 * max(4, int(width * 0.008)), int(width * 0.02)))  # ornament between headline and body
             gap = int(width * 0.02)
         parts.append(('lines', (lines, font, int(font.size * 1.6), 'body'), len(lines) * int(font.size * 1.6), gap))
+    if rating:
+        star = max(14, int(width * 0.024))
+        parts.append(('stars', (int(rating), star), star, int(width * 0.02) if parts else 0))
     if cta:
         quiet = style['cta'] == 'underline'  # a quiet text link: sentence case, regular weight
         font = _brand_font(brand_profile, 'regular' if quiet else 'semibold', max(15, int(width * (0.029 if quiet else 0.03))), cta)
@@ -541,6 +646,11 @@ def _parts_width(draw, parts, align, width):
             widest = max(widest, int(width * 0.2) if align == 'center' else int(width * 0.16))
         elif kind == 'cta':
             widest = max(widest, data[2])
+        elif kind == 'portrait':
+            widest = max(widest, data.width)
+        elif kind == 'stars':
+            count, star = data
+            widest = max(widest, int(count * star * 1.35))
     return widest
 
 
@@ -586,12 +696,60 @@ def _crop_taller_than(base, aspect):
     return base.crop((0, top, width, top + target))
 
 
+def _fit_aspect(base, aspect):
+    """The picture fitted to the creative's exact shape: the excess height or width is centre-cropped. Nothing is
+    stretched or invented - the image prompt already asked for the subject to sit where this crop keeps it."""
+    width, height = base.size
+    target_h = round(width * aspect)
+    if target_h < height:
+        top = (height - target_h) // 2
+        return base.crop((0, top, width, top + target_h))
+    target_w = round(height / aspect)
+    if target_w < width:
+        left = (width - target_w) // 2
+        return base.crop((left, 0, left + target_w, height))
+    return base
+
+
+def _prepare_portrait(portrait_bytes):
+    """The client's own photo (never a generated face), as RGBA - or None if it cannot be read."""
+    try:
+        return Image.open(io.BytesIO(portrait_bytes)).convert('RGBA')
+    except Exception:  # noqa: BLE001 - an unreadable upload just leaves the photo out
+        return None
+
+
+def _round_portrait(photo, diameter):
+    """The photo centre-cropped to a square and masked to a circle with an antialiased edge."""
+    side = min(photo.size)
+    left, top = (photo.width - side) // 2, (photo.height - side) // 2
+    square = photo.crop((left, top, left + side, top + side)).resize((diameter, diameter), Image.LANCZOS)
+    scale = 4
+    mask = Image.new('L', (diameter * scale, diameter * scale), 0)
+    ImageDraw.Draw(mask).ellipse([0, 0, diameter * scale - 1, diameter * scale - 1], fill=255)
+    square.putalpha(mask.resize((diameter, diameter), Image.LANCZOS))
+    return square
+
+
+def _star_points(cx, cy, outer):
+    """The ten points of a five-pointed star centred on (cx, cy)."""
+    import math
+
+    inner = outer * 0.45
+    points = []
+    for index in range(10):
+        radius = outer if index % 2 == 0 else inner
+        angle = math.pi / 2 + index * math.pi / 5
+        points.append((cx + radius * math.cos(angle), cy - radius * math.sin(angle)))
+    return points
+
+
 # How opaque the veil behind the text may get, gentlest first. Nothing at all when the text already reads on
 # the picture as it is: a cleaner, more luxurious look than a glow behind every block of text.
 VEIL_STRENGTHS = (0.0, 0.2, 0.35, 0.5, 0.65, 0.8)
 
 
-def _luminance_extremes(zone):
+def _luminance_extremes(zone, share=0.1):
     """(bright_hex, dark_hex): the colour 90% of the way up and 10% of the way down the zone's brightness
     range. Text has to stay readable over the brightest spot behind it (a flame, a marigold) for white ink and
     the darkest one for dark ink, not just on the average colour."""
@@ -599,10 +757,10 @@ def _luminance_extremes(zone):
         zone.resize((48, 48)).getdata(), key=lambda p: 0.2126 * p[0] + 0.7152 * p[1] + 0.0722 * p[2],
     )
     pick = lambda share: '#%02X%02X%02X' % tuple(pixels[min(len(pixels) - 1, int(len(pixels) * share))][:3])  # noqa: E731
-    return pick(0.9), pick(0.1)
+    return pick(1 - share), pick(share)
 
 
-def _text_style(backdrop_hex, primary, accent, bright_hex=None, dark_hex=None):
+def _text_style(backdrop_hex, primary, accent, bright_hex=None, dark_hex=None, min_strength=0.0, target=4.5):
     """How the text reads best on the part of the picture it sits on, as (veil_color, veil_strength, ink,
     accent_color). The gentlest veil that gives readable contrast wins: a pale veil with dark brand-coloured
     text on a light picture (the usual look of a premium greeting: dark type straight onto a bright wall), or a
@@ -613,7 +771,8 @@ def _text_style(backdrop_hex, primary, accent, bright_hex=None, dark_hex=None):
     deep = _mix(primary, (0, 0, 0), 0.62)
     pale = _mix(backdrop_hex, (255, 255, 255), 0.6)
     best = None
-    for strength in VEIL_STRENGTHS:
+    strengths = [strength for strength in VEIL_STRENGTHS if strength >= min_strength] or [VEIL_STRENGTHS[-1]]
+    for strength in strengths:
         options = []
         light_bg = _mix(dark_hex, _rgb(pale), strength)
         if _relative_luminance(light_bg) > 0.4:
@@ -623,17 +782,118 @@ def _text_style(backdrop_hex, primary, accent, bright_hex=None, dark_hex=None):
         options.append((_contrast_ratio('#FFFFFF', dark_bg), deep, dark_bg, '#FFFFFF'))
         contrast, veil, background, ink = max(options, key=lambda option: option[0])
         best = (veil, strength, ink, _ensure_contrast(accent, background, 3.0))
-        if contrast >= 4.5:
+        if contrast >= target:
             break
     return best
 
 
-def _text_colors(base, rect, primary, accent):
-    """(veil_color, veil_strength, ink, accent_color) for the text that will sit over `rect` of the picture."""
+# How busy the picture behind the text is: mean edge detail at a 200 px-wide working scale. Calibrated on real
+# creatives - text read well on a calm dark floor (about 6) and badly across a laid dinner table (about 38) or a
+# patterned carpet (about 24), even where the brightness contrast alone passed.
+BUSY_MODERATE, BUSY, BUSY_VERY = 10.0, 22.0, 34.0
+
+
+def _busyness(base, rect):
+    """The busiest horizontal band of the text block (each about a line high): a headline that crosses a screen
+    or a dress is hard to read even when the rest of the block sits on a calm floor, so the block is judged by its
+    worst stretch, not its average."""
+    width = base.width
+    zone = base.crop(rect).convert('L')
+    zone = zone.resize((max(3, zone.width * 200 // width), max(3, zone.height * 200 // width)))
+    edges = zone.filter(ImageFilter.FIND_EDGES).crop((1, 1, zone.width - 1, zone.height - 1))
+    band = max(4, int(width * 0.06) * 200 // width)  # about one headline line at the working scale
+    if edges.height <= band:
+        return ImageStat.Stat(edges).mean[0]
+    step = max(1, band // 2)
+    return max(
+        ImageStat.Stat(edges.crop((0, y, edges.width, min(edges.height, y + band)))).mean[0]
+        for y in range(0, edges.height - band + 1, step)
+    )
+
+
+def legibility_for(busy):
+    """(min_veil, contrast_target, scrim, shadow) for a picture this busy behind the text: a calm area keeps the
+    clean look (no veil unless contrast needs one); detail behind the letters needs more contrast than an even
+    surface of the same brightness, a stronger backing, and - once busy - an edge scrim and a soft shadow."""
+    if busy >= BUSY_VERY:
+        return 0.65, 7.0, True, True
+    if busy >= BUSY:
+        return 0.5, 7.0, True, True
+    if busy >= BUSY_MODERATE:
+        return 0.2, 5.5, False, True
+    return 0.0, 4.5, False, False
+
+
+def _text_colors(base, rect, primary, accent, min_strength=0.0, target=4.5):
+    """(veil_color, veil_strength, ink, accent_color) for the text that will sit over `rect` of the picture. Behind
+    busy text the contrast is judged against the brightest / darkest 3% (a lit screen or a lamp under a few letters)
+    rather than 10%."""
     zone = base.crop(rect).convert('RGB')
     backdrop_hex = '#%02X%02X%02X' % tuple(int(v) for v in ImageStat.Stat(zone).mean)
-    bright_hex, dark_hex = _luminance_extremes(zone)
-    return _text_style(backdrop_hex, primary, accent, bright_hex, dark_hex)
+    bright_hex, dark_hex = _luminance_extremes(zone, share=0.03 if min_strength >= 0.5 else 0.1)
+    return _text_style(backdrop_hex, primary, accent, bright_hex, dark_hex, min_strength=min_strength, target=target)
+
+
+def _edge_scrim(base, color, max_alpha, rect, tall_side=None):
+    """The editorial backing for text on a busy picture: `color` rising from the frame edge nearest the text to
+    full strength just before the text, holding behind it, then fading out towards the middle of the picture - a
+    deliberate gradient, never a box or a blotch. `tall_side` ('left' / 'right') backs a tall side column from that
+    side instead of from the top or bottom."""
+    width, height = base.size
+    left, top, right, bottom = rect
+    pad = int(width * 0.06)
+    if tall_side in ('left', 'right'):
+        span_start, span_end = (0, min(width, right + pad * 3)) if tall_side == 'left' else (max(0, left - pad * 3), width)
+        size = span_end - span_start
+        ramp = max(1, min(size, pad * 3))
+        line = Image.new('L', (size, 1))
+        for x in range(size):
+            # Full strength from the edge to the text's far side, then a smooth fade.
+            distance = (x if tall_side == 'right' else size - 1 - x)
+            alpha = 1.0 if distance >= ramp else (distance / ramp) ** 1.3
+            line.putpixel((x, 0), int(max_alpha * alpha))
+        mask = line.resize((size, height))
+        layer = Image.new('RGBA', (size, height), (*_rgb(color), 255))
+        layer.putalpha(mask)
+        base.alpha_composite(layer, (span_start, 0))
+        return
+    from_bottom = (top + bottom) / 2 > height / 2
+    if from_bottom:
+        start = max(0, top - pad * 3)
+        size = height - start
+        hold_from = max(1, top - pad // 2 - start)
+        column = [1.0 if y >= hold_from else (y / hold_from) ** 1.3 for y in range(size)]
+        offset = start
+    else:
+        end = min(height, bottom + pad * 3)
+        size = end
+        hold_to = min(size - 1, bottom + pad // 2)
+        fade = max(1, size - hold_to)
+        column = [1.0 if y <= hold_to else ((size - y) / fade) ** 1.3 for y in range(size)]
+        offset = 0
+    if size <= 0:
+        return
+    mask = Image.new('L', (1, size))
+    for y, value in enumerate(column):
+        mask.putpixel((0, y), int(max_alpha * value))
+    layer = Image.new('RGBA', (width, size), (*_rgb(color), 255))
+    layer.putalpha(mask.resize((width, size)))
+    base.alpha_composite(layer, (0, offset))
+
+
+def _composite_with_shadow(base, text_layer, ink):
+    """Lays the painted text over the picture with a soft shadow under the letters - dark under light type,
+    a pale glow under dark type - so the edges of every character separate from the detail behind them."""
+    width = base.width
+    alpha = text_layer.getchannel('A')
+    radius = max(2, int(width * 0.004))
+    shadow_alpha = alpha.filter(ImageFilter.GaussianBlur(radius)).point(lambda v: int(v * 0.6))
+    light_ink = _relative_luminance(ink) > 0.5
+    shadow = Image.new('RGBA', base.size, (0, 0, 0, 255) if light_ink else (255, 255, 255, 255))
+    shadow.putalpha(shadow_alpha)
+    offset = max(1, int(width * 0.0015))
+    base.alpha_composite(shadow, (0, offset))
+    base.alpha_composite(text_layer)
 
 
 def _draw_layout(base, *, placement, eyebrow, headline, description, cta, primary, accent, mark, brand_profile):
@@ -797,6 +1057,8 @@ def _paint_header(base, eyebrow, *, logo_rect, brand_profile, primary, accent):
 def _art_direct(
     base, *, eyebrow, headline, description, cta, primary, accent, mark, brand_profile, creative_type, seed,
     composition=None, highlights=(), tagline='', brand_name='', website='',
+    safe_top=0.0, safe_bottom=0.0, style_presets=None, style_seed=None, headline_scale=1.0, rating=None, portrait=None,
+    logos=None, logo_anchor=None, layout_info=None,
 ):
     """The art-directed layout: the text stack's family (centred / left / right / a narrow column) and position
     and the logo's corner are chosen for this picture's calm areas (art_direction.plan_layout), and the
@@ -811,8 +1073,16 @@ def _art_direct(
     labels = list(highlights)[:4] if len(highlights) >= 2 else []
     site = _site_label(website)
     framed = creative_type not in UNFRAMED_TYPES and bool(labels or site)
-    _name, style = choose_style(rng, creative_type, brand_profile, framed=framed)
+    # The typography can be chosen from its own seed (a carousel's slides share one look) and from a design style's
+    # own presets; the layout below still follows each picture.
+    style_rng = seeded(style_seed) if style_seed is not None else rng
+    presets = [name for name in (style_presets or ()) if name in STYLE_PRESETS]
+    if presets and not framed:
+        style = STYLE_PRESETS[style_rng.choice(presets) if style_rng is not None else presets[0]]
+    else:
+        _name, style = choose_style(style_rng, creative_type, brand_profile, framed=framed)
     framed = framed and bool(style.get('frame'))
+    safe_top_px, safe_bottom_px = int(height * (safe_top or 0)), int(height * (safe_bottom or 0))
     draw = ImageDraw.Draw(base)
     stacks = {}
 
@@ -820,45 +1090,77 @@ def _art_direct(
     header_text, stack_eyebrow = (eyebrow, '') if framed else ('', eyebrow)
     if framed and site:
         cta = ''  # the website in the footer is the call to action
-    logo_size = _logo_size(mark, width, height) if mark is not None else None
+    logos = list(logos or ([] if mark is None else [_variant(mark)]))
+    if framed:
+        # The poster's header row is designed around the logo at the top right, opposite the kicker.
+        logo_size = _integrated_logo_size(logos[0].image, width, height, creative_type) if logos else None
+    else:
+        logo_size = None
     margin_top = margin_bottom = None
     if framed:
         pad = int(width * 0.06)
         margin_top = pad + max(logo_size[1] if logo_size else 0, _header_height(draw, header_text, brand_profile, width)) + int(width * 0.04)
         margin_bottom = metrics['reserve']
+    if safe_top_px or safe_bottom_px:
+        # A story: the text stays out of the app's top and bottom bands (so does the logo - see its slots).
+        pad = int(width * 0.06)
+        margin_top = max(margin_top or 0, safe_top_px + pad)
+        margin_bottom = max(margin_bottom or 0, safe_bottom_px + int(width * 0.05))
 
     def measure(family):
         parts = _build_text_parts(
             draw, align=family.align, text_width=int(width * family.width), width=width, eyebrow=stack_eyebrow,
             headline=headline, description=description, cta=cta, brand_profile=brand_profile, style=style,
+            headline_scale=headline_scale, rating=rating, portrait=portrait,
         )
         stacks[family.name] = parts
         return _parts_width(draw, parts, family.align, width), sum(h + gap for _kind, _data, h, gap in parts)
 
     has_text = any((stack_eyebrow, headline, description, cta))
-    plan = plan_layout(
-        EnergyMap(base), base.size, measure=measure if has_text else None, logo_size=logo_size, rng=rng,
-        prefer=composition, margin_top=margin_top, margin_bottom=margin_bottom,
+    energy = EnergyMap(base)
+    rects, cost = _logo_options(
+        base, energy, logos, creative_type=creative_type, framed=framed, anchor=logo_anchor,
+        top_inset=safe_top_px, bottom_inset=safe_bottom_px,
     )
+    plan = plan_layout(
+        energy, base.size, measure=measure if has_text else None, logo_size=logo_size, rng=rng,
+        prefer=composition, margin_top=margin_top, margin_bottom=margin_bottom,
+        logo_rects=rects if logos else {}, logo_cost=cost,
+    )
+    if layout_info is not None:
+        layout_info['logo_anchor'] = plan.logo_corner
+    plan = _align_logo_with_text(plan, base.size, framed=framed, top_inset=safe_top_px, bottom_inset=safe_bottom_px)
 
     if plan.text_rect is not None:
         parts, align = stacks[plan.family.name], plan.family.align
         left, top, right, bottom = plan.text_rect
-        veil_color, strength, ink, accent_color = _text_colors(base, plan.text_rect, primary, accent)
+        min_veil, target, scrim, shadow = legibility_for(_busyness(base, plan.text_rect))
+        veil_color, strength, ink, accent_color = _text_colors(
+            base, plan.text_rect, primary, accent, min_strength=min_veil, target=target,
+        )
         pad = int(width * 0.06)
         reach = int(pad * 1.5)
-        _soft_veil(base, veil_color, int(255 * strength), (left - reach, top - reach, right + reach, bottom + reach), blur=pad)
+        if scrim:
+            tall = (bottom - top) > height * 0.45 and plan.family.align in ('left', 'right')
+            _edge_scrim(base, veil_color, int(255 * strength), plan.text_rect, tall_side=plan.family.align if tall else None)
+        else:
+            _soft_veil(base, veil_color, int(255 * strength), (left - reach, top - reach, right + reach, bottom + reach), blur=pad)
         # The body copy and the kicker are a softer tone of the headline's ink, taken towards the picture behind
         # them (as a designer would grade them) - still held to a readable contrast.
         backdrop = '#%02X%02X%02X' % tuple(int(v) for v in ImageStat.Stat(base.crop(plan.text_rect).convert('RGB')).mean)
-        body_color = _ensure_contrast(_mix(ink, _rgb(backdrop), 0.18), backdrop, 4.5)
-        muted_color = _ensure_contrast(_mix(ink, _rgb(backdrop), 0.42), backdrop, 3.5)
+        # On a busy picture the softer tones are held to the full text contrast too (a small label such as a
+        # slide counter "02 / 05" otherwise disappears into the detail).
+        body_color = _ensure_contrast(_mix(ink, _rgb(backdrop), 0.12 if shadow else 0.18), backdrop, target)
+        muted_color = _ensure_contrast(_mix(ink, _rgb(backdrop), 0.25 if shadow else 0.42), backdrop, 4.5 if shadow else 3.5)
+        canvas = Image.new('RGBA', base.size, (0, 0, 0, 0)) if shadow else base
         _paint_parts(
-            ImageDraw.Draw(base), parts, x={'center': (left + right) // 2, 'left': left, 'right': right}[align],
+            ImageDraw.Draw(canvas), parts, x={'center': (left + right) // 2, 'left': left, 'right': right}[align],
             y=top, align=align, width=width, ink=ink, accent_color=accent_color,
             headline_color=accent_color if style['headline_color'] == 'accent' else ink,
-            body_color=body_color, muted_color=muted_color,
+            body_color=body_color, muted_color=muted_color, canvas=canvas,
         )
+        if shadow:
+            _composite_with_shadow(base, canvas, ink)
     if framed:
         if header_text:
             _paint_header(base, header_text, logo_rect=plan.logo_rect, brand_profile=brand_profile, primary=primary, accent=accent)
@@ -866,9 +1168,105 @@ def _art_direct(
             base, metrics, labels=labels, site=site, brand_name=brand_name, tagline=tagline,
             brand_profile=brand_profile, primary=primary, accent=accent,
         )
-    if mark is not None and plan.logo_rect is not None:
-        _draw_logo(base, mark, plan.logo_rect, primary)
+    if logos and plan.logo_rect is not None and plan.logo_corner:
+        _draw_logo(base, logos[int(plan.logo_corner.split(':')[1])].image, plan.logo_rect, primary)
     return base
+
+
+def _align_logo_with_text(plan, size, *, framed, top_inset=0, bottom_inset=0):
+    """A logo that shares the top or bottom band with the text block, beside it, lines up with the block's edge -
+    its bottom on the text's last line, or its top on the text's first - as a designer would align them, instead of
+    floating on its own margin. Only when the two sit side by side and the shift is small."""
+    if framed or plan.text_rect is None or plan.logo_rect is None or not plan.logo_corner:
+        return plan
+    width, height = size
+    t_left, t_top, t_right, t_bottom = plan.text_rect
+    l_left, l_top, l_right, l_bottom = plan.logo_rect
+    gap = int(width * 0.03)
+    beside = l_right + gap <= t_left or t_right + gap <= l_left
+    if not beside:
+        return plan
+    limit = int(height * 0.08)
+    vertical = plan.logo_corner.split('_')[0]
+    shift = 0
+    if vertical == 'bottom' and t_bottom > height * 0.6 and 0 < l_bottom - t_bottom <= limit:
+        shift = t_bottom - l_bottom
+    elif vertical == 'top' and t_top < height * 0.4 and 0 < t_top - l_top <= limit:
+        shift = t_top - l_top
+        if l_top + shift < int(width * 0.06) + top_inset:
+            shift = 0
+    if not shift:
+        return plan
+    from dataclasses import replace
+
+    return replace(plan, logo_rect=(l_left, l_top + shift, l_right, l_bottom + shift))
+
+
+def _logo_options(base, energy, logos, *, creative_type, framed, anchor, top_inset, bottom_inset):
+    """({'slot:variant': rect}, cost) - every place each usable logo variant could go, and how well it would sit
+    there. A designer's reasons, as costs: the logo stays off busy detail (a subject, a face, a pattern), stays
+    clearly visible against what is behind it, lines up with the text block's alignment and balances it (text at
+    the bottom, logo at the top), and suits the creative - a letterhead position for an announcement, a signature
+    under a testimonial, a quiet place on a greeting. A file with its own background box is used only where its
+    box sits on a similar tone, so it reads as designed in rather than pasted on."""
+    width, height = base.size
+    gap = int(width * 0.03)
+    rects = {}
+    for index, variant in enumerate(logos):
+        size = _integrated_logo_size(variant.image, width, height, creative_type)
+        for slot, rect in logo_slots(base.size, size, top_inset=top_inset, bottom_inset=bottom_inset).items():
+            if framed and slot != 'top_right':
+                continue
+            rects[f'{slot}:{index}'] = rect
+    if anchor:
+        if anchor in rects:
+            rects = {anchor: rects[anchor]}
+        else:
+            slot = anchor.split(':')[0]
+            rects = {name: rect for name, rect in rects.items() if name.split(':')[0] == slot} or rects
+    backdrops = {}
+
+    def backdrop(rect):
+        if rect not in backdrops:
+            zone = base.crop(rect).convert('RGB')
+            backdrops[rect] = '#%02X%02X%02X' % tuple(int(v) for v in ImageStat.Stat(zone).mean)
+        return backdrops[rect]
+
+    def cost(name, rect, family, text_rect):
+        slot, index = name.split(':')
+        variant = logos[int(index)]
+        vertical, horizontal = slot.split('_')
+        padded = (rect[0] - gap, rect[1] - gap, rect[2] + gap, rect[3] + gap)
+        total = 0.7 * energy.mean(padded)                       # calm surroundings, off the subject
+        behind = backdrop(rect)
+        if variant.transparent:
+            contrast = _contrast_ratio(variant.tone, behind)
+            if contrast < 3.0:
+                total += (3.0 - contrast) * 4.0                 # it must stay clearly visible
+        else:
+            # Its own background box reads as a pasted sticker: used only when no clean (transparent) version can
+            # go anywhere better, and then where the picture around it has a similar tone.
+            total += 6.0 + 6.0 * abs(_relative_luminance(variant.tone) - _relative_luminance(behind))
+        if family is not None:
+            if family.align == horizontal or (family.align == 'center' and horizontal == 'center'):
+                total -= 1.5                                    # aligned with the text block
+            elif horizontal == 'center':
+                total += 0.6
+            if text_rect is not None:
+                text_low = (text_rect[1] + text_rect[3]) / 2 > height / 2
+                if (vertical == 'top') == text_low:
+                    total -= 1.0                                # balances the text across the frame
+        elif horizontal == 'center':
+            total += 0.6
+        if creative_type == 'testimonial_creative' and vertical == 'bottom':
+            total -= 1.2                                        # a signature beneath the client's words
+        elif creative_type == 'announcement_creative' and vertical == 'top':
+            total -= 0.8                                        # a letterhead above the news
+        elif creative_type == 'festival_creative' and slot == 'bottom_center':
+            total -= 0.8                                        # a quiet sign-off under the greeting
+        return total
+
+    return rects, cost
 
 
 def _draw_line(draw, x, y, text, font, fill, align, tail=None, emphasis=None, emphasis_fill=None):
@@ -900,6 +1298,7 @@ def _draw_line(draw, x, y, text, font, fill, align, tail=None, emphasis=None, em
 
 def _paint_parts(
     draw, parts, *, x, y, align, width, ink, accent_color, headline_color=None, body_color=None, muted_color=None,
+    canvas=None,
 ):
     """Draws the text stack top to bottom starting at y, centred on x, left-aligned at x or right-aligned at x.
     The headline is in `headline_color`, the body copy in `body_color` and a 'tracked' kicker in `muted_color`
@@ -952,6 +1351,17 @@ def _paint_parts(
                 _draw_spaced(draw, x, y + index * int(font.size * CAPS_LEADING), text_line, font, _rgb(body_color), spacing, align=align)
         elif kind == 'cta':
             _paint_cta(draw, data, x, y, align, ink, accent_color)
+        elif kind == 'portrait' and canvas is not None:
+            left = {'center': x - data.width // 2, 'left': x, 'right': x - data.width}[align]
+            canvas.alpha_composite(data, (int(left), int(y)))
+        elif kind == 'stars':
+            count, star = data
+            step = int(star * 1.35)
+            total = step * count - (step - star)
+            start = {'center': x - total // 2, 'left': x, 'right': x - total}[align]
+            for index in range(count):
+                cx = start + index * step + star / 2
+                draw.polygon(_star_points(cx, y + star / 2, star / 2), fill=_rgb(accent_color))
         y += part_height
 
 
@@ -1018,36 +1428,9 @@ def _logo_size(mark, width, height):
     return max(1, mark_w), max(1, mark_h)
 
 
-def _draw_plate(base, rect, color):
-    """A rounded plate of `color` behind rect (the logo): nearly opaque, with a fully rounded end and an antialiased
-    edge, so it reads as a deliberate brand tag and not a smudge on the picture."""
-    left, top, right, bottom = rect
-    pad_x, pad_y = int(base.width * 0.024), int(base.width * 0.014)
-    box = (left - pad_x, top - pad_y, right + pad_x, bottom + pad_y)
-    size = (box[2] - box[0], box[3] - box[1])
-    scale = 3  # drawn at 3x and reduced, for a smooth edge
-    mask = Image.new('L', (size[0] * scale, size[1] * scale), 0)
-    ImageDraw.Draw(mask).rounded_rectangle([0, 0, size[0] * scale - 1, size[1] * scale - 1], radius=size[1] * scale // 2, fill=236)
-    layer = Image.new('RGBA', size, (*_rgb(color), 255))
-    layer.putalpha(mask.resize(size, Image.LANCZOS))
-    base.alpha_composite(layer, (max(0, box[0]), max(0, box[1])), (max(0, -box[0]), max(0, -box[1])))
-
-
 def _draw_logo(base, mark, rect, primary):
-    """The original logo file, resized into `rect` and composited as it is - never redrawn by AI and never
-    recoloured, so its sharpness, colours and proportions are kept. The backdrop can be any colour (a brown
-    logo on an orange sky is unreadable), so where the logo's own colours would not stand out from what is
-    behind it, a clean rounded plate of a contrasting tone (white behind a dark logo, a deep brand tone behind a
-    light one) is put behind it instead."""
+    """The original logo file, resized proportionally into `rect` and composited exactly as it is: never redrawn,
+    recoloured, keyed out or given a plate - its own colours, background and proportions are kept."""
     left, top, right, bottom = rect
     mark = mark.resize((max(1, right - left), max(1, bottom - top)), Image.LANCZOS)
-    backdrop = ImageStat.Stat(base.crop(rect).convert('RGB')).mean
-    backdrop_hex = '#%02X%02X%02X' % tuple(int(v) for v in backdrop)
-    own = ImageStat.Stat(mark.convert('RGB'), mask=mark.getchannel('A')).mean
-    own_hex = '#%02X%02X%02X' % tuple(int(v) for v in own)
-    # A logo that kept its own opaque background (it could not be keyed out) is a solid rectangle already.
-    keeps_background = ImageStat.Stat(mark.getchannel('A').point(lambda v: 255 if v > 128 else 0)).mean[0] > 0.9 * 255
-    if not keeps_background and _contrast_ratio(own_hex, backdrop_hex) < 3.0:
-        plate = '#FFFFFF' if _relative_luminance(own_hex) < 0.4 else _mix(primary, (0, 0, 0), 0.7)
-        _draw_plate(base, rect, plate)
     base.alpha_composite(mark, (left, top))

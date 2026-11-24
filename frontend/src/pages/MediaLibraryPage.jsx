@@ -140,8 +140,8 @@ export default function MediaLibraryPage() {
 
       <div className="page-header">
         <div>
-          <h1>Media Library</h1>
-          <p className="page-subtitle">{company.name} · {items.length} file{items.length === 1 ? '' : 's'}</p>
+          <h1>Media library</h1>
+          <p className="page-subtitle">Every asset, creative and video for this company · {items.length} file{items.length === 1 ? '' : 's'}</p>
         </div>
       </div>
 
@@ -239,11 +239,11 @@ export default function MediaLibraryPage() {
       )}
 
       {previewItem && (
-        <Modal title={previewItem.name} onClose={() => setPreviewItem(null)} width={640}>
+        <Modal title={previewItem.name} onClose={() => setPreviewItem(null)} width={900} className="modal-media">
           {previewItem.type === 'video' ? (
-            <video controls src={previewItem.url} poster={previewItem.thumbnail_url || undefined} style={{ width: '100%' }} />
+            <video className="modal-media-asset" controls src={previewItem.url} poster={previewItem.thumbnail_url || undefined} />
           ) : previewItem.type === 'image' ? (
-            <img src={previewItem.url} alt={previewItem.name} style={{ width: '100%' }} />
+            <img className="modal-media-asset" src={previewItem.url} alt={previewItem.name} />
           ) : (
             <p>
               <a href={previewItem.url} target="_blank" rel="noreferrer">

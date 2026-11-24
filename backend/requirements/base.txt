@@ -21,6 +21,7 @@ cryptography==50.0.0                   # Fernet encryption for stored social acc
 # Background jobs
 celery==5.4.0                          # Async/background task processing
 redis==5.0.7                           # Celery broker / cache backend
+kombu==5.6.2                           # Celery transport - pinned: 5.7+ requires redis-py 6.1+
 
 # Media storage
 django-storages==1.14.4                # Pluggable storage backend (S3 / Cloudflare R2)

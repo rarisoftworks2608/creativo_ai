@@ -77,7 +77,7 @@ export default function JobsPage() {
     <div>
       <div className="page-header">
         <div>
-          <h1>Background Jobs</h1>
+          <h1>Background jobs</h1>
           <p className="page-subtitle">{count} background jobs - generation, publishing, reports and analytics sync</p>
         </div>
       </div>

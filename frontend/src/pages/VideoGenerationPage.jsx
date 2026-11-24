@@ -189,8 +189,8 @@ export default function VideoGenerationPage() {
 
       <div className="page-header">
         <div>
-          <h1>AI Video Generation</h1>
-          <p className="page-subtitle">{company.name}</p>
+          <h1>Videos</h1>
+          <p className="page-subtitle">Scripted reels and videos with voice-over for the planned content.</p>
         </div>
         {isAdmin && (
           <button type="button" className="btn btn-primary" onClick={() => setShowCreate(true)}>
@@ -364,7 +364,7 @@ export default function VideoGenerationPage() {
                 </select>
                 {musicTracks.length === 0 && (
                   <span className="field-hint-inline">
-                    The music library is empty - add royalty-free tracks under Music Library, or the video renders without music.
+                    The music library is empty, so a built-in soft background score is used. Add your own royalty-free tracks under Music Library to choose one.
                   </span>
                 )}
               </label>

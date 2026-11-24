@@ -247,17 +247,17 @@ class BrandLayerTests(SimpleTestCase):
         image.save(buf, format='JPEG', quality=95)
         return buf.getvalue()
 
-    def test_logo_background_is_removed_and_the_margin_trimmed(self):
+    def test_the_logo_file_is_used_exactly_as_uploaded_with_its_own_background(self):
         from apps.creative_generation.compositor import _prepare_mark
 
+        original = Image.open(io.BytesIO(self.flat_background_logo())).convert('RGBA')
         mark = _prepare_mark(self.flat_background_logo())
 
         self.assertEqual(mark.mode, 'RGBA')
-        self.assertLessEqual(abs(mark.width - 120), 4)  # trimmed to the artwork, not the 400px canvas
-        self.assertLessEqual(abs(mark.height - 60), 4)
-        self.assertEqual(mark.getpixel((mark.width // 2, mark.height // 2))[3], 255)  # artwork stays solid
+        self.assertEqual(mark.size, original.size)  # not trimmed to the artwork
+        self.assertEqual(mark.tobytes(), original.tobytes())  # every pixel as uploaded: the background is not keyed out
 
-    def test_logo_with_real_transparency_is_kept_as_is(self):
+    def test_a_transparent_logo_keeps_its_transparency_and_its_whole_canvas(self):
         from apps.creative_generation.compositor import _prepare_mark
 
         image = Image.new('RGBA', (100, 40), (0, 0, 0, 0))
@@ -267,7 +267,8 @@ class BrandLayerTests(SimpleTestCase):
 
         mark = _prepare_mark(buf.getvalue())
 
-        self.assertEqual((mark.width, mark.height), (60, 20))
+        self.assertEqual(mark.size, (100, 40))
+        self.assertEqual(mark.tobytes(), image.tobytes())
 
     def test_unreadable_logo_gives_none(self):
         from apps.creative_generation.compositor import _prepare_mark
@@ -410,23 +411,26 @@ class SceneLayoutTests(SimpleTestCase):
         photo.save(buf, format='PNG')
         return buf.getvalue()
 
-    def test_the_original_logo_keeps_its_own_colours_and_is_fixed_top_right_on_every_picture(self):
-        # A calm picture: top-right.
+    def brown_box(self, image):
+        mask = Image.new('L', image.size, 0)
+        mask.putdata([255 if self.brown(px) else 0 for px in image.getdata()])
+        return mask.getbbox()
+
+    def test_the_original_logo_keeps_its_own_colours_and_moves_off_a_busy_corner(self):
         calm = self.compose(self.flat(self.LIGHT), logo_bytes=self.logo())
-        self.assertGreater(self.count(calm, (512, 0, 1024, 300), self.brown), 15000)
-        self.assertEqual(self.count(calm, (0, 0, 512, 300), self.brown), 0)
-        # A busy top-right corner (flowers, lanterns): the logo does not move, same colours, same size.
+        self.assertGreater(self.count(calm, (0, 0, 1024, 1280), self.brown), 8000)  # its own colour, a clear size
+        # A busy top-right corner (flowers, lanterns): the logo is placed elsewhere, never on the detail.
         photo = Image.new('RGB', (1024, 1280), self.LIGHT)
         photo.paste(Image.effect_noise((424, 300), 70).convert('RGB'), (600, 0))
         buf = io.BytesIO()
         photo.save(buf, format='PNG')
         for seed in (None, 1, 2, 3):
             busy = self.compose(buf.getvalue(), logo_bytes=self.logo(), variation_seed=seed, headline='Diwali')
-            self.assertGreater(self.count(busy, (512, 0, 1024, 300), self.brown), 15000, seed)
-            self.assertEqual(self.count(busy, (0, 0, 512, 300), self.brown), 0, seed)
+            self.assertGreater(self.count(busy, (0, 0, 1024, 1280), self.brown), 8000, seed)
+            self.assertEqual(self.count(busy, (600, 0, 1024, 300), self.brown), 0, seed)
 
-    def test_a_logo_that_would_vanish_into_the_picture_gets_a_plate_not_a_new_colour(self):
-        # A brown logo on a dark brown picture: it is not recoloured, a light plate is put behind it instead.
+    def test_a_logo_is_never_recoloured_or_given_a_plate_even_on_a_matching_picture(self):
+        # A brown logo on a dark brown picture: drawn as it is - no new colour and no plate behind it.
         dark_brown = self.flat((70, 52, 40))
         lettered = Image.new('RGBA', (300, 100), (0, 0, 0, 0))  # letters with gaps between them, as real logos have
         for left in (30, 110, 190):
@@ -434,31 +438,13 @@ class SceneLayoutTests(SimpleTestCase):
         buf = io.BytesIO()
         lettered.save(buf, format='PNG')
         image = self.compose(dark_brown, logo_bytes=buf.getvalue())
-        self.assertGreater(self.count(image, (512, 0, 1024, 300), self.brown), 15000)  # the logo, as it is
-        # The gap between the first two letters (about x 725-755) shows the plate directly behind the logo.
-        gap = ImageStat.Stat(image.crop((730, 90, 750, 115)).convert('L')).mean[0]
-        self.assertGreater(gap, 110)  # lighter than the picture around it (about 54)
-        far = ImageStat.Stat(image.crop((100, 600, 300, 700)).convert('L')).mean[0]
-        self.assertAlmostEqual(far, 54, delta=4)  # and the plate stays around the logo
-
-    def test_the_plate_is_a_rounded_pill_with_a_clean_edge_not_a_box_or_a_smudge(self):
-        dark_brown = self.flat((70, 52, 40))
-        lettered = Image.new('RGBA', (300, 100), (0, 0, 0, 0))
-        for left in (30, 110, 190):
-            lettered.paste(Image.new('RGBA', (60, 60), (*self.BROWN, 255)), (left, 20))
-        buf = io.BytesIO()
-        lettered.save(buf, format='PNG')
-        image = self.compose(dark_brown, logo_bytes=buf.getvalue())
-
-        def luminance(point):
-            r, g, b = image.getpixel(point)
-            return r * 0.3 + g * 0.6 + b * 0.1
-
-        # The logo sits at x 636-963, y 61-143; its plate reaches about 24 px further left and 14 px up and down.
-        self.assertGreater(luminance((626, 102)), 200)   # inside the rounded end: a nearly white plate
-        self.assertLess(luminance((604, 102)), 90)       # a clean edge: just outside it is the picture again
-        self.assertLess(luminance((618, 52)), 90)        # the corner of the plate's box is rounded away, not filled in
-        self.assertGreater(luminance((800, 50)), 200)    # while the top edge of the plate is solid
+        self.assertGreater(self.count(image, (0, 0, 1024, 1280), self.brown), 4000)  # the logo, in its own colour
+        # Between the first two letters (canvas x 90-110 of the 30-250 artwork) the picture itself shows through.
+        left, top, right, bottom = self.brown_box(image)
+        scale = (right - left) / 220
+        gap_x = int(left + (100 - 30) * scale)
+        gap = ImageStat.Stat(image.crop((gap_x - 3, top + 5, gap_x + 3, bottom - 5)).convert('L')).mean[0]
+        self.assertAlmostEqual(gap, 54, delta=4)
 
     def test_the_same_picture_gets_different_compositions_for_different_seeds_and_the_same_one_for_the_same_seed(self):
         photo = self.flat(self.LIGHT)
@@ -500,9 +486,13 @@ class SceneLayoutTests(SimpleTestCase):
 
     def test_hd_output_enlarges_the_picture_before_the_text_and_logo_are_drawn_and_never_reduces_it(self):
         copy = {'eyebrow': 'Happy', 'headline': 'Diwali', 'description': 'May this season bring light and joy.'}
-        hd = self.compose(self.flat(self.LIGHT), logo_bytes=self.logo(), output_width=2048, **copy)
+        large = Image.new('RGBA', (1200, 400), (0, 0, 0, 0))  # a logo file big enough for both sizes
+        large.paste(Image.new('RGBA', (960, 240), (*self.BROWN, 255)), (120, 80))
+        buf = io.BytesIO()
+        large.save(buf, format='PNG')
+        hd = self.compose(self.flat(self.LIGHT), logo_bytes=buf.getvalue(), output_width=2048, **copy)
         self.assertEqual(hd.size, (2048, 2560))
-        standard = self.compose(self.flat(self.LIGHT), logo_bytes=self.logo(), **copy)
+        standard = self.compose(self.flat(self.LIGHT), logo_bytes=buf.getvalue(), **copy)
         self.assertEqual(standard.size, (1024, 1280))
         # The text and the logo are set at the final size, not enlarged with the picture: about four times the pixels.
         self.assertGreater(self.count(hd, (0, 0, 2048, 2560), self.brown), 3.5 * self.count(standard, (0, 0, 1024, 1280), self.brown))
@@ -601,7 +591,7 @@ class SceneLayoutTests(SimpleTestCase):
             self.assertLess(changed((0, 0, width // 2, 200)), 50, placement)  # and nothing at the top-left
 
     def test_a_logo_that_keeps_its_own_background_is_not_turned_into_a_solid_block(self):
-        # A shaded (non-flat) background cannot be keyed out, so the logo stays an opaque rectangle.
+        # A shaded (non-flat) background is part of the file, so the logo keeps it - and its artwork.
         from PIL import ImageDraw
 
         artwork = Image.new('RGB', (300, 100))
@@ -612,13 +602,15 @@ class SceneLayoutTests(SimpleTestCase):
         artwork.save(buf, format='PNG')
 
         image = self.compose(self.flat(self.LIGHT), logo_bytes=buf.getvalue())
-        width = image.width
-        box = (width - int(width * 0.06) - int(width * 0.32), int(width * 0.06), width - int(width * 0.06), int(width * 0.06) + 100)
+        red = Image.new('L', image.size, 0)
+        red.putdata([255 if abs(px[0] - 123) < 25 and px[1] < 60 and px[2] < 60 else 0 for px in image.getdata()])
+        left, top, right, bottom = red.getbbox()  # the artwork's red bar (canvas 60-240 x 30-70)
+        scale = (right - left) / 180
+        box = (int(left - 60 * scale), int(top - 30 * scale), int(right + 60 * scale), int(bottom + 30 * scale))
         light = self.count(image, box, lambda px: min(px) > 180)
-        dark = self.count(image, box, lambda px: sum(px) < 330)
         total = (box[2] - box[0]) * (box[3] - box[1])
-        self.assertGreater(light, total * 0.3)  # its background is still there
-        self.assertGreater(dark, total * 0.1)   # and so is its artwork
+        self.assertGreater(light, total * 0.3)  # its background is still there around the artwork
+        self.assertGreater((right - left) * (bottom - top), 2000)  # and so is its artwork
 
     def test_a_taller_picture_is_cropped_to_the_ratio_and_a_shorter_one_is_kept(self):
         tall = self.compose(self.scene(size=(1000, 1500)), headline='Hello')
@@ -952,9 +944,10 @@ class PosterFrameTests(SimpleTestCase):
 
     def test_the_kicker_is_a_header_row_opposite_the_logo_followed_by_a_short_accent_rule(self):
         image = self.image()
-        self.assertGreater(self.light(image, (72, 85, 480, 120), 150), 50)
-        self.assertGreater(sum(1 for px in image.crop((72, 90, 700, 115)).getdata() if self.amber(px)), 20)
-        # The logo is still the original file, top-right, with a plate because brown would vanish on this picture.
+        # The header row is centred on the logo (its whole uploaded canvas, which is not trimmed).
+        self.assertGreater(self.light(image, (72, 95, 480, 135), 150), 50)
+        self.assertGreater(sum(1 for px in image.crop((72, 100, 700, 130)).getdata() if self.amber(px)), 20)
+        # The logo is the original file, top-right, drawn exactly as uploaded - no plate behind it.
         brown = lambda px: all(abs(a - b) <= 14 for a, b in zip(px, (123, 90, 69)))  # noqa: E731
         self.assertGreater(sum(1 for px in image.crop((512, 0, 1024, 300)).getdata() if brown(px)), 8000)
 
@@ -1064,3 +1057,99 @@ class AccentHeadlineTests(SimpleTestCase):
         parts = self.parts(headline='शुभ दीपावली', description='शुभ दिवाली')
         self.assertNotIn('spaced', [part[0] for part in parts])
         self.assertIsNone(parts[0][1][5])
+
+
+class LogoIntegrationTests(SimpleTestCase):
+    """The logo is designed into each creative: the right variant of the brand's own files, sized by visual weight,
+    placed where it is calm, visible, aligned and balanced - never a fixed stamp, never altered."""
+
+    BROWN = (123, 90, 69)
+
+    def png(self, image):
+        buffer = io.BytesIO()
+        image.save(buffer, format='PNG')
+        return buffer.getvalue()
+
+    def picture(self, color=(24, 32, 64)):
+        return self.png(Image.new('RGB', (1024, 1280), color))
+
+    def wordmark(self, transparent=True, size=(900, 300), color=(123, 90, 69), background=(255, 255, 255)):
+        image = Image.new('RGBA', size, (0, 0, 0, 0) if transparent else (*background, 255))
+        image.paste(Image.new('RGBA', (size[0] * 7 // 9, size[1] * 2 // 3), (*color, 255)), (size[0] // 9, size[1] // 6))
+        return self.png(image)
+
+    def compose(self, picture, **kwargs):
+        from apps.creative_generation.compositor import compose_creative
+
+        info = {}
+        data, _ = compose_creative(picture, 'image/png', layout_info=info, **kwargs)
+        return Image.open(io.BytesIO(data)).convert('RGB'), info
+
+    def count(self, image, box, predicate):
+        return sum(1 for px in image.crop(box).getdata() if predicate(px))
+
+    def test_a_transparent_version_of_the_same_logo_is_used_instead_of_one_in_a_white_box(self):
+        boxed = self.wordmark(transparent=False, color=(110, 20, 20))
+        transparent = self.wordmark(transparent=True, color=(230, 190, 120))  # the light version for dark pictures
+        image, info = self.compose(self.picture(), logo_bytes=boxed, symbol_bytes=transparent)
+        self.assertTrue(info['logo_anchor'].endswith(':1'))
+        white = self.count(image, (0, 0, 1024, 1280), lambda px: min(px) > 240)
+        self.assertLess(white, 500)  # no white box pasted onto the dark picture
+
+    def test_an_icon_only_secondary_file_never_replaces_the_full_logo(self):
+        boxed = self.wordmark(transparent=False)
+        icon = self.wordmark(transparent=True, size=(400, 400))  # a square symbol, not the wordmark
+        _image, info = self.compose(self.picture(), logo_bytes=boxed, symbol_bytes=icon, headline='Grand Opening')
+        self.assertTrue(info['logo_anchor'].endswith(':0'))
+
+    def test_a_logo_file_is_never_enlarged_until_it_turns_soft(self):
+        from apps.creative_generation.compositor import LOGO_MAX_UPSCALE, _integrated_logo_size
+
+        small = Image.new('RGBA', (160, 160))
+        width, _height = _integrated_logo_size(small, 2048, 2560)
+        self.assertLessEqual(width, 160 * LOGO_MAX_UPSCALE)
+
+    def test_the_logo_never_dominates_the_frame(self):
+        from apps.creative_generation.compositor import _integrated_logo_size
+
+        wide = Image.new('RGBA', (2500, 400))
+        width, height = _integrated_logo_size(wide, 1080, 1350)
+        self.assertLessEqual(width, 1080 * 0.30)
+        post = _integrated_logo_size(Image.new('RGBA', (800, 800)), 1080, 1350)
+        signature = _integrated_logo_size(Image.new('RGBA', (800, 800)), 1080, 1350, 'testimonial_creative')
+        self.assertLess(signature[0], post[0])  # a testimonial's logo is a quieter signature
+
+    def test_a_pinned_anchor_keeps_the_logo_in_the_same_place_on_every_slide(self):
+        for color in ((24, 32, 64), (200, 180, 150)):
+            image, info = self.compose(
+                self.picture(color), logo_bytes=self.wordmark(), headline='Slide headline', logo_anchor='bottom_left:0',
+            )
+            self.assertEqual(info['logo_anchor'], 'bottom_left:0')
+            brown = lambda px: all(abs(a - b) <= 14 for a, b in zip(px, self.BROWN))  # noqa: E731
+            self.assertGreater(self.count(image, (0, 900, 512, 1280), brown), 3000)
+            self.assertEqual(self.count(image, (512, 0, 1024, 600), brown), 0)
+
+    def test_a_testimonial_signs_at_the_bottom_and_an_announcement_sits_at_the_top(self):
+        calm = self.picture((235, 228, 215))
+        _image, testimonial = self.compose(
+            calm, logo_bytes=self.wordmark(), creative_type='testimonial_creative', eyebrow='What our clients say',
+            headline='They understood our vision.', description='Rahul Sharma',
+        )
+        self.assertTrue(testimonial['logo_anchor'].startswith('bottom'))
+        _image, announcement = self.compose(
+            calm, logo_bytes=self.wordmark(), creative_type='announcement_creative', eyebrow='NEW SERVICE',
+            headline='Introducing Our AI Solutions',
+        )
+        self.assertTrue(announcement['logo_anchor'].startswith('top'))
+
+    def test_the_logo_is_not_stamped_in_one_place_on_every_creative(self):
+        anchors = set()
+        for picture in (self.picture((24, 32, 64)), self.picture((235, 228, 215))):
+            for seed in (1, 2, 3, 4, 5, 6):
+                for composition in ('bottom', 'top', 'left', 'right'):
+                    _image, info = self.compose(
+                        picture, logo_bytes=self.wordmark(color=(120, 90, 70)), headline='A headline here',
+                        description='Supporting line.', variation_seed=seed, composition=composition,
+                    )
+                    anchors.add(info['logo_anchor'].split(':')[0])
+        self.assertGreaterEqual(len(anchors), 3)

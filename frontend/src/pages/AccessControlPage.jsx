@@ -90,7 +90,7 @@ export default function AccessControlPage() {
     <div>
       <div className="page-header">
         <div>
-          <h1>Access Control</h1>
+          <h1>Access control</h1>
           <p className="page-subtitle">
             Every client login, grouped by company — activate/deactivate the login, and choose exactly which pages they can reach.
           </p>

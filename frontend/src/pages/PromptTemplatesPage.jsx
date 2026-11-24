@@ -112,7 +112,7 @@ export default function PromptTemplatesPage() {
     <div>
       <div className="page-header">
         <div>
-          <h1>AI Prompt &amp; Template Library</h1>
+          <h1>Prompt library</h1>
           <p className="page-subtitle">Extra guidance injected into AI generation prompts, versioned and activated on demand.</p>
         </div>
         <button type="button" className="btn btn-primary" onClick={() => setShowCreate(true)}>

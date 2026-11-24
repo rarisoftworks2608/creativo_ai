@@ -27,6 +27,7 @@ PROVIDER_CREDENTIALS = {
     'video': {
         'huggingface': ['HF_TOKEN'],
         'replicate': ['REPLICATE_API_TOKEN'],
+        'agnes': ['AGNES_API_KEY'],
     },
 }
 
@@ -40,6 +41,7 @@ DEFAULT_MODELS = {
     ('image', 'openai'): 'gpt-image-1',
     ('video', 'huggingface'): 'Wan-AI/Wan2.2-TI2V-5B',
     ('video', 'replicate'): 'wan-video/wan-2.2-i2v-fast',
+    ('video', 'agnes'): 'agnes-video-v2.0',
 }
 
 

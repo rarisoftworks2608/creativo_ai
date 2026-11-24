@@ -14,6 +14,10 @@ import re
 
 from common.ai_config import content_language_instruction
 
+from .creative_types import (
+    ANNOUNCEMENT_CATEGORIES, DESIGN_STYLES, FESTIVALS, SPECS, STORY_OBJECTIVES, festival_name, orientation, picture_look,
+)
+
 CREATIVE_TYPE_GUIDANCE = {
     # Legacy - these three bundled a platform into the format; still resolved for
     # old rows (retry, display of history) but no longer offered in the UI.
@@ -175,7 +179,8 @@ def _brand_style_lines(brand_profile):
 
 def build_image_prompt(
     company, brand_profile, creative_type, platform, prompt_brief, product_info, variation_number, variation_count=3,
-    extra_guidance='', scene_description='', composition='bottom',
+    extra_guidance='', scene_description='', composition='bottom', brief_fields=None, design_style='', aspect_ratio='',
+    series_look='', slide_label='',
 ):
     """A full, richly detailed scene for the calendar entry, in the brand's palette and visual style.
 
@@ -196,8 +201,9 @@ def build_image_prompt(
     if name:
         scene = re.sub(re.escape(name), '', scene, flags=re.IGNORECASE)
         scene = re.sub(r'\s{2,}', ' ', scene).strip(' ,')
-    look = LOOKS[look_for(creative_type, brand_profile)]
-    mood = TYPE_MOOD.get(creative_type, '')
+    look = LOOKS[picture_look(creative_type, design_style) or look_for(creative_type, brand_profile)]
+    mood = TYPE_MOOD.get(creative_type, '') if creative_type != 'testimonial_creative' else ''
+    frame = _frame_phrase(aspect_ratio)
     variation_note = (
         f'This is variation {variation_number} of {variation_count} - make it visually distinct from the '
         'other variations while staying on-brand.'
@@ -209,8 +215,8 @@ def build_image_prompt(
         context = ', '.join(str(p) for p in (company.products or [])[:3])
 
     lines = [
-        f'A premium editorial advertising photograph, portrait 4:5: {scene[:600].rstrip(" .")}.' if scene else
-        'A premium editorial advertising photograph, portrait 4:5, that suits the brand and its audience.',
+        f'A premium editorial advertising photograph, {frame}: {scene[:600].rstrip(" .")}.' if scene else
+        f'A premium editorial advertising photograph, {frame}, that suits the brand and its audience.',
         'A complete, richly detailed environment fills the whole frame edge to edge, never one object on an empty '
         'backdrop: a real place with depth - a framing element in the foreground (architecture, foliage or decor), a '
         f'clear focal subject in the middle ground, and a distant background with atmosphere (a skyline, a landscape or '
@@ -223,7 +229,21 @@ def build_image_prompt(
     # The layout needs come before the brand lines: a provider with a short prompt limit (Cloudflare
     # FLUX, 2048) cuts from the end, and the calm areas for the text and logo matter most after the scene.
     lines.append(_composition_sentence(composition))
-    lines += _brand_style_lines(brand_profile)
+    crop_line = _crop_safety_sentence(aspect_ratio)
+    if crop_line:
+        lines.append(crop_line)
+    brand_lines = _brand_style_lines(brand_profile)
+    # The palette first, then this creative type's own direction and the design style, then the rest of the brand:
+    # a provider that cuts long prompts keeps the most important lines.
+    lines += brand_lines[:1]
+    if series_look:
+        lines.append(f'{slide_label or "This slide"} of one carousel series - every slide shares this look: '
+                     f'{series_look.strip()[:350]}.')
+    lines += type_picture_lines(creative_type, brief_fields)
+    style_line = _style_line(design_style)
+    if style_line:
+        lines.append(style_line)
+    lines += brand_lines[1:]
     if context:
         lines.append(f'Also: {context}')
     if extra_guidance:
@@ -261,11 +281,11 @@ def _calendar_lines(calendar_item):
 
 def build_copy_prompt(
     company, brand_profile, brand_context, creative_type, platform, prompt_brief, product_info, extra_guidance='',
-    calendar_item=None,
+    calendar_item=None, brief_fields=None, design_style='', aspect_ratio='',
 ):
     format_guidance = CREATIVE_TYPE_GUIDANCE.get(creative_type, 'a social media creative')
     platform_guidance = PLATFORM_GUIDANCE.get(platform, PLATFORM_GUIDANCE['general'])
-    look_phrase = LOOKS[look_for(creative_type, brand_profile)]['copy']
+    look_phrase = LOOKS[picture_look(creative_type, design_style) or look_for(creative_type, brand_profile)]['copy']
     role_lines = [
         # Matches the fixed layout system's typography hierarchy (see compositor) - each
         # field has a distinct, non-overlapping job.
@@ -318,6 +338,7 @@ def build_copy_prompt(
         *role_lines,
         f'Creative brief: {prompt_brief or "Use your best judgement."}',
         *_calendar_lines(calendar_item),
+        *type_copy_lines(creative_type, brief_fields, design_style),
         f'Product information: {product_info or _joined(company.products, empty="not specified")}',
     ]
     services = [str(s)[:60] for s in (company.services or [])[:8] if s]
@@ -334,4 +355,177 @@ def build_copy_prompt(
     language_line = content_language_instruction()
     if language_line:
         lines += ['', language_line]
+    return '\n'.join(lines)
+
+
+# --------------------------------------------------------------------------- the creative-type systems
+
+FRAME_PHRASES = {
+    '1:1': 'square 1:1', '4:5': 'portrait 4:5', '1.91:1': 'wide landscape 1.91:1', '9:16': 'tall vertical 9:16',
+}
+
+
+def _frame_phrase(aspect_ratio):
+    return FRAME_PHRASES.get(aspect_ratio or '4:5', 'portrait 4:5')
+
+
+def _crop_safety_sentence(aspect_ratio):
+    """Some image providers can only draw one size: the picture is then centre-cropped to the creative's frame, so
+    the subject must sit where that crop keeps it."""
+    shape = orientation(aspect_ratio) if aspect_ratio else 'portrait'
+    if shape == 'vertical':
+        return ('Frame: a tall vertical phone-screen composition; keep the main subject within the centre 56% of the '
+                'frame width, with calm sky, wall or floor above and below it.')
+    if shape == 'landscape':
+        return ('Frame: a wide landscape composition; keep the main subject within the centre 50% of the frame height, '
+                'with room to the side of it.')
+    if shape == 'square':
+        return 'Frame: a square composition; keep the main subject within the centre 80% of the frame.'
+    return ''
+
+
+def _festival_lines(fields):
+    key = fields.get('festival', '')
+    name = festival_name(fields)
+    if key in FESTIVALS:
+        imagery = FESTIVALS[key][1]
+    elif name:
+        imagery = (f'the traditional imagery, symbols, colours and lighting of {name}, depicted accurately and '
+                   'respectfully')
+    else:
+        imagery = "the occasion's traditional decor, symbols and lighting"
+    return [
+        f'Occasion imagery: {imagery}.',
+        'The occasion is the primary visual context; the brand colours appear only as subtle accents. No unrelated '
+        'decorations and no excess of festive elements; cultural and religious symbols are accurate and respectful.',
+    ]
+
+
+def type_picture_lines(creative_type, fields=None):
+    """What this creative type's picture has to be, in visual terms - the image prompt's type direction."""
+    fields = fields or {}
+    spec = SPECS.get(creative_type)
+    if spec is None:
+        return []
+    lines = [f'This picture is {spec.picture}.'] if creative_type != 'carousel' else []
+    if creative_type == 'story':
+        objective = STORY_OBJECTIVES.get(fields.get('objective', ''))
+        if objective:
+            lines.append(f'Scene for this story: {objective[2]}.')
+    elif creative_type == 'festival_creative':
+        lines += _festival_lines(fields)
+    elif creative_type == 'announcement_creative':
+        category = ANNOUNCEMENT_CATEGORIES.get(fields.get('category', ''), ANNOUNCEMENT_CATEGORIES['custom'])
+        lines.append(f'Visual direction for this announcement: {category[2]}.')
+    return lines
+
+
+def _style_line(design_style):
+    style = DESIGN_STYLES.get(design_style)
+    return f'Design style: {style.image}.' if style else ''
+
+
+def _supplied_lines(creative_type, fields):
+    """The person's own inputs for this creative, labelled - the copy must follow them exactly."""
+    labels = {
+        'topic': 'Topic', 'headline': 'Headline (use exactly as written)',
+        'supporting_text': 'Supporting text (use exactly as written)', 'cta': 'Call to action (use exactly as written)',
+        'objective': 'Content objective', 'outline': 'Content outline', 'tone': 'Tone',
+        'message': 'Greeting message (use exactly as written)', 'year': 'Year', 'audience': 'Target audience',
+        'label': 'Announcement label (use exactly as written)', 'title': 'Announcement title (use exactly as written)',
+        'description': 'Announcement details (use exactly as written)', 'date': 'Date / time (use exactly as written)',
+    }
+    lines = []
+    for key in SPECS[creative_type].fields:
+        value = fields.get(key)
+        if not value or key in ('festival', 'festival_name', 'category', 'quote', 'customer_name', 'company',
+                                'designation', 'rating', 'allow_shorten'):
+            continue
+        if creative_type == 'story' and key == 'objective':
+            value = STORY_OBJECTIVES.get(value, (value,))[0]
+        lines.append(f'- {labels.get(key, key)}: {value}')
+    return lines
+
+
+def type_copy_lines(creative_type, fields=None, design_style=''):
+    """The type's own copy rules and the person's inputs - added to the copy prompt for the six creative types."""
+    fields = fields or {}
+    spec = SPECS.get(creative_type)
+    if spec is None:
+        return []
+    lines = ['', f'CREATIVE TYPE: {spec.label} - {spec.purpose}.', *spec.copy_rules]
+    if spec.hierarchy:
+        lines.append(f'Visual hierarchy of the finished creative: {" > ".join(spec.hierarchy)}.')
+    if creative_type == 'story':
+        objective = STORY_OBJECTIVES.get(fields.get('objective', ''))
+        if objective:
+            lines.append(f'This is {objective[1]}.')
+    elif creative_type == 'festival_creative':
+        name = festival_name(fields)
+        if name:
+            year = f' {fields["year"]}' if fields.get('year') else ''
+            lines.append(f'Occasion: {name}{year}. Greet the audience for {name}; the brand complements the occasion '
+                         'and never overpowers it.')
+    elif creative_type == 'announcement_creative':
+        category = ANNOUNCEMENT_CATEGORIES.get(fields.get('category', ''), ANNOUNCEMENT_CATEGORIES['custom'])
+        lines.append(f'Announcement category: {category[0]}. Only the details supplied below are facts - do not '
+                     'add dates, prices, places or names.')
+    elif creative_type == 'testimonial_creative':
+        lines.append(f'Client quote (verbatim): "{fields.get("quote", "")}"')
+        if fields.get('allow_shorten'):
+            lines.append('headline: the quote, shortened to at most 30 words ONLY by removing words - keep its exact '
+                         'meaning and the client\'s own wording, add nothing.')
+        else:
+            lines.append('headline: the quote exactly as supplied.')
+        lines.append('eyebrow, description and cta are set by the system - return them as empty strings. The '
+                     'caption may introduce the review but must not invent details about the client.')
+    supplied = _supplied_lines(creative_type, fields)
+    if supplied:
+        lines += ['Supplied content (follow it; text marked "use exactly as written" goes into its field unchanged):',
+                  *supplied]
+    lines.append(f'For the visual_scene: the picture must be {spec.picture if creative_type != "carousel" else "one slide of a consistent series"}.')
+    for line in type_picture_lines(creative_type, fields)[1:]:
+        lines.append(f'For the visual_scene: {line}')
+    style_line = _style_line(design_style)
+    if style_line:
+        lines.append(f'{style_line} Let it shape the copy\'s tone too.')
+    return lines
+
+
+def build_carousel_prompt(
+    company, brand_profile, brand_context, platform, prompt_brief, product_info, *, brief_fields, slide_count,
+    design_style='', extra_guidance='', calendar_item=None,
+):
+    """One request for the whole carousel: the series look shared by every slide and, per slide, its role, copy and
+    picture - so the slides read as one story and one visual system."""
+    fields = brief_fields or {}
+    base = build_copy_prompt(
+        company, brand_profile, brand_context, 'carousel', platform, prompt_brief, product_info,
+        extra_guidance=extra_guidance, calendar_item=calendar_item, brief_fields=fields, design_style=design_style,
+    )
+    outline = [line.strip() for line in (fields.get('outline') or '').splitlines() if line.strip()]
+    cta_note = f' (use exactly: {fields["cta"]})' if fields.get('cta') else ''
+    lines = [
+        base,
+        '',
+        f'CAROUSEL PLAN: write exactly {slide_count} slides in "slides", in order.',
+        '- Slide 1 role "cover": the hook - the strongest headline of the series (at most 8 words) and a short '
+        'subtitle in "body" (at most 8 words).',
+        f'- Slides 2 to {slide_count - 1} role "content": each ONE specific idea (a problem, tip, benefit, step, '
+        'feature or example), a short headline (at most 7 words) and at most one short sentence in "body". No two '
+        'slides make the same point.',
+        f'- Slide {slide_count} role "cta": the conclusion or summary as the headline and the call to action in "cta"'
+        f'{cta_note}.',
+        '- series_look: ONE description (30-60 words) of the visual world every slide shares - the setting, palette '
+        'from the brand colours, lighting, lens and grade - so the slides look like one photographed series.',
+        '- per slide visual_scene: what THIS slide shows inside that shared world (30-60 words), varied from slide to '
+        'slide in subject and framing so no two slides look alike. Describe only the photograph: no text, letters, '
+        'logos, numbers or screens with writing.',
+        '- caption, hashtags and keywords are for the whole carousel post.',
+    ]
+    if outline:
+        lines.append('Use this outline for the slides\' content. Lines written as slide text keep their wording for '
+                     'the headlines and body; lines written as instructions ("create...", "show...") are direction '
+                     'only - never copy an instruction onto a slide:')
+        lines += [f'  {index}. {line}' for index, line in enumerate(outline, start=1)]
     return '\n'.join(lines)
