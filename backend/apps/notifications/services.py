@@ -5,12 +5,35 @@ video_generation, ...) depend on a small stable function surface instead of
 constructing Notification rows by hand.
 """
 
+import re
+
 from django.utils import timezone
 
 from .models import Notification
 
+QUOTED_MAX = 70  # a quoted topic inside a title ("<topic>" was approved) is shortened to this
+_QUOTED = re.compile(r'"([^"]*)"')
+
+
+def _fit_title(title):
+    """A notification title that fits its column and reads well. Titles embed the content's topic, and a
+    topic can be a whole design brief (255 characters on its own) - so a quoted topic is shortened, and the
+    title as a whole is capped at the field's length, instead of the insert failing."""
+    def shorten(match):
+        text = ' '.join(match.group(1).replace('*', '').split())
+        if len(text) > QUOTED_MAX:
+            text = text[:QUOTED_MAX].rsplit(' ', 1)[0].rstrip(' ,.;:-') + '…'
+        return f'"{text}"'
+
+    title = _QUOTED.sub(shorten, title or '')
+    limit = Notification._meta.get_field('title').max_length
+    if len(title) > limit:
+        title = title[: limit - 1].rstrip() + '…'
+    return title
+
 
 def notify(recipient, notification_type, title, *, message='', url='', company=None, content_calendar_item=None):
+    title = _fit_title(title)
     notification = Notification.objects.create(
         recipient=recipient,
         notification_type=notification_type,

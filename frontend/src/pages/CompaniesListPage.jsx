@@ -66,22 +66,25 @@ export default function CompaniesListPage() {
       <div className="page-header">
         <div>
           <h1>Companies</h1>
-          <p className="page-subtitle">{count} total</p>
+          <p className="page-subtitle">
+            {count} {count === 1 ? 'company' : 'companies'} · open one to work through its content workflow
+          </p>
         </div>
         <button type="button" className="btn btn-primary" onClick={() => setShowCreate(true)}>
           + Add company
         </button>
       </div>
 
-      <div className="toolbar">
+      <div className="toolbar adm-toolbar">
         <input
           type="search"
-          placeholder="Search by name…"
+          aria-label="Search companies"
+          placeholder="Search companies…"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
           className="search-input"
         />
-        <select className="status-select" value={status} onChange={(event) => setStatus(event.target.value)}>
+        <select className="status-select" aria-label="Filter by status" value={status} onChange={(event) => setStatus(event.target.value)}>
           <option value="">All statuses</option>
           <option value="active">Active</option>
           <option value="inactive">Inactive</option>
@@ -102,37 +105,64 @@ export default function CompaniesListPage() {
           </div>
         ) : (
           <div className="table-wrapper">
-            <table className="table">
+            <table className="table table-stack adm-company-table">
               <thead>
                 <tr>
-                  <th>Name</th>
-                  <th>Industry</th>
+                  <th>Company</th>
                   <th>Status</th>
                   <th>Clients</th>
-                  <th>Onboarding</th>
+                  <th>Setup</th>
+                  <th>
+                    <span className="sr-only">Actions</span>
+                  </th>
                 </tr>
               </thead>
               <tbody>
-                {companies.map((company) => (
-                  <tr key={company.id} className="table-row-link" onClick={() => navigate(`/companies/${company.id}`)}>
-                    <td>
-                      <Link to={`/companies/${company.id}`} onClick={(event) => event.stopPropagation()}>
-                        {company.name}
-                      </Link>
-                    </td>
-                    <td>{company.industry || '—'}</td>
-                    <td>
-                      <span className={`badge badge-${company.status}`}>{company.status}</span>
-                    </td>
-                    <td>{company.client_count}</td>
-                    <td>
-                      <div className="progress">
-                        <div className="progress-bar" style={{ width: `${company.onboarding.completion_percentage}%` }} />
-                      </div>
-                      <span className="progress-label">{company.onboarding.completion_percentage}%</span>
-                    </td>
-                  </tr>
-                ))}
+                {companies.map((company) => {
+                  const setup = company.onboarding?.completion_percentage ?? 0
+                  return (
+                    <tr key={company.id} className="table-row-link" onClick={() => navigate(`/companies/${company.id}`)}>
+                      <td data-label="Company">
+                        <span className="adm-cell-company">
+                          <span className="adm-company-avatar" aria-hidden="true">
+                            {company.name.charAt(0).toUpperCase()}
+                          </span>
+                          <span className="adm-company-main">
+                            <Link
+                              to={`/companies/${company.id}`}
+                              className="adm-company-name"
+                              onClick={(event) => event.stopPropagation()}
+                            >
+                              {company.name}
+                            </Link>
+                            <span className="adm-company-meta">{company.industry || 'No industry set'}</span>
+                          </span>
+                        </span>
+                      </td>
+                      <td data-label="Status">
+                        <span className={`badge badge-${company.status}`}>{company.status}</span>
+                      </td>
+                      <td data-label="Clients">{company.client_count}</td>
+                      <td data-label="Setup">
+                        <span className="adm-company-setup">
+                          <span className="adm-setup-bar">
+                            <span style={{ width: `${setup}%` }} />
+                          </span>
+                          <span className="adm-setup-label">{setup}%</span>
+                        </span>
+                      </td>
+                      <td className="table-actions">
+                        <Link
+                          to={`/companies/${company.id}`}
+                          className="btn btn-ghost btn-sm"
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          Open workspace
+                        </Link>
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>

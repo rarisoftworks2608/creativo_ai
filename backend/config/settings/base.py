@@ -96,7 +96,7 @@ ROOT_URLCONF = 'config.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': [BASE_DIR / 'templates'],  # project overrides, e.g. the themed Django admin
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [

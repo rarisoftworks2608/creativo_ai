@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { resetPassword } from '../api/auth'
 import { extractErrorMessage } from '../api/client'
+import AuthLayout from '../components/AuthLayout'
 
 export default function ResetPasswordPage() {
   const [searchParams] = useSearchParams()
@@ -35,32 +36,22 @@ export default function ResetPasswordPage() {
   }
 
   return (
-    <div className="auth-screen">
-      <div className="auth-bg" aria-hidden="true">
-        <span className="auth-blob auth-blob-1" />
-        <span className="auth-blob auth-blob-2" />
-        <span className="auth-blob auth-blob-3" />
-        <span className="auth-grid" />
-      </div>
-
-      <div className="auth-panel auth-panel-single">
-        <form className="auth-card" onSubmit={handleSubmit}>
-          <div className="auth-brand">
-            <span className="brand-mark">AI</span>
-            <span>Marketing OS</span>
-          </div>
+    <AuthLayout>
+      <form className="signin-form" onSubmit={handleSubmit}>
+        <div className="signin-heading signin-rise">
           <h1>Reset password</h1>
-          <p className="auth-subtitle">Choose a new password for your account.</p>
+          <p>Choose a new password for your account.</p>
+        </div>
 
           {!uid || !token ? (
-            <div className="alert alert-error">This reset link is invalid. Request a new one.</div>
+            <div className="signin-error" role="alert">This reset link is invalid. Request a new one.</div>
           ) : done ? (
-            <div className="alert alert-success">Password reset. Redirecting you to sign in…</div>
+            <div className="signin-success" role="status">Password reset. Redirecting you to sign in…</div>
           ) : (
             <>
-              {error && <div className="alert alert-error">{error}</div>}
-              <label className="field">
-                <span>New password</span>
+              {error && <div className="signin-error" role="alert">{error}</div>}
+              <label className="signin-field">
+                <span className="signin-label">New password</span>
                 <input
                   type="password"
                   value={newPassword}
@@ -70,8 +61,8 @@ export default function ResetPasswordPage() {
                   required
                 />
               </label>
-              <label className="field">
-                <span>Confirm new password</span>
+              <label className="signin-field">
+                <span className="signin-label">Confirm new password</span>
                 <input
                   type="password"
                   value={confirmPassword}
@@ -80,17 +71,16 @@ export default function ResetPasswordPage() {
                   required
                 />
               </label>
-              <button type="submit" className="btn btn-primary btn-block auth-submit" disabled={submitting}>
-                <span>{submitting ? 'Resetting…' : 'Reset password'}</span>
+              <button type="submit" className="signin-submit" disabled={submitting}>
+                {submitting ? 'Resetting…' : 'Reset password'}
               </button>
             </>
           )}
 
-          <p className="auth-footer-link">
-            <Link to="/login">← Back to sign in</Link>
-          </p>
-        </form>
-      </div>
-    </div>
+        <p className="signin-note">
+          <Link to="/login">← Back to sign in</Link>
+        </p>
+      </form>
+    </AuthLayout>
   )
 }

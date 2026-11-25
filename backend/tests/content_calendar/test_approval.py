@@ -128,3 +128,50 @@ class ApprovalWorkflowTests(APITestCase):
         self.assertEqual(self.item.status, ContentCalendarItem.Status.REJECTED)
         self.assertEqual(self.item.regeneration_count, 1)
         mock_enqueue.assert_not_called()
+
+
+class LongTopicNotificationTests(APITestCase):
+    """A topic can be a whole design brief (the full 255 characters). Notification titles quote the topic, so
+    they must be shortened - Postgres rejects an over-long title and the approval request failed with a 500."""
+
+    LONG = (
+        'Create a **premium, minimal, ultra-realistic Ganesh Chaturthi social media creative** in Instagram '
+        'portrait size **1080 x 1350 px (4:5)**. **Layout:** * Use a clean, soft **ivory, warm cream, or light '
+        'beige background** with a luxurious and elegant feel'
+    )[:255]
+
+    # Same company, users and pending item as the workflow tests - without inheriting their test methods.
+    authenticate_as = ApprovalWorkflowTests.authenticate_as
+    approve_url = ApprovalWorkflowTests.approve_url
+    reject_url = ApprovalWorkflowTests.reject_url
+
+    def setUp(self):
+        ApprovalWorkflowTests.setUp(self)
+        self.item.topic = self.LONG
+        self.item.save(update_fields=['topic'])
+
+    def test_approving_an_item_with_a_brief_as_its_topic_succeeds_and_notifies_with_a_short_title(self):
+        self.authenticate_as('client@example.com', 'StrongPass123!')
+        response = self.client.post(self.approve_url())
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        notification = Notification.objects.get(
+            recipient=self.admin, notification_type=Notification.NotificationType.CONTENT_APPROVED,
+        )
+        self.assertLessEqual(len(notification.title), 120)
+        self.assertTrue(notification.title.startswith('"Create a premium, minimal, ultra-realistic Ganesh'))
+        self.assertIn('…" was approved', notification.title)
+        self.assertNotIn('**', notification.title)
+
+    def test_rejecting_it_also_fits(self):
+        self.authenticate_as('client@example.com', 'StrongPass123!')
+        response = self.client.post(self.reject_url(), {'feedback': 'Make the background warmer.'})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        for notification in Notification.objects.all():
+            self.assertLessEqual(len(notification.title), 255)
+
+    def test_every_title_fits_the_column_even_without_quotes(self):
+        from apps.notifications.services import notify
+
+        notification = notify(self.admin, Notification.NotificationType.CONTENT_APPROVED, 'x' * 400)
+        self.assertEqual(len(notification.title), 255)
+        self.assertTrue(notification.title.endswith('…'))

@@ -980,7 +980,7 @@ a.journey-step:hover {
   margin: 0 auto;
   border-radius: 8px;
   overflow: hidden;
-  background: linear-gradient(160deg, rgba(14, 124, 123, 0.85), rgba(12, 42, 46, 0.95)), #0c2a2e;
+  background: linear-gradient(160deg, rgba(41, 37, 36, 0.9), rgba(12, 12, 14, 0.96)), #0c0c0e;
   color: #fff;
   display: flex;
   flex-direction: column;

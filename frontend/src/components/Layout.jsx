@@ -6,7 +6,7 @@ import { getMyCompany } from '../api/companies'
 import NotificationBell from './NotificationBell'
 import ChangePasswordModal from './ChangePasswordModal'
 import WorkflowProvider from './WorkflowProvider'
-import { AdminNav, Breadcrumbs, WorkspaceNav } from './AppNavigation'
+import { AdminNav, Breadcrumbs, Rail, WorkspaceNav } from './AppNavigation'
 
 /**
  * App shell. The sidebar has two modes:
@@ -85,11 +85,12 @@ export default function Layout() {
       permissions={isAdmin ? null : clientCompany?.page_permissions || []}
     >
       <div className="shell">
+        <Rail isAdmin={isAdmin} pendingApprovals={pendingApprovals} />
         <aside className={`sidebar ${navOpen ? 'open' : ''}`} aria-label="Main navigation">
-          <div className="sidebar-brand">
+          <div className={`sidebar-brand ${inWorkspace ? 'is-workspace' : ''}`}>
             <Link to={isAdmin ? '/dashboard' : '/client'} className="sidebar-brand-link">
               <span className="brand-mark">C</span>
-              <span>Creativo AI</span>
+              <span className="sidebar-brand-name">Creativo AI</span>
             </Link>
             <button type="button" className="sidebar-close" onClick={() => setNavOpen(false)} aria-label="Close navigation">
               ×

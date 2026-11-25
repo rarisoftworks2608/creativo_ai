@@ -1,0 +1,503 @@
+/* =====================================================================
+   Studio theme (design B). Loaded last.
+   Shell: a dark icon rail with the app-wide destinations, a white panel with
+   the context (company switcher, campaign progress, numbered workflow), and
+   the page. Warm neutrals, ink-black primary actions, ember highlights.
+   Colours come from the tokens in index.css.
+   ===================================================================== */
+
+/* ---------- Icon rail ---------- */
+
+.rail {
+  position: sticky;
+  top: 0;
+  height: 100svh;
+  flex: 0 0 68px;
+  width: 68px;
+  background: var(--rail-bg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 16px 0;
+  box-sizing: border-box;
+  z-index: 40;
+}
+.rail-brand {
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  background: var(--ember);
+  color: #0c0c0e;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 14px;
+  transition: transform 0.15s ease;
+}
+.rail-brand:hover {
+  transform: rotate(-6deg);
+}
+.rail-brand svg {
+  width: 19px;
+  height: 19px;
+}
+.rail-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.rail-bottom {
+  margin-top: auto;
+}
+.rail-link {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #a8a29e;
+  text-decoration: none;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+.rail-link:hover {
+  background: #1f1f23;
+  color: #ffffff;
+}
+.rail-link.active {
+  background: #26262b;
+  color: #ffffff;
+}
+.rail-link.active::before {
+  content: '';
+  position: absolute;
+  left: -12px;
+  top: 12px;
+  bottom: 12px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--ember);
+}
+.rail-link:focus-visible,
+.rail-brand:focus-visible {
+  outline: 2px solid var(--ember);
+  outline-offset: 2px;
+}
+.rail-icon {
+  display: inline-flex;
+  width: 20px;
+  height: 20px;
+}
+.rail-icon svg {
+  width: 100%;
+  height: 100%;
+}
+.rail-dot {
+  position: absolute;
+  top: 9px;
+  right: 9px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ember);
+  box-shadow: 0 0 0 2px var(--rail-bg);
+}
+/* Label tooltip on hover/focus */
+.rail-link::after {
+  content: attr(data-label);
+  position: absolute;
+  left: calc(100% + 12px);
+  top: 50%;
+  transform: translate(-4px, -50%);
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 600;
+  color: #fff;
+  background: #1c1917;
+  padding: 6px 10px;
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease, transform 0.12s ease;
+}
+.rail-link:hover::after,
+.rail-link:focus-visible::after {
+  opacity: 1;
+  transform: translate(0, -50%);
+}
+
+/* ---------- Context panel (sidebar) ---------- */
+
+.sidebar {
+  width: 252px;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  padding: 18px 14px;
+  gap: 16px;
+}
+.sidebar-brand .brand-mark {
+  background: var(--ember);
+  color: #0c0c0e;
+}
+@media (min-width: 861px) {
+  /* The rail carries the logo on desktop. */
+  .sidebar-brand .brand-mark {
+    display: none;
+  }
+  .sidebar-brand.is-workspace {
+    display: none;
+  }
+  .sidebar-brand-name {
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+}
+
+.sidebar-nav a {
+  font-weight: 500;
+  border-radius: 9px;
+  min-height: 36px;
+  padding: 7px 10px;
+}
+.sidebar-nav a:hover {
+  background: var(--surface-2);
+  color: var(--text-h);
+}
+.sidebar-nav a.active {
+  background: var(--accent-bg);
+  color: var(--text-h);
+  font-weight: 600;
+}
+.nav-group-title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.co-switch {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  padding: 8px;
+}
+.co-switch-btn:hover {
+  border-color: #d6d3d1;
+  background: var(--surface-2);
+}
+.co-switch-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--ink);
+  color: var(--on-ink);
+  font-size: 12px;
+  font-weight: 700;
+}
+.co-switch-name {
+  font-weight: 600;
+}
+.sidebar-nav .co-switch-option.is-current {
+  background: var(--accent-bg);
+  color: var(--text-h);
+}
+.sidebar-nav a.co-switch-all {
+  color: var(--accent);
+}
+
+/* Campaign progress under the switcher */
+.ws-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 4px;
+}
+.ws-progress-head {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-h);
+}
+.ws-progress-head span:last-child {
+  color: var(--muted);
+  font-weight: 500;
+}
+.ws-progress-bar {
+  display: flex;
+  gap: 3px;
+}
+.ws-progress-seg {
+  flex: 1;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--border);
+}
+.ws-progress-seg.is-done {
+  background: var(--ink);
+}
+.ws-progress-seg.is-current {
+  background: var(--ember);
+}
+
+/* Workflow steps: rounded-square numbers, no connector line */
+.nav-group-count {
+  color: var(--muted);
+  background: var(--surface-2);
+  font-weight: 600;
+}
+.nav-steps::before {
+  display: none;
+}
+.nav-step-num {
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--surface);
+  border: 1px solid #d6d3d1;
+  color: var(--muted);
+}
+.nav-step-done .nav-step-num {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--on-ink);
+}
+.nav-step-current .nav-step-num {
+  background: var(--ember);
+  border-color: var(--ember);
+  color: #1c1917;
+}
+.sidebar-nav a.nav-step.is-parent,
+.sidebar-nav a.nav-step.active {
+  background: var(--accent-bg);
+  color: var(--text-h);
+  font-weight: 600;
+}
+.nav-sub {
+  margin: 2px 0 6px 32px;
+  padding-left: 8px;
+  border-left: 0;
+}
+.sidebar-nav a.nav-sub-item {
+  font-weight: 500;
+  min-height: 32px;
+}
+.sidebar-nav a.nav-sub-item.active {
+  background: var(--surface-2);
+  color: var(--text-h);
+  font-weight: 600;
+}
+
+/* "N items need review" reminder at the bottom of the panel */
+.ws-callout {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px;
+  border-radius: 12px;
+  background: var(--accent-bg);
+  border: 1px solid var(--accent-border);
+  font-size: 12px;
+  color: var(--text);
+}
+.ws-callout strong {
+  font-size: 14px;
+  color: var(--text-h);
+}
+.sidebar-nav .ws-callout a {
+  display: inline;
+  min-height: 0;
+  padding: 0;
+  margin-top: 2px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  background: none;
+}
+.sidebar-nav .ws-callout a:hover {
+  background: none;
+  text-decoration: underline;
+}
+.sidebar-nav {
+  flex: 1;
+}
+
+/* ---------- Top bar ---------- */
+
+.topbar {
+  min-height: 60px;
+  padding: 10px 28px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.crumbs ol {
+  font-weight: 500;
+}
+.crumbs li + li::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid #a8a29e;
+  border-top: 1.5px solid #a8a29e;
+  transform: rotate(45deg);
+  margin: 0 8px 0 4px;
+}
+.crumbs span {
+  font-weight: 600;
+}
+.user-avatar {
+  background: var(--ink);
+  color: var(--on-ink);
+}
+
+/* ---------- Page ---------- */
+
+.content {
+  max-width: 1320px;
+}
+.page-header h1 {
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+h1,
+h2 {
+  font-weight: 600;
+}
+.page-subtitle {
+  color: var(--muted);
+}
+.back-link {
+  color: var(--muted);
+}
+
+/* Step strip: quieter, ember for the current step */
+.step-strip {
+  border-radius: 12px;
+  box-shadow: var(--shadow-sm);
+}
+.step-strip-label {
+  font-weight: 600;
+}
+.step-strip-title {
+  font-weight: 600;
+}
+.step-chip-done {
+  background: var(--surface-2);
+  color: var(--text-h);
+}
+.step-chip-current,
+.step-chip-open {
+  background: var(--accent-bg);
+  color: var(--accent-ink);
+  border-color: transparent;
+}
+.step-dot {
+  width: 20px;
+  height: 5px;
+}
+.step-dot-done {
+  background: var(--ink);
+}
+.step-dot-current {
+  background: var(--ember);
+}
+.step-dot.is-here {
+  outline: 2px solid var(--accent-border);
+}
+
+/* ---------- Buttons ---------- */
+
+.btn {
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 14px;
+  min-height: 38px;
+}
+.btn-primary {
+  background: var(--ink);
+  color: var(--on-ink);
+  box-shadow: var(--shadow-sm);
+}
+.btn-primary:hover:not(:disabled) {
+  background: var(--ink-hover);
+  box-shadow: 0 6px 16px -6px rgba(28, 25, 23, 0.45);
+}
+.btn-accent {
+  background: var(--ember);
+  color: #1c1917;
+  border-color: transparent;
+  box-shadow: 0 1px 2px rgba(255, 107, 61, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+.btn-accent:hover:not(:disabled) {
+  background: #ff7d53;
+  box-shadow: 0 8px 20px -8px rgba(255, 107, 61, 0.7);
+}
+.btn-ghost {
+  border-width: 1px;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+.btn-ghost:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+.table a.btn-primary,
+.table a.btn-primary:hover {
+  color: var(--on-ink);
+}
+.btn:focus-visible,
+.sidebar-nav a:focus-visible {
+  outline: 2px solid var(--ember);
+  outline-offset: 2px;
+}
+input:focus,
+textarea:focus,
+select:focus {
+  border-color: var(--ember) !important;
+  box-shadow: 0 0 0 3px rgba(255, 107, 61, 0.18);
+}
+
+/* ---------- Surfaces ---------- */
+
+.card {
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+}
+.modal {
+  border-radius: 16px;
+}
+.table th {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+/* Creative cards: ember selection ring like the Studio gallery */
+.variation-card.variation-card-selected,
+.variation-card.is-selected {
+  box-shadow: 0 0 0 2px var(--ember), 0 8px 20px rgba(28, 25, 23, 0.1);
+}
+
+/* ---------- Mobile: the rail folds away, the panel becomes the drawer ---------- */
+
+@media (max-width: 860px) {
+  .rail {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rail-link,
+  .rail-link::after,
+  .rail-brand {
+    transition: none;
+  }
+}

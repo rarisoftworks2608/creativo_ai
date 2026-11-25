@@ -190,7 +190,7 @@ export default function CreativeGenerationPage() {
           <p className="page-subtitle">Generate image posts for the planned content, then send them for review.</p>
         </div>
         {isAdmin && (
-          <button type="button" className="btn btn-primary" onClick={() => setShowCreate(true)} disabled={!options}>
+          <button type="button" className="btn btn-accent" onClick={() => setShowCreate(true)} disabled={!options}>
             + New creative
           </button>
         )}

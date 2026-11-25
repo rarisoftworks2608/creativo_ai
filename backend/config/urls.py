@@ -12,6 +12,11 @@ from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, Spec
 
 company = 'api/v1/companies/<int:company_id>'
 
+# Django admin branding (its look lives in templates/admin/base_site.html).
+admin.site.site_header = 'Creativo AI'
+admin.site.site_title = 'Creativo AI admin'
+admin.site.index_title = 'Data administration'
+
 urlpatterns = [
     path('admin/', admin.site.urls),
 

@@ -59,6 +59,61 @@ export const ADMIN_NAV = [
   },
 ]
 
+/* ---------------------------------------------------------------------------
+   Icon rail - the dark strip on the far left with the app-wide destinations.
+   The panel beside it carries the context: the company's workflow, or the
+   admin's grouped menu.
+   --------------------------------------------------------------------------- */
+
+const RAIL_ADMIN = [
+  { to: '/dashboard', label: 'Dashboard', icon: 'home' },
+  { to: '/companies', label: 'Companies', icon: 'building' },
+  { to: '/approvals', label: 'Approvals', icon: 'check', badge: 'approvals' },
+  { to: '/publishing', label: 'Publishing queue', icon: 'send' },
+  { to: '/analytics', label: 'Analytics', icon: 'chart' },
+]
+const RAIL_ADMIN_BOTTOM = [{ to: '/admin-settings', label: 'Platform settings', icon: 'settings' }]
+const RAIL_CLIENT = [{ to: '/client', label: 'Dashboard', icon: 'home' }]
+const RAIL_CLIENT_BOTTOM = [{ to: '/settings', label: 'My account', icon: 'settings' }]
+
+function RailLink({ item, badgeCount = 0 }) {
+  return (
+    <NavLink
+      to={item.to}
+      className={({ isActive }) => `rail-link ${isActive ? 'active' : ''}`}
+      aria-label={badgeCount > 0 ? `${item.label} (${badgeCount} waiting)` : item.label}
+      data-label={item.label}
+    >
+      <span className="rail-icon" aria-hidden="true">{ICONS[item.icon]}</span>
+      {badgeCount > 0 && <span className="rail-dot" aria-hidden="true" />}
+    </NavLink>
+  )
+}
+
+export function Rail({ isAdmin, pendingApprovals = 0 }) {
+  const top = isAdmin ? RAIL_ADMIN : RAIL_CLIENT
+  const bottom = isAdmin ? RAIL_ADMIN_BOTTOM : RAIL_CLIENT_BOTTOM
+  return (
+    <nav className="rail" aria-label="App">
+      <Link to={isAdmin ? '/dashboard' : '/client'} className="rail-brand" aria-label="Creativo AI home">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M17 7.5A6.5 6.5 0 1 0 17 16.5" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" />
+        </svg>
+      </Link>
+      <div className="rail-group">
+        {top.map((item) => (
+          <RailLink key={item.to} item={item} badgeCount={item.badge === 'approvals' ? pendingApprovals : 0} />
+        ))}
+      </div>
+      <div className="rail-group rail-bottom">
+        {bottom.map((item) => (
+          <RailLink key={item.to} item={item} />
+        ))}
+      </div>
+    </nav>
+  )
+}
+
 export function NavItem({ item, badgeCount = 0 }) {
   return (
     <NavLink to={item.to} end={item.end} className={({ isActive }) => (isActive ? 'active' : '')}>
@@ -264,6 +319,23 @@ export function WorkspaceNav({ isAdmin, pathname }) {
       )}
       <CompanySwitcher company={company} isAdmin={isAdmin} />
 
+      {steps.length > 0 && (
+        <div className="ws-progress">
+          <div className="ws-progress-head">
+            <span>Campaign progress</span>
+            <span>
+              {doneCount} of {steps.length}
+            </span>
+          </div>
+          <div className="ws-progress-bar" aria-hidden="true">
+            {steps.map((step) => {
+              const status = workflow?.steps[step.key]?.status || 'open'
+              return <span key={step.key} className={`ws-progress-seg is-${status}`} />
+            })}
+          </div>
+        </div>
+      )}
+
       <div className="nav-group">
         {isAdmin ? (
           <NavItem item={{ to: base, label: 'Overview', icon: 'home', end: true }} />
@@ -300,6 +372,16 @@ export function WorkspaceNav({ isAdmin, pathname }) {
         {plan && <NavItem item={{ to: `${base}/subscription`, label: 'Plan & usage', icon: 'dollar' }} />}
         {!isAdmin && <NavItem item={{ to: '/settings', label: 'My account', icon: 'users' }} />}
       </div>
+
+      {(workflow?.pendingApproval || 0) > 0 && (
+        <div className="ws-callout">
+          <strong>
+            {workflow.pendingApproval} {workflow.pendingApproval === 1 ? 'item needs' : 'items need'} review
+          </strong>
+          <span>{isAdmin ? 'Waiting for the client to approve.' : 'Approve them so they can be published.'}</span>
+          <Link to={`${base}/approvals`}>Go to Review →</Link>
+        </div>
+      )}
     </>
   )
 }

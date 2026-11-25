@@ -1,0 +1,611 @@
+/* =====================================================================
+   Admin panel (Studio theme): dashboard, companies list, and the shared
+   pieces every admin list page uses (toolbars, filters, tables).
+   ===================================================================== */
+
+/* ---------- Tables: the actions cell stays a real table cell ---------- */
+/* `.table-actions` is display:flex for button rows; on a <td> that broke the row's border line. */
+
+@media (min-width: 721px) {
+  td.table-actions {
+    display: table-cell;
+    text-align: right;
+    white-space: nowrap;
+  }
+  td.table-actions > * + * {
+    margin-left: 4px;
+  }
+}
+.table th {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  background: transparent;
+}
+.table td {
+  padding: 13px 12px;
+}
+.table-row-link:hover td {
+  background: var(--surface-2);
+}
+
+/* ---------- Toolbars & filters on list pages ---------- */
+
+.toolbar {
+  gap: 10px;
+}
+.search-input,
+.status-select,
+.toolbar select,
+.toolbar input[type='search'] {
+  height: 40px;
+  box-sizing: border-box;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background-color: var(--surface);
+  color: var(--text-h);
+  font: inherit;
+  font-size: 14px;
+  box-shadow: var(--shadow-sm);
+}
+.search-input,
+.toolbar input[type='search'] {
+  padding: 0 12px 0 38px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2378716c' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='M20 20l-3.5-3.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: 13px center;
+}
+.status-select,
+.toolbar select {
+  padding: 0 34px 0 12px;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2378716c' stroke-width='2.2' stroke-linecap='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  cursor: pointer;
+}
+
+.btn-icon {
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  margin-right: 8px;
+}
+.btn-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* ---------- Dashboard ---------- */
+
+.adm {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+.adm-hero {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px 24px;
+  padding-top: 4px;
+}
+.adm-hero-text {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.adm-eyebrow {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+}
+.adm-hero h1 {
+  margin: 0;
+  font-size: 30px;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  color: var(--text-h);
+}
+.adm-hero p {
+  margin: 0;
+  font-size: 15px;
+  color: var(--muted);
+}
+.adm-hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.adm-btn-count {
+  margin-left: 8px;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: rgba(28, 25, 23, 0.14);
+  font-size: 12px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
+
+/* Key numbers */
+.adm-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 16px;
+}
+.adm-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 18px 20px;
+  border-radius: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  color: inherit;
+  text-decoration: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+.adm-metric-link:hover {
+  border-color: #d6d3d1;
+  box-shadow: 0 10px 24px -12px rgba(28, 25, 23, 0.25);
+  transform: translateY(-1px);
+}
+.adm-metric-link:focus-visible {
+  outline: 2px solid var(--ember);
+  outline-offset: 2px;
+}
+.adm-metric-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+}
+.adm-metric-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--accent-bg);
+  color: var(--accent);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.adm-metric-icon svg {
+  width: 15px;
+  height: 15px;
+}
+.adm-metric-value {
+  font-size: 30px;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  line-height: 1.1;
+  color: var(--text-h);
+}
+.adm-metric-note {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* Two columns: companies | attention + platform */
+.adm-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  align-items: flex-start;
+}
+.adm-companies {
+  flex: 999 1 520px;
+  min-width: 0;
+  margin: 0;
+}
+.adm-side {
+  flex: 1 1 320px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.adm-side .card {
+  margin: 0;
+}
+.adm-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.adm-card-head h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-h);
+}
+.adm-card-head p {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+.adm-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.adm-link span {
+  display: inline-flex;
+  width: 14px;
+  height: 14px;
+}
+.adm-link:hover {
+  color: var(--accent-strong);
+}
+.adm-count {
+  min-width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  padding: 0 8px;
+  box-sizing: border-box;
+  background: var(--accent-bg);
+  color: var(--accent-ink);
+  font-size: 12px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Company rows */
+.adm-company-list {
+  list-style: none;
+  margin: 0 -8px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.adm-company-list li + li {
+  border-top: 1px solid var(--border);
+}
+.adm-company {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) 150px auto;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 8px;
+  border-radius: 10px;
+  color: inherit;
+  text-decoration: none;
+  transition: background-color 0.12s ease;
+}
+.adm-company:hover {
+  background: var(--surface-2);
+}
+.adm-company:focus-visible {
+  outline: 2px solid var(--ember);
+  outline-offset: 0;
+}
+.adm-company-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  background: var(--ink);
+  color: var(--on-ink);
+  font-weight: 700;
+  font-size: 15px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.adm-company-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.adm-company-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  color: var(--text-h);
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.adm-company-status {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--danger);
+  background: var(--danger-bg);
+  border-radius: 999px;
+  padding: 1px 8px;
+}
+.adm-company-meta {
+  font-size: 13px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.adm-company-setup {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 120px;
+}
+.adm-setup-bar {
+  flex: 1;
+  height: 6px;
+  border-radius: 6px;
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 1px var(--border);
+  overflow: hidden;
+}
+.adm-setup-bar span {
+  display: block;
+  height: 100%;
+  border-radius: 6px;
+  background: var(--ink);
+}
+.adm-setup-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  min-width: 34px;
+  text-align: right;
+}
+.adm-company-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-h);
+  padding: 7px 12px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+.adm-company-open span {
+  display: inline-flex;
+  width: 14px;
+  height: 14px;
+}
+.adm-company:hover .adm-company-open {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--on-ink);
+}
+
+/* Needs attention */
+.adm-attention-list {
+  list-style: none;
+  margin: 0 -8px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.adm-alert {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 8px;
+  border-radius: 10px;
+  color: var(--text-h);
+  text-decoration: none;
+  font-size: 14px;
+  transition: background-color 0.12s ease;
+}
+.adm-alert:hover {
+  background: var(--surface-2);
+}
+.adm-alert:focus-visible {
+  outline: 2px solid var(--ember);
+  outline-offset: 0;
+}
+.adm-alert-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.adm-alert-icon svg {
+  width: 15px;
+  height: 15px;
+}
+.adm-alert-warning .adm-alert-icon {
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+.adm-alert-danger .adm-alert-icon {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+.adm-alert-label {
+  flex: 1;
+  min-width: 0;
+}
+.adm-alert-count {
+  font-weight: 700;
+  font-size: 14px;
+  min-width: 28px;
+  text-align: right;
+}
+.adm-clear {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.adm-clear strong {
+  display: block;
+  font-size: 14px;
+  color: var(--text-h);
+}
+.adm-clear-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: var(--success-bg);
+  color: var(--success);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.adm-clear-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Platform totals */
+.adm-kv {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+}
+.adm-kv > div {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  font-size: 14px;
+}
+.adm-kv > div + div {
+  border-top: 1px solid var(--border);
+}
+.adm-kv dt {
+  color: var(--muted);
+}
+.adm-kv dd {
+  margin: 0;
+  font-weight: 600;
+}
+.adm-kv a {
+  color: var(--text-h);
+  text-decoration: none;
+}
+.adm-kv a:hover {
+  color: var(--accent);
+}
+
+/* ---------- Companies list page ---------- */
+
+.adm-cell-company {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.adm-cell-company .adm-company-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  font-size: 14px;
+}
+.adm-company-table td[data-label='Setup'] {
+  width: 200px;
+}
+.table a.adm-company-name {
+  color: var(--text-h);
+  font-weight: 600;
+}
+
+/* ---------- Small screens ---------- */
+
+@media (max-width: 720px) {
+  .adm-hero h1 {
+    font-size: 24px;
+  }
+  .adm-company {
+    grid-template-columns: 40px minmax(0, 1fr);
+  }
+  .adm-company-setup,
+  .adm-company-open {
+    grid-column: 2;
+  }
+  .adm-company-open {
+    justify-self: start;
+  }
+  .adm-company-table td[data-label='Setup'] {
+    width: auto;
+  }
+}
+
+/* Links inside a card's subtitle line (e.g. the company on an approval card) */
+.card-header .page-subtitle a,
+.review-card .page-subtitle a {
+  color: var(--text-h);
+  font-weight: 600;
+  text-decoration: none;
+}
+.card-header .page-subtitle a:hover,
+.review-card .page-subtitle a:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+/* Phone dashboard: what needs attention comes first; the four numbers sit two by two. */
+@media (max-width: 720px) {
+  .adm-side {
+    order: -1;
+  }
+  .adm-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .adm-metric {
+    padding: 14px;
+  }
+  .adm-metric-value {
+    font-size: 24px;
+  }
+  .adm-metric-head {
+    font-size: 12px;
+  }
+  .adm-metric-icon {
+    display: none;
+  }
+}
+
+/* Phones: the toolbar stacks, so its controls must not grow vertically (flex-basis would become a height). */
+@media (max-width: 860px) {
+  .toolbar > .search-input,
+  .toolbar > .status-select,
+  .toolbar > select,
+  .toolbar > input {
+    flex: 0 0 auto;
+    width: 100%;
+    max-width: none;
+  }
+}
+
+/* Stacked (phone) tables: badges keep their own width instead of filling the cell. */
+@media (max-width: 720px) {
+  .table-stack td .badge {
+    justify-self: start;
+    width: auto;
+  }
+}

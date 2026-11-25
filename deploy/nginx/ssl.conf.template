@@ -1,7 +1,12 @@
 # HTTPS edge config for docker-compose.prod.yml. Rendered by the nginx image's template
 # step: only ${DOMAIN} is substituted, nginx's own $variables are left untouched.
+# Docker's internal DNS. With `resolve`, nginx keeps looking the backend up instead of caching the IP it found at
+# start-up - so recreating the backend container (a new IP, e.g. on every deploy) never leaves the site on a 502.
+resolver 127.0.0.11 valid=10s ipv6=off;
+
 upstream django_backend {
-    server backend:8000;
+    zone django_backend 64k;
+    server backend:8000 resolve;
 }
 
 server {
