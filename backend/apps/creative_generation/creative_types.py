@@ -320,14 +320,24 @@ def attribution(fields):
     return ', '.join(part for part in (name, role) if part)
 
 
+# Text the AI would otherwise add to the picture (a services strip, a tagline) - none of it was typed by the person.
+NO_EXTRA_TEXT = {'highlights': [], 'tagline': ''}
+
+
 def locked_copy(creative_type, fields):
-    """The copy fields the person typed, mapped onto the creative's text roles. These replace whatever the AI
-    wrote for the same roles, so the creative shows them exactly as entered."""
+    """The text on the creative, from what the person typed - exactly as entered. A role they left empty stays
+    empty: the AI writes the caption and hashtags, but adds nothing to the picture that the person did not ask
+    for. (The one exception is a headline: with neither a headline nor a topic typed, the AI writes one, since a
+    creative needs one.)"""
     locked = {}
     if creative_type in ('post', 'story'):
-        for source, target in (('headline', 'headline'), ('supporting_text', 'description'), ('cta', 'cta')):
-            if fields.get(source):
-                locked[target] = fields[source]
+        headline = fields.get('headline') or fields.get('topic')
+        if headline:
+            locked['headline'] = headline
+        locked['eyebrow'] = ''
+        locked['description'] = fields.get('supporting_text', '')
+        locked['cta'] = fields.get('cta', '')
+        locked.update(NO_EXTRA_TEXT)
     elif creative_type == 'festival_creative':
         name = festival_name(fields)
         if name:
@@ -335,9 +345,9 @@ def locked_copy(creative_type, fields):
             locked['eyebrow'] = f'Happy {name}{f" {year}" if year else ""}'
         if fields.get('headline'):
             locked['headline'] = fields['headline']
-        if fields.get('message'):
-            locked['description'] = fields['message']
+        locked['description'] = fields.get('message', '')
         locked['cta'] = ''
+        locked.update(NO_EXTRA_TEXT)
     elif creative_type == 'announcement_creative':
         category = ANNOUNCEMENT_CATEGORIES.get(fields.get('category', ''), ANNOUNCEMENT_CATEGORIES['custom'])
         label = (fields.get('label') or category[1]).strip()
@@ -345,10 +355,9 @@ def locked_copy(creative_type, fields):
         locked['eyebrow'] = f'{label} / {date}' if date else label
         if fields.get('title'):
             locked['headline'] = fields['title']
-        if fields.get('description'):
-            locked['description'] = fields['description']
-        if fields.get('cta'):
-            locked['cta'] = fields['cta']
+        locked['description'] = fields.get('description', '')
+        locked['cta'] = fields.get('cta', '')
+        locked.update(NO_EXTRA_TEXT)
     elif creative_type == 'testimonial_creative':
         locked['eyebrow'] = TESTIMONIAL_LABEL
         if fields.get('quote') and not fields.get('allow_shorten'):

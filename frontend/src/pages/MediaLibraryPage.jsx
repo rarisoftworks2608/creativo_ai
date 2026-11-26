@@ -6,6 +6,62 @@ import { getCompany } from '../api/companies'
 import { extractErrorMessage } from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import Modal from '../components/Modal'
+import { downloadCreativeZip } from '../api/creativeGeneration'
+
+/** Every slide of a carousel in the preview: arrows, keyboard arrows, a thumbnail strip and the slide count. */
+function SlidePreview({ item, onDownload, downloading }) {
+  const slides = item.slides
+  const [index, setIndex] = useState(0)
+  const count = slides.length
+  const go = useCallback((step) => setIndex((current) => (current + step + count) % count), [count])
+
+  useEffect(() => {
+    function onKeyDown(event) {
+      if (event.key === 'ArrowRight') go(1)
+      if (event.key === 'ArrowLeft') go(-1)
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [go])
+
+  const slide = slides[index]
+  return (
+    <div className="media-slides">
+      <div className="media-slides-stage">
+        <button type="button" className="media-slides-arrow is-prev" onClick={() => go(-1)} aria-label="Previous slide">
+          ‹
+        </button>
+        <img className="modal-media-asset media-slides-image" src={slide.url} alt={`Slide ${index + 1} of ${count}: ${slide.name}`} />
+        <button type="button" className="media-slides-arrow is-next" onClick={() => go(1)} aria-label="Next slide">
+          ›
+        </button>
+      </div>
+      <div className="media-slides-bar">
+        <span className="media-slides-count" aria-live="polite">
+          Slide {index + 1} of {count}
+        </span>
+        <div className="media-slides-thumbs" role="tablist" aria-label="Slides">
+          {slides.map((entry, i) => (
+            <button
+              key={entry.url}
+              type="button"
+              role="tab"
+              aria-selected={i === index}
+              aria-label={`Slide ${i + 1}`}
+              className={`media-slides-thumb ${i === index ? 'is-current' : ''}`}
+              onClick={() => setIndex(i)}
+            >
+              <img src={entry.url} alt="" />
+            </button>
+          ))}
+        </div>
+        <button type="button" className="btn btn-ghost btn-sm" onClick={() => onDownload(slide, index)} disabled={downloading}>
+          Download slide
+        </button>
+      </div>
+    </div>
+  )
+}
 
 const SECTIONS = [
   {
@@ -101,6 +157,17 @@ export default function MediaLibraryPage() {
   }
 
   async function handleDownload(item) {
+    if (item.slides?.length > 1 && item.request_id) {
+      setDownloadingId(item.id)
+      try {
+        await downloadCreativeZip(companyId, item.request_id)
+      } catch (err) {
+        setLoadError(extractErrorMessage(err, 'Could not download this carousel.'))
+      } finally {
+        setDownloadingId(null)
+      }
+      return
+    }
     // A plain <a href> to the backend's media URL just opens the file in a new
     // tab instead of downloading it, since it's a different origin than the
     // frontend (browsers only honor the `download` attribute same-origin).
@@ -177,6 +244,9 @@ export default function MediaLibraryPage() {
                 {sectionItems.map((item) => (
                   <div className="asset-card" key={item.id}>
                     <button type="button" className="asset-thumb" onClick={() => setPreviewItem(item)}>
+                      {item.slides?.length > 1 && (
+                        <span className="asset-slides-badge">{item.slides.length} slides</span>
+                      )}
                       {item.type === 'video' ? (
                         item.thumbnail_url ? <img src={item.thumbnail_url} alt={item.name} /> : <span className="asset-thumb-icon">🎬</span>
                       ) : item.thumbnail_url ? (
@@ -242,6 +312,14 @@ export default function MediaLibraryPage() {
         <Modal title={previewItem.name} onClose={() => setPreviewItem(null)} width={900} className="modal-media">
           {previewItem.type === 'video' ? (
             <video className="modal-media-asset" controls src={previewItem.url} poster={previewItem.thumbnail_url || undefined} />
+          ) : previewItem.slides?.length > 1 ? (
+            <SlidePreview
+              item={previewItem}
+              downloading={downloadingId === previewItem.id}
+              onDownload={(slide, i) =>
+                handleDownload({ ...previewItem, slides: null, url: slide.url, name: `${previewItem.name} - slide ${i + 1}` })
+              }
+            />
           ) : previewItem.type === 'image' ? (
             <img className="modal-media-asset" src={previewItem.url} alt={previewItem.name} />
           ) : (

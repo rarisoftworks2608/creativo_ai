@@ -40,14 +40,15 @@ export async function getCreativeOptions(companyId) {
 }
 
 // Sends multipart only when a file is attached (a testimonial's client photo); brief_fields then travels as JSON text.
-export async function createCreative(companyId, payload, photoFile) {
-  if (!photoFile) return createGenerationRequest(companyId, payload)
+export async function createCreative(companyId, payload, photoFile, referenceFile) {
+  if (!photoFile && !referenceFile) return createGenerationRequest(companyId, payload)
   const form = new FormData()
   Object.entries(payload).forEach(([key, value]) => {
     if (value === null || value === undefined) return
     form.append(key, typeof value === 'object' ? JSON.stringify(value) : value)
   })
-  form.append('customer_photo', photoFile)
+  if (photoFile) form.append('customer_photo', photoFile)
+  if (referenceFile) form.append('reference_image', referenceFile)
   const response = await apiClient.post(`${base(companyId)}/requests/`, form, {
     headers: { 'Content-Type': 'multipart/form-data' },
   })

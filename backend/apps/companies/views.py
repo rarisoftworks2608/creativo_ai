@@ -543,15 +543,33 @@ class MediaLibraryView(APIView):
         ).select_related('generation_request')
         if search:
             variations = variations.filter(caption__icontains=search)
-        for variation in variations:
+        # A carousel's slides are one item (its cover, carrying every slide in order), so opening it shows the
+        # whole series rather than a single slide.
+        carousels = {}
+        for variation in variations.order_by('generation_request_id', 'variation_number'):
             if not variation.image:
                 continue
             url = request.build_absolute_uri(variation.image.url)
             name = variation.headline or (variation.caption[:60] if variation.caption else f'Variation {variation.variation_number}')
+            generation = variation.generation_request
+            slide = {'url': url, 'name': name, 'number': variation.variation_number}
+            if generation.creative_type == generation.CreativeType.CAROUSEL:
+                if generation.id in carousels:
+                    carousels[generation.id]['slides'].append(slide)
+                    continue
+                item = {
+                    'id': f'creative_variation-{variation.id}', 'source': 'creative_variation', 'source_id': variation.id,
+                    'type': 'image', 'name': name, 'url': url, 'thumbnail_url': url,
+                    'category': generation.get_creative_type_display(), 'created_at': variation.created_at,
+                    'renamable': False, 'deletable': False, 'slides': [slide], 'request_id': generation.id,
+                }
+                carousels[generation.id] = item
+                items.append(item)
+                continue
             items.append({
                 'id': f'creative_variation-{variation.id}', 'source': 'creative_variation', 'source_id': variation.id,
                 'type': 'image', 'name': name, 'url': url, 'thumbnail_url': url,
-                'category': variation.generation_request.get_creative_type_display(), 'created_at': variation.created_at,
+                'category': generation.get_creative_type_display(), 'created_at': variation.created_at,
                 'renamable': False, 'deletable': False,
             })
 

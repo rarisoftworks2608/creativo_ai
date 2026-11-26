@@ -107,11 +107,11 @@ export default function CreativeGenerationPage() {
     setRequests((prev) => prev.map((r) => (r.id === updated.id ? updated : r)))
   }
 
-  async function handleCreate(payload, photoFile) {
+  async function handleCreate(payload, photoFile, referenceFile) {
     setCreating(true)
     setCreateError('')
     try {
-      const created = await createCreative(companyId, payload, photoFile)
+      const created = await createCreative(companyId, payload, photoFile, referenceFile)
       setRequests((prev) => [created, ...prev])
       setShowCreate(false)
     } catch (err) {
@@ -234,6 +234,7 @@ export default function CreativeGenerationPage() {
       {isAdmin && showCreate && options && (
         <Modal title="New creative" onClose={() => setShowCreate(false)} width={1040}>
           <CreativeForm
+            companyId={companyId}
             options={options}
             calendarItems={calendarItems}
             onSubmit={handleCreate}

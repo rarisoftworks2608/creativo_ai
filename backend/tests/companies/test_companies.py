@@ -310,3 +310,33 @@ class MediaLibraryTests(BaseCompanyTestCase):
         self.authenticate_as('acmeclient@example.com', 'StrongPass123!')
         response = self.client.get(self.media_library_url())
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+
+class MediaLibraryCarouselTests(BaseCompanyTestCase):
+    def test_a_carousel_is_one_item_carrying_every_slide_in_order(self):
+        carousel = GenerationRequest.objects.create(
+            company=self.company, creative_type=GenerationRequest.CreativeType.CAROUSEL,
+            status=GenerationRequest.Status.SUCCEEDED,
+        )
+        for number in (2, 1, 3):  # stored out of order on purpose
+            GenerationVariation.objects.create(
+                generation_request=carousel, variation_number=number, headline=f'Slide {number}',
+                image=SimpleUploadedFile(f's{number}.png', b'fake-image-bytes', content_type='image/png'),
+            )
+        single = GenerationRequest.objects.create(
+            company=self.company, creative_type=GenerationRequest.CreativeType.INSTAGRAM_POST,
+            status=GenerationRequest.Status.SUCCEEDED,
+        )
+        GenerationVariation.objects.create(
+            generation_request=single, variation_number=1, headline='A post',
+            image=SimpleUploadedFile('p.png', b'fake-image-bytes', content_type='image/png'),
+        )
+        self.authenticate_as('admin@example.com', 'StrongPass123!')
+        results = self.client.get(reverse('companies:media-library', kwargs={'company_id': self.company.pk})).data['results']
+        creatives = [item for item in results if item['source'] == 'creative_variation']
+        self.assertEqual(len(creatives), 2)  # the carousel is one item, not three
+        carousel_item = next(item for item in creatives if item.get('slides'))
+        self.assertEqual([slide['name'] for slide in carousel_item['slides']], ['Slide 1', 'Slide 2', 'Slide 3'])
+        self.assertEqual(carousel_item['name'], 'Slide 1')  # the cover represents it
+        self.assertEqual(carousel_item['request_id'], carousel.id)
+        self.assertNotIn('slides', next(item for item in creatives if item['name'] == 'A post'))

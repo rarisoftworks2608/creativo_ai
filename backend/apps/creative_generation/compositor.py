@@ -216,7 +216,7 @@ def compose_creative(
     placement='auto', aspect=DEFAULT_ASPECT, creative_type='', variation_seed=None, composition=None,
     output_width=None, highlights=(), tagline='', brand_name='', website='',
     exact_aspect=False, safe_top=0.0, safe_bottom=0.0, style_presets=None, style_seed=None, headline_scale=1.0,
-    rating=None, portrait_bytes=None, logo_anchor=None, layout_info=None,
+    rating=None, portrait_bytes=None, logo_anchor=None, layout_info=None, logo_slots=None,
 ):
     """Returns (composited_bytes, 'image/jpeg'), or the input unchanged if there is nothing to
     apply. `logo_bytes` (BrandProfile.logo) takes priority over `symbol_bytes`
@@ -269,7 +269,10 @@ def compose_creative(
     variants = _logo_variants(logo_bytes, symbol_bytes)
     mark = variants[0].image if variants else None
 
-    base = _upscale(_fit_aspect(base, aspect) if exact_aspect else _crop_taller_than(base, aspect), output_width)
+    base = _upscale(
+        _fit_aspect(base, aspect) if exact_aspect else _crop_taller_than(base, aspect), output_width,
+        aspect=aspect if exact_aspect else None,
+    )
     portrait = _prepare_portrait(portrait_bytes) if portrait_bytes else None
     if placement in ('top', 'below'):
         base = _draw_layout(
@@ -283,7 +286,7 @@ def compose_creative(
             composition=composition, highlights=highlights, tagline=tagline, brand_name=brand_name, website=website,
             safe_top=safe_top, safe_bottom=safe_bottom, style_presets=style_presets, style_seed=style_seed,
             headline_scale=headline_scale, rating=rating, portrait=portrait, logos=variants, logo_anchor=logo_anchor,
-            layout_info=layout_info,
+            layout_info=layout_info, logo_slots=logo_slots,
         )
     return _encode_jpeg(base.convert('RGB')), 'image/jpeg'
 
@@ -302,12 +305,13 @@ def _encode_jpeg(image):
     return output.getvalue()
 
 
-def _upscale(base, output_width):
+def _upscale(base, output_width, aspect=None):
     """The picture enlarged to `output_width` with a high-quality filter and a light sharpening pass, so it reads
-    as a crisp HD picture rather than a soft small one. Never reduces a picture that is already that wide."""
+    as a crisp HD picture rather than a soft small one. Never reduces a picture that is already that wide. With
+    `aspect`, the height is exactly width x aspect (a 4:5 post is 2048 x 2560, not a pixel off from rounding)."""
     if not output_width or base.width >= output_width:
         return base
-    height = round(base.height * output_width / base.width)
+    height = round(output_width * aspect) if aspect else round(base.height * output_width / base.width)
     enlarged = base.convert('RGB').resize((output_width, height), Image.LANCZOS)
     return enlarged.filter(ImageFilter.UnsharpMask(radius=1.6, percent=60, threshold=2)).convert('RGBA')
 
@@ -415,6 +419,27 @@ def _relative_luminance(hex_color):
 
     r, g, b = (channel(c) for c in _rgb(hex_color))
     return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def _logo_visibility(base, rect, tone):
+    """The logo's contrast against the picture behind it, on the side it reads worst: the 15th-percentile
+    contrast over the pixels of `rect` (so a patch of sky behind half a gold wordmark counts, even when dark
+    frames around it make the area's average look fine)."""
+    zone = base.crop(rect).convert('L')
+    zone.thumbnail((48, 48))
+    values = sorted(zone.getdata())
+    if not values:
+        return 21.0
+    logo_luminance = _relative_luminance(tone)
+
+    def luminance(value):
+        channel = value / 255
+        return channel / 12.92 if channel <= 0.04045 else ((channel + 0.055) / 1.055) ** 2.4
+
+    contrasts = sorted(
+        (max(logo_luminance, luminance(v)) + 0.05) / (min(logo_luminance, luminance(v)) + 0.05) for v in values
+    )
+    return contrasts[int(len(contrasts) * 0.15)]
 
 
 def _contrast_ratio(color_a, color_b):
@@ -1058,7 +1083,7 @@ def _art_direct(
     base, *, eyebrow, headline, description, cta, primary, accent, mark, brand_profile, creative_type, seed,
     composition=None, highlights=(), tagline='', brand_name='', website='',
     safe_top=0.0, safe_bottom=0.0, style_presets=None, style_seed=None, headline_scale=1.0, rating=None, portrait=None,
-    logos=None, logo_anchor=None, layout_info=None,
+    logos=None, logo_anchor=None, layout_info=None, logo_slots=None,
 ):
     """The art-directed layout: the text stack's family (centred / left / right / a narrow column) and position
     and the logo's corner are chosen for this picture's calm areas (art_direction.plan_layout), and the
@@ -1120,7 +1145,7 @@ def _art_direct(
     energy = EnergyMap(base)
     rects, cost = _logo_options(
         base, energy, logos, creative_type=creative_type, framed=framed, anchor=logo_anchor,
-        top_inset=safe_top_px, bottom_inset=safe_bottom_px,
+        top_inset=safe_top_px, bottom_inset=safe_bottom_px, allowed_slots=logo_slots,
     )
     plan = plan_layout(
         energy, base.size, measure=measure if has_text else None, logo_size=logo_size, rng=rng,
@@ -1202,7 +1227,7 @@ def _align_logo_with_text(plan, size, *, framed, top_inset=0, bottom_inset=0):
     return replace(plan, logo_rect=(l_left, l_top + shift, l_right, l_bottom + shift))
 
 
-def _logo_options(base, energy, logos, *, creative_type, framed, anchor, top_inset, bottom_inset):
+def _logo_options(base, energy, logos, *, creative_type, framed, anchor, top_inset, bottom_inset, allowed_slots=None):
     """({'slot:variant': rect}, cost) - every place each usable logo variant could go, and how well it would sit
     there. A designer's reasons, as costs: the logo stays off busy detail (a subject, a face, a pattern), stays
     clearly visible against what is behind it, lines up with the text block's alignment and balances it (text at
@@ -1211,19 +1236,21 @@ def _logo_options(base, energy, logos, *, creative_type, framed, anchor, top_ins
     box sits on a similar tone, so it reads as designed in rather than pasted on."""
     width, height = base.size
     gap = int(width * 0.03)
+    pinned = anchor.split(':')[0] if anchor else None
     rects = {}
     for index, variant in enumerate(logos):
         size = _integrated_logo_size(variant.image, width, height, creative_type)
         for slot, rect in logo_slots(base.size, size, top_inset=top_inset, bottom_inset=bottom_inset).items():
-            if framed and slot != 'top_right':
+            if allowed_slots and slot not in allowed_slots:
+                continue
+            # A framed poster's header row is built for the logo at the top right - unless the logo's place is
+            # pinned (every slide of a carousel keeps the cover's place, framed or not).
+            if framed and slot != 'top_right' and slot != pinned:
                 continue
             rects[f'{slot}:{index}'] = rect
-    if anchor:
-        if anchor in rects:
-            rects = {anchor: rects[anchor]}
-        else:
-            slot = anchor.split(':')[0]
-            rects = {name: rect for name, rect in rects.items() if name.split(':')[0] == slot} or rects
+    if pinned:
+        # The place is pinned; the version (light/dark file) is still chosen for this picture, so it stays visible.
+        rects = {name: rect for name, rect in rects.items() if name.split(':')[0] == pinned} or rects
     backdrops = {}
 
     def backdrop(rect):
@@ -1240,9 +1267,13 @@ def _logo_options(base, energy, logos, *, creative_type, framed, anchor, top_ins
         total = 0.7 * energy.mean(padded)                       # calm surroundings, off the subject
         behind = backdrop(rect)
         if variant.transparent:
-            contrast = _contrast_ratio(variant.tone, behind)
+            # Judged on the parts of the picture where it reads worst (a pale sky between dark window frames
+            # averages to a mid tone the logo seems to stand out from, yet half of it fades into the sky).
+            contrast = _logo_visibility(base, rect, variant.tone)
             if contrast < 3.0:
-                total += (3.0 - contrast) * 4.0                 # it must stay clearly visible
+                total += (3.0 - contrast) * 6.0                 # it must stay clearly visible
+            if contrast < 2.2:
+                total += 8.0                                    # parts of it would disappear: any other place first
         else:
             # Its own background box reads as a pasted sticker: used only when no clean (transparent) version can
             # go anywhere better, and then where the picture around it has a similar tone.

@@ -1417,3 +1417,237 @@ video.modal-media-asset {
     max-height: calc(94svh - 104px);
   }
 }
+
+/* Media library: a carousel opens as a slide viewer (all slides, in order). */
+.asset-thumb {
+  position: relative;
+}
+.asset-slides-badge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 1;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(12, 12, 14, 0.78);
+  color: #fff;
+}
+.media-slides {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  max-width: 100%;
+}
+.media-slides-stage {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+}
+.modal-media-asset.media-slides-image {
+  max-height: calc(90vh - 200px);
+}
+.media-slides-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 0;
+  background: rgba(12, 12, 14, 0.72);
+  color: #fff;
+  font-size: 26px;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding-bottom: 3px;
+}
+.media-slides-arrow:hover {
+  background: rgba(12, 12, 14, 0.9);
+}
+.media-slides-arrow:focus-visible {
+  outline: 2px solid var(--ember, #ff6b3d);
+  outline-offset: 2px;
+}
+.media-slides-arrow.is-prev {
+  left: 8px;
+}
+.media-slides-arrow.is-next {
+  right: 8px;
+}
+.media-slides-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.media-slides-count {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-h);
+  white-space: nowrap;
+}
+.media-slides-thumbs {
+  display: flex;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  justify-content: center;
+}
+.media-slides-thumb {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 50px;
+  padding: 0;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 2px solid transparent;
+  background: none;
+  cursor: pointer;
+  opacity: 0.65;
+}
+.media-slides-thumb.is-current {
+  border-color: var(--ember, #ff6b3d);
+  opacity: 1;
+}
+.media-slides-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+@media (max-width: 560px) {
+  .modal-media-asset.media-slides-image {
+    max-height: calc(94svh - 220px);
+  }
+}
+
+/* Creative form: reference image (brand asset or upload; design on it or use as inspiration) */
+.cf-ref-intro {
+  display: block;
+  margin: -2px 0 10px;
+}
+.cf-reference {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.cf-ref-sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.cf-ref-sources .cf-chip {
+  display: inline-flex;
+  align-items: center;
+}
+.cf-ref-sources .cf-chip input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.cf-chip.is-on {
+  background: var(--ink, var(--accent));
+  border-color: var(--ink, var(--accent));
+  color: var(--on-ink, #fff);
+}
+.cf-chip:focus-within {
+  outline: 2px solid var(--ember, var(--accent));
+  outline-offset: 2px;
+}
+.cf-ref-assets {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 8px;
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 2px;
+}
+.cf-ref-asset {
+  aspect-ratio: 1;
+  padding: 0;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 2px solid var(--border);
+  background: var(--surface-2);
+  cursor: pointer;
+}
+.cf-ref-asset img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.cf-ref-asset.is-on {
+  border-color: var(--ember, var(--accent));
+  box-shadow: 0 0 0 3px rgba(255, 107, 61, 0.2);
+}
+.cf-ref-upload {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.cf-ref-mode {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+.cf-ref-preview {
+  width: 72px;
+  height: 90px;
+  object-fit: cover;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.cf-ref-mode-options {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.cf-ref-option {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  cursor: pointer;
+}
+.cf-ref-option input {
+  margin-top: 3px;
+  accent-color: #1c1917;
+}
+.cf-ref-option strong {
+  display: block;
+  font-size: 14px;
+  color: var(--text-h);
+}
+.cf-ref-option small {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+.cf-ref-option.is-on {
+  border-color: var(--ember, var(--accent));
+  background: var(--accent-bg);
+}
+.cf-ref-option.is-disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+.cf-ref-error {
+  margin-top: 10px;
+}

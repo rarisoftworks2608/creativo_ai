@@ -71,9 +71,30 @@ class LockedCopyTests(SimpleTestCase):
         fields = {'headline': 'Your Website Is Your First Impression.', 'supporting_text': 'Stand out.', 'cta': "Let's Build Yours"}
         self.assertEqual(
             creative_types.locked_copy('post', fields),
-            {'headline': 'Your Website Is Your First Impression.', 'description': 'Stand out.', 'cta': "Let's Build Yours"},
+            {
+                'headline': 'Your Website Is Your First Impression.', 'description': 'Stand out.', 'cta': "Let's Build Yours",
+                'eyebrow': '', 'highlights': [], 'tagline': '',
+            },
         )
-        self.assertEqual(creative_types.locked_copy('story', {'headline': 'Ready?'}), {'headline': 'Ready?'})
+        # Only what was typed reaches the picture: a role left empty stays empty (no AI line is added).
+        self.assertEqual(
+            creative_types.locked_copy('story', {'headline': 'Ready?'}),
+            {'headline': 'Ready?', 'eyebrow': '', 'description': '', 'cta': '', 'highlights': [], 'tagline': ''},
+        )
+
+    def test_the_topic_is_the_headline_when_no_headline_is_typed(self):
+        locked = creative_types.locked_copy('post', {'topic': 'Location Advantage', 'cta': 'Visit us'})
+        self.assertEqual(locked['headline'], 'Location Advantage')
+        self.assertEqual(locked['eyebrow'], '')
+        self.assertEqual(locked['description'], '')
+        # Nothing typed at all for the headline: the AI's headline is kept (a creative needs one).
+        self.assertNotIn('headline', creative_types.locked_copy('post', {'cta': 'Visit us'}))
+
+    def test_an_announcement_or_festival_adds_no_untyped_text(self):
+        announcement = creative_types.locked_copy('announcement_creative', {'category': 'new_service', 'title': 'Now open'})
+        self.assertEqual((announcement['description'], announcement['cta'], announcement['highlights']), ('', '', []))
+        festival = creative_types.locked_copy('festival_creative', {'festival': 'diwali'})
+        self.assertEqual((festival['description'], festival['tagline']), ('', ''))
 
     def test_a_festival_greets_by_the_occasion_and_has_no_sales_cta(self):
         locked = creative_types.locked_copy('festival_creative', {'festival': 'diwali', 'year': '2026'})
@@ -267,7 +288,7 @@ class CreativeTypeApiTests(BaseCreativeGenerationTestCase):
         kwargs = compose.call_args.kwargs
         self.assertEqual(kwargs['headline'], 'Your Website Is Your First Impression.')
         self.assertEqual(kwargs['cta'], "Let's Build Yours")
-        self.assertEqual(kwargs['description'], COPY_RESULT['description'])  # left blank: the AI writes it
+        self.assertEqual(kwargs['description'], '')  # left blank: nothing the person did not type is added
         self.assertAlmostEqual(kwargs['aspect'], 1.0)
         self.assertTrue(kwargs['exact_aspect'])
         self.assertEqual(kwargs['style_presets'], ('bold_sans', 'modern_caps'))
@@ -508,3 +529,130 @@ class OutlineInstructionTests(SimpleTestCase):
         slides = carousel_slides(CAROUSEL_RESULT, {'outline': outline}, 4)
         self.assertNotIn('Create a premium', ' '.join(s['headline'] for s in slides))
         self.assertEqual([s['headline'] for s in slides[1:3]], ['Spacious floor plans', 'Living in light'])
+
+
+class TypedCarouselTextTests(SimpleTestCase):
+    def plan(self):
+        return {'slides': [
+            {'headline': 'AI cover line', 'body': 'AI cover body', 'cta': ''},
+            {'headline': 'Rising infrastructure', 'body': 'Metro lines', 'cta': ''},
+            {'headline': 'Secure your spot', 'body': '', 'cta': 'AI CTA'},
+        ]}
+
+    def test_the_cover_is_the_typed_topic_and_the_close_carries_only_the_typed_cta(self):
+        from apps.creative_generation.tasks import carousel_slides
+
+        slides = carousel_slides(self.plan(), {'topic': '5 signs you need to buy property in East Pune'}, 3)
+        self.assertEqual(slides[0]['headline'], '5 signs you need to buy property in East Pune')
+        self.assertEqual(slides[0]['body'], '')
+        self.assertEqual(slides[1]['headline'], 'Rising infrastructure')  # the middle needs words: the AI's plan
+        self.assertEqual(slides[-1]['cta'], '')  # no CTA typed: none added
+        typed = carousel_slides(self.plan(), {'topic': 'Topic', 'cta': 'Book a site visit'}, 3)
+        self.assertEqual(typed[-1]['cta'], 'Book a site visit')
+
+    def test_every_slide_shares_the_carousel_logo_places(self):
+        from types import SimpleNamespace
+
+        from apps.creative_generation.tasks import CAROUSEL_LOGO_SLOTS, slide_render_params
+
+        request = SimpleNamespace(id=57)
+        for index, role in enumerate(('cover', 'content', 'cta'), start=1):
+            self.assertEqual(slide_render_params(request, index, 3, role)['logo_slots'], list(CAROUSEL_LOGO_SLOTS))
+
+
+class ReferenceAwareImageProvider(RecordingImageProvider):
+    def generate_image(self, *, prompt, reference_images=None, aspect=None):
+        self.calls.append({'prompt': prompt, 'aspect': aspect, 'references': len(reference_images or [])})
+        return png_bytes(), 'image/png'
+
+
+@patch('apps.creative_generation.tasks.get_text_provider')
+@patch('apps.creative_generation.tasks.get_image_provider')
+class ReferenceImageTests(BaseCreativeGenerationTestCase):
+    """A creative can be built on (or from) the person's own image: a brand asset or an upload."""
+
+    def setUp(self):
+        super().setUp()
+        self.image = ReferenceAwareImageProvider()
+        self.text = RecordingTextProvider()
+        self.authenticate_as('admin@example.com', 'StrongPass123!')
+
+    def wire(self, mock_get_image, mock_get_text, text_result=None):
+        if text_result is not None:
+            self.text = RecordingTextProvider(text_result)
+        mock_get_image.return_value = self.image
+        mock_get_text.return_value = self.text
+
+    def url(self):
+        return reverse('creative_generation:request-list-create', kwargs={'company_id': self.company.pk})
+
+    def asset(self, company=None, name='office.png', data=None):
+        from apps.brand.models import BrandAsset
+
+        return BrandAsset.objects.create(
+            company=company or self.company, category=BrandAsset.Category.REFERENCE_IMAGE, name=name,
+            file=SimpleUploadedFile(name, data if data is not None else png_bytes((300, 375), 'navy'), content_type='image/png'),
+        )
+
+    def test_designed_on_a_brand_asset_uses_that_exact_picture_and_no_ai_image(self, mock_get_image, mock_get_text):
+        self.wire(mock_get_image, mock_get_text)
+        asset = self.asset()
+        with patch('apps.creative_generation.tasks.compose_creative', return_value=(png_bytes(), 'image/png')) as compose:
+            response = self.client.post(self.url(), {
+                'creative_type': 'post', 'variation_count': 1, 'brief_fields': {'headline': 'Our new office'},
+                'reference_asset': asset.id, 'reference_mode': 'base',
+            }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_202_ACCEPTED, response.data)
+        self.assertEqual(self.image.calls, [])  # no AI picture drawn
+        with asset.file.open('rb') as f:
+            self.assertEqual(compose.call_args.args[0], f.read())  # the creative is laid out on the asset itself
+        request = GenerationRequest.objects.get(pk=response.data['id'])
+        self.assertEqual(request.reference_mode, 'base')
+        self.assertEqual(request.usage['images_generated'], 0)
+
+    def test_an_uploaded_image_as_inspiration_is_handed_to_the_image_ai(self, mock_get_image, mock_get_text):
+        self.wire(mock_get_image, mock_get_text)
+        upload = SimpleUploadedFile('mood.png', png_bytes((200, 250), 'gold'), content_type='image/png')
+        with patch('apps.creative_generation.tasks.compose_creative', return_value=(png_bytes(), 'image/png')):
+            response = self.client.post(self.url(), {
+                'creative_type': 'post', 'variation_count': 1, 'brief_fields': '{"headline": "Launch"}',
+                'reference_image': upload, 'reference_mode': 'inspire',
+            }, format='multipart')
+        self.assertEqual(response.status_code, status.HTTP_202_ACCEPTED, response.data)
+        self.assertEqual(self.image.calls[0]['references'], 1)
+        self.assertIn('REFERENCE IMAGE', self.image.calls[0]['prompt'])
+
+    def test_a_carousel_uses_the_image_as_its_cover_only(self, mock_get_image, mock_get_text):
+        self.wire(mock_get_image, mock_get_text, CAROUSEL_RESULT)
+        asset = self.asset()
+        with patch('apps.creative_generation.tasks.compose_creative', return_value=(png_bytes(), 'image/png')):
+            response = self.client.post(self.url(), {
+                'creative_type': 'carousel', 'slide_count': 3, 'brief_fields': {'topic': 'Office tour'},
+                'reference_asset': asset.id, 'reference_mode': 'base',
+            }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_202_ACCEPTED, response.data)
+        self.assertEqual(len(self.image.calls), 2)  # slides 2 and 3; the cover is the person's image
+        self.assertTrue(all(call['references'] == 1 for call in self.image.calls))  # guided by it, same look
+
+    def test_the_reference_is_checked(self, mock_get_image, mock_get_text):
+        from apps.companies.models import Company
+
+        self.wire(mock_get_image, mock_get_text)
+        elsewhere = self.asset(company=Company.objects.create(name='Other', created_by=self.admin))
+        document = self.asset(name='brochure.pdf', data=b'%PDF-1.4')
+        for payload, field in (
+            ({'reference_asset': elsewhere.id}, 'reference_asset'),
+            ({'reference_asset': document.id}, 'reference_asset'),
+            ({'reference_mode': 'base'}, 'reference_mode'),
+        ):
+            response = self.client.post(self.url(), {
+                'creative_type': 'post', 'variation_count': 1, 'brief_fields': {'headline': 'X'}, **payload,
+            }, format='json')
+            self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, payload)
+            self.assertIn(field, response.data)
+        self.assertEqual(self.image.calls, [])
+
+    def test_options_say_whether_the_image_ai_can_take_a_reference(self, mock_get_image, mock_get_text):
+        self.wire(mock_get_image, mock_get_text)
+        data = self.client.get(reverse('creative_generation:options', kwargs={'company_id': self.company.pk})).data
+        self.assertIn('inspire_supported', data['reference'])

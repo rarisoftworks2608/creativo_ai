@@ -1,5 +1,131 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { listBrandAssets } from '../api/brand'
 import ICONS from './DashboardIcons'
+
+const IMAGE_FILE = /\.(jpe?g|png|webp)(\?|$)/i
+const EMPTY_REFERENCE = { source: 'none', assetId: null, file: null, mode: 'base' }
+
+/**
+ * An optional image to build the creative on (designed on that exact picture - no AI picture) or from (the AI
+ * draws a new picture guided by it). It comes from the company's brand assets or from an upload.
+ */
+function ReferencePicker({ companyId, reference, setReference, inspireSupported, isCarousel }) {
+  const [assets, setAssets] = useState(null)
+  const [preview, setPreview] = useState('')
+
+  useEffect(() => {
+    if (reference.source !== 'asset' || assets !== null || !companyId) return
+    listBrandAssets(companyId)
+      .then((data) => {
+        const list = Array.isArray(data) ? data : data.results || []
+        setAssets(list.filter((asset) => IMAGE_FILE.test(asset.file || '')))
+      })
+      .catch(() => setAssets([]))
+  }, [reference.source, assets, companyId])
+
+  useEffect(() => {
+    if (!reference.file) {
+      setPreview('')
+      return undefined
+    }
+    const url = URL.createObjectURL(reference.file)
+    setPreview(url)
+    return () => URL.revokeObjectURL(url)
+  }, [reference.file])
+
+  const set = (patch) => setReference((prev) => ({ ...prev, ...patch }))
+  const chosen = reference.source === 'asset' ? assets?.find((a) => a.id === reference.assetId)?.file : preview
+
+  return (
+    <div className="cf-reference">
+      <div className="cf-ref-sources" role="radiogroup" aria-label="Reference image">
+        {[
+          ['none', 'None'],
+          ['asset', 'From brand assets'],
+          ['upload', 'Upload an image'],
+        ].map(([value, label]) => (
+          <label key={value} className={`cf-chip ${reference.source === value ? 'is-on' : ''}`}>
+            <input
+              type="radio"
+              name="reference-source"
+              checked={reference.source === value}
+              onChange={() => setReference({ ...EMPTY_REFERENCE, source: value, mode: reference.mode })}
+            />
+            {label}
+          </label>
+        ))}
+      </div>
+
+      {reference.source === 'asset' && (
+        <div className="cf-ref-assets">
+          {assets === null && <span className="field-hint-inline">Loading brand assets…</span>}
+          {assets?.length === 0 && (
+            <span className="field-hint-inline">No images in the brand assets yet - add some on the Brand page, or upload one here.</span>
+          )}
+          {assets?.map((asset) => (
+            <button
+              key={asset.id}
+              type="button"
+              className={`cf-ref-asset ${reference.assetId === asset.id ? 'is-on' : ''}`}
+              onClick={() => set({ assetId: asset.id })}
+              aria-pressed={reference.assetId === asset.id}
+              title={asset.name || 'Brand asset'}
+            >
+              <img src={asset.file} alt={asset.name || 'Brand asset'} />
+            </button>
+          ))}
+        </div>
+      )}
+
+      {reference.source === 'upload' && (
+        <label className="cf-ref-upload">
+          <input
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            onChange={(e) => set({ file: e.target.files?.[0] || null })}
+          />
+          <span className="field-hint-inline">JPG, PNG or WebP, up to 10 MB.</span>
+        </label>
+      )}
+
+      {reference.source !== 'none' && (
+        <div className="cf-ref-mode">
+          {chosen && <img className="cf-ref-preview" src={chosen} alt="Chosen reference" />}
+          <div className="cf-ref-mode-options" role="radiogroup" aria-label="How to use it">
+            <label className={`cf-ref-option ${reference.mode === 'base' ? 'is-on' : ''}`}>
+              <input type="radio" name="reference-mode" checked={reference.mode === 'base'} onChange={() => set({ mode: 'base' })} />
+              <span>
+                <strong>Design on this image</strong>
+                <small>
+                  {isCarousel
+                    ? 'It becomes the cover; the other slides get their own pictures in the same look.'
+                    : 'Your text and logo are designed on this exact picture. No AI image credit.'}
+                </small>
+              </span>
+            </label>
+            <label className={`cf-ref-option ${reference.mode === 'inspire' ? 'is-on' : ''} ${inspireSupported ? '' : 'is-disabled'}`}>
+              <input
+                type="radio"
+                name="reference-mode"
+                disabled={!inspireSupported}
+                checked={reference.mode === 'inspire'}
+                onChange={() => set({ mode: 'inspire' })}
+              />
+              <span>
+                <strong>Use as inspiration</strong>
+                <small>
+                  {inspireSupported
+                    ? 'The AI draws a new picture guided by it (subject, setting, mood, colours).'
+                    : 'Needs the Gemini or OpenAI image provider (Platform settings). The current one cannot take a reference image.'}
+                </small>
+              </span>
+            </label>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 
 // What each type is for - shown on the type picker so the choice is obvious.
 const TYPE_CARDS = {
@@ -328,10 +454,13 @@ function TypeFields({ type, fields, setField, options, photo, setPhoto, slideCou
  * The creative form: pick a creative type and the form shows only that type's own inputs, its sizes and the design
  * options, with a live layout preview at the real proportions.
  */
-export default function CreativeForm({ options, calendarItems, onSubmit, onCancel, submitting, error }) {
+export default function CreativeForm({ companyId, options, calendarItems, onSubmit, onCancel, submitting, error }) {
   const [common, setCommon] = useState(EMPTY_COMMON)
   const [fieldsByType, setFieldsByType] = useState({})
   const [photo, setPhoto] = useState(null)
+  const [reference, setReference] = useState(EMPTY_REFERENCE)
+  const [referenceError, setReferenceError] = useState('')
+  const inspireSupported = Boolean(options.reference?.inspire_supported)
 
   const typeSpec = useMemo(
     () => options.types.find((t) => t.value === common.creative_type) || options.types[0],
@@ -341,7 +470,12 @@ export default function CreativeForm({ options, calendarItems, onSubmit, onCance
   const fields = fieldsByType[type] || {}
   const ratio = typeSpec.aspects.includes(common.aspect_ratio) ? common.aspect_ratio : typeSpec.default_aspect
   const isCarousel = type === 'carousel'
-  const images = isCarousel ? common.slide_count : common.variation_count
+  const hasReference =
+    (reference.source === 'asset' && reference.assetId) || (reference.source === 'upload' && reference.file)
+  // Designing on the person's own image needs no AI picture (a carousel's other slides still do).
+  const designedOnReference = hasReference && reference.mode === 'base'
+  const slidesOrVariations = isCarousel ? common.slide_count : common.variation_count
+  const images = designedOnReference ? (isCarousel ? common.slide_count - 1 : 0) : slidesOrVariations
 
   function update(key, value) {
     setCommon((prev) => ({ ...prev, [key]: value }))
@@ -353,6 +487,14 @@ export default function CreativeForm({ options, calendarItems, onSubmit, onCance
 
   function handleSubmit(event) {
     event.preventDefault()
+    if (reference.source !== 'none' && !hasReference) {
+      setReferenceError(reference.source === 'asset' ? 'Choose one of the brand images, or set Reference image to None.' : 'Choose an image file to upload, or set Reference image to None.')
+      return
+    }
+    setReferenceError('')
+    const referencePayload = hasReference
+      ? { reference_mode: reference.mode, ...(reference.source === 'asset' ? { reference_asset: reference.assetId } : {}) }
+      : {}
     const briefFields = Object.fromEntries(
       Object.entries(fields).filter(([key, value]) => typeSpec.fields.includes(key) && value !== '' && value !== false),
     )
@@ -364,8 +506,10 @@ export default function CreativeForm({ options, calendarItems, onSubmit, onCance
         content_calendar_item: common.content_calendar_item || null,
         slide_count: isCarousel ? common.slide_count : 0,
         variation_count: isCarousel ? 1 : common.variation_count,
+        ...referencePayload,
       },
       type === 'testimonial_creative' ? photo : null,
+      hasReference && reference.source === 'upload' ? reference.file : null,
     )
   }
 
@@ -464,6 +608,24 @@ export default function CreativeForm({ options, calendarItems, onSubmit, onCance
           </fieldset>
 
           <fieldset className="cf-section">
+            <legend>Reference image (optional)</legend>
+            <p className="field-hint-inline cf-ref-intro">
+              Build the creative on one of your own pictures - a brand asset or an upload.
+            </p>
+            <ReferencePicker
+              companyId={companyId}
+              reference={reference}
+              setReference={(value) => {
+                setReferenceError('')
+                setReference(value)
+              }}
+              inspireSupported={inspireSupported}
+              isCarousel={isCarousel}
+            />
+            {referenceError && <div className="alert alert-error cf-ref-error">{referenceError}</div>}
+          </fieldset>
+
+          <fieldset className="cf-section">
             <legend>4. Publishing details</legend>
             <div className="field-row">
               <Field label="Platform">
@@ -499,8 +661,9 @@ export default function CreativeForm({ options, calendarItems, onSubmit, onCance
 
       <div className="modal-actions cf-actions">
         <span className="cf-cost">
-          Uses {images} AI image {images === 1 ? 'credit' : 'credits'}
-          {isCarousel ? ` (one per slide)` : ''}
+          {images === 0
+            ? 'No AI image credit - designed on your image'
+            : `Uses ${images} AI image ${images === 1 ? 'credit' : 'credits'}${isCarousel ? (designedOnReference ? ' (your image is the cover)' : ' (one per slide)') : ''}`}
         </span>
         <button type="button" className="btn btn-ghost" onClick={onCancel}>
           Cancel

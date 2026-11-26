@@ -175,3 +175,29 @@ class LongTopicNotificationTests(APITestCase):
         notification = notify(self.admin, Notification.NotificationType.CONTENT_APPROVED, 'x' * 400)
         self.assertEqual(len(notification.title), 255)
         self.assertTrue(notification.title.endswith('…'))
+
+
+class RevisionKeepsFormatTests(APITestCase):
+    """A revision after the client's feedback keeps the creative's size and settings - only the feedback is new."""
+
+    authenticate_as = ApprovalWorkflowTests.authenticate_as
+    reject_url = ApprovalWorkflowTests.reject_url
+
+    def setUp(self):
+        ApprovalWorkflowTests.setUp(self)
+        self.generation_request.creative_type = GenerationRequest.CreativeType.STORY
+        self.generation_request.aspect_ratio = '9:16'
+        self.generation_request.design_style = 'bold'
+        self.generation_request.brief_fields = {'headline': 'Ready to grow?', 'cta': 'Book a call'}
+        self.generation_request.save()
+
+    @patch('apps.content_calendar.tasks._enqueue_creative')
+    def test_the_regenerated_creative_has_the_same_size_and_typed_text(self, mock_enqueue):
+        self.authenticate_as('client@example.com', 'StrongPass123!')
+        self.client.post(self.reject_url(), {'feedback': 'Warmer colours please.'})
+        revision = GenerationRequest.objects.exclude(pk=self.generation_request.pk).get(content_calendar_item=self.item)
+        self.assertEqual(revision.creative_type, GenerationRequest.CreativeType.STORY)
+        self.assertEqual(revision.aspect_ratio, '9:16')
+        self.assertEqual(revision.design_style, 'bold')
+        self.assertEqual(revision.brief_fields, {'headline': 'Ready to grow?', 'cta': 'Book a call'})
+        self.assertIn('Warmer colours please.', revision.prompt_brief)

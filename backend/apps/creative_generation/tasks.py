@@ -63,15 +63,48 @@ class BrandKit:
         self.symbol = _read(self.profile.secondary_logo if self.profile is not None else None)
 
 
-def _draw_picture(image_provider, prompt, aspect):
-    """The image provider's picture, asking for the creative's shape when the provider can draw at a chosen size."""
+def _draw_picture(image_provider, prompt, aspect, reference=None):
+    """The image provider's picture, asking for the creative's shape when the provider can draw at a chosen size,
+    and handing it the person's reference image when it accepts one."""
     try:
-        accepts_aspect = 'aspect' in inspect.signature(image_provider.generate_image).parameters
+        parameters = inspect.signature(image_provider.generate_image).parameters
     except (TypeError, ValueError):
-        accepts_aspect = False
-    if accepts_aspect:
-        return image_provider.generate_image(prompt=prompt, aspect=aspect)
-    return image_provider.generate_image(prompt=prompt)
+        parameters = {}
+    kwargs = {'prompt': prompt}
+    if 'aspect' in parameters:
+        kwargs['aspect'] = aspect
+    if reference is not None and 'reference_images' in parameters:
+        kwargs['reference_images'] = [reference]
+    return image_provider.generate_image(**kwargs)
+
+
+REFERENCE_PROMPT = (
+    'REFERENCE IMAGE: an image is supplied. Use it as the visual starting point - keep its subject, setting, mood and '
+    'colour palette - while following the composition above. Do not copy any text or logo from it.'
+)
+
+
+def _reference(request):
+    """(bytes, mime) of the person's reference image, or None."""
+    data = _read(request.reference_image)
+    if not data:
+        return None
+    name = request.reference_image.name.lower()
+    mime = 'image/png' if name.endswith('.png') else 'image/webp' if name.endswith('.webp') else 'image/jpeg'
+    return data, mime
+
+
+def _picture_for(request, image_provider, prompt, aspect, *, may_use_as_base=True):
+    """The picture for one image of the creative. With a reference image in 'base' mode the creative is designed on
+    that exact image (no AI picture, no image credit); in 'inspire' mode - or for a carousel's later slides, which
+    each need their own picture - the AI draws a new one guided by it. Counts the pictures the AI actually drew."""
+    reference = _reference(request) if request.reference_image else None
+    if reference and request.reference_mode == GenerationRequest.ReferenceMode.BASE and may_use_as_base:
+        return reference
+    request._ai_pictures = getattr(request, '_ai_pictures', 0) + 1
+    if reference:
+        return _draw_picture(image_provider, f'{prompt}\n{REFERENCE_PROMPT}', aspect, reference=reference)
+    return _draw_picture(image_provider, prompt, aspect)
 
 
 def _overlay_on(request):
@@ -121,7 +154,7 @@ def render_variation(variation, brand, background_bytes=None, background_mime='i
         portrait_bytes=_read(request.customer_photo) if is_testimonial and overlay else None,
         # Where the logo went is kept, so an edit of the copy re-renders around the same logo position and every
         # slide of a carousel carries it in the same place.
-        logo_anchor=params.get('logo_anchor'), layout_info=layout_info,
+        logo_anchor=params.get('logo_anchor'), layout_info=layout_info, logo_slots=params.get('logo_slots'),
     )
     if layout_info.get('logo_anchor') and not params.get('logo_anchor'):
         variation.render_params = {**params, 'logo_anchor': layout_info['logo_anchor']}
@@ -154,9 +187,10 @@ def _save_variation(request, brand, *, number, copy, picture, render_params, sli
 
 
 def _new_style(request):
-    """Requests made with the creative-type inputs get the exact creative size; older and calendar-made ones keep
-    the picture as drawn (their stored behaviour)."""
-    return bool(request.brief_fields or request.design_style or request.aspect_ratio)
+    """Every new creative is made at its exact platform size (a 4:5 post is 4:5), whether it was started from the
+    creative form or from the content calendar ("Generate now" / the automatic sweep). Creatives made before this
+    keep their stored layout when they are re-rendered (their `render_params['exact']`)."""
+    return True
 
 
 def _apply_locked(request, copy):
@@ -194,7 +228,7 @@ def _generate_single(request, brand, image_provider, text_provider, image_guidan
             brief_fields=request.brief_fields, design_style=request.design_style,
             aspect_ratio=spec['ratio'] if _new_style(request) else '',
         )
-        picture = _draw_picture(image_provider, image_prompt, spec['aspect'])
+        picture = _picture_for(request, image_provider, image_prompt, spec['aspect'])
         _save_variation(
             request, brand, number=variation_number, copy=copy_data, picture=picture,
             visual_scene=copy_data.get('visual_scene', ''),
@@ -261,9 +295,20 @@ def carousel_slides(copy_data, fields, slide_count):
         slide['role'] = 'cover' if index == 0 else ('cta' if index == len(slides) - 1 and len(slides) > 1 else 'content')
         if slide['role'] != 'cta':
             slide['cta'] = ''
-    if fields.get('cta') and len(slides) > 1:
-        slides[-1]['cta'] = fields['cta']
+    if fields:
+        # What the person typed is what the series shows: the topic is the cover (on its own - no AI line under
+        # it), and the closing slide carries their CTA or none. The middle slides need words, so they come from
+        # the person's outline when given, otherwise from the AI's plan.
+        topic = (fields.get('headline') or fields.get('topic') or '').strip()
+        if topic and targets is not slides:
+            slides[0]['headline'] = topic
+            slides[0]['body'] = ''
+        if len(slides) > 1:
+            slides[-1]['cta'] = fields.get('cta', '')
     return slides
+
+
+CAROUSEL_LOGO_SLOTS = ('top_center', 'top_right')
 
 
 def slide_render_params(request, index, total, role, *, highlights=(), tagline=''):
@@ -278,6 +323,9 @@ def slide_render_params(request, index, total, role, *, highlights=(), tagline='
         'framed': role == 'cta',
         'highlights': list(highlights) if role == 'cta' else [],
         'tagline': tagline if role == 'cta' else '',
+        # One logo place for the whole series: the cover chooses it from the places that suit every slide's layout
+        # (the closing slide's header row has its kicker on the left), and the other slides keep it.
+        'logo_slots': list(CAROUSEL_LOGO_SLOTS),
     }
 
 
@@ -328,7 +376,8 @@ def _generate_carousel(request, brand, image_provider, text_provider, image_guid
             brief_fields=fields, design_style=request.design_style, aspect_ratio=spec['ratio'],
             series_look=series_look, slide_label=f'Slide {index} of {total}',
         )
-        picture = _draw_picture(image_provider, image_prompt, spec['aspect'])
+        # The person's image is the cover; every other slide gets its own picture, guided by it.
+        picture = _picture_for(request, image_provider, image_prompt, spec['aspect'], may_use_as_base=index == 1)
         saved = _save_variation(
             request, brand, number=index, copy=_slide_copy(slide, index, total, carousel_copy), picture=picture,
             render_params=params, slide_role=slide['role'], visual_scene=slide.get('visual_scene', ''),
@@ -377,6 +426,7 @@ def generate_creative_variations(self, generation_request_id):
     )
 
     generate = _generate_carousel if request.creative_type == GenerationRequest.CreativeType.CAROUSEL else _generate_single
+    request._ai_pictures = 0  # pictures the image AI actually draws (none when designed on the person's image)
     try:
         image_count = generate(request, brand, image_provider, text_provider, image_guidance, copy_guidance)
     except AIProviderError as exc:
@@ -391,11 +441,14 @@ def generate_creative_variations(self, generation_request_id):
     request.status = GenerationRequest.Status.SUCCEEDED
     request.error_message = ''
     request.model_used = f'{getattr(image_provider, "model", "")} + {getattr(text_provider, "model", "")}'
-    request.usage = {'images_generated': image_count}
+    ai_pictures = request._ai_pictures
+    request.usage = {'images_generated': ai_pictures}
+    if ai_pictures != image_count:
+        request.usage['images_from_reference'] = image_count - ai_pictures
 
     if settings.AI_IMAGE_COST_PER_IMAGE_USD:
         try:
-            request.cost_usd = Decimal(str(settings.AI_IMAGE_COST_PER_IMAGE_USD)) * image_count
+            request.cost_usd = Decimal(str(settings.AI_IMAGE_COST_PER_IMAGE_USD)) * ai_pictures
         except (ValueError, ArithmeticError):
             pass
 
@@ -466,7 +519,10 @@ def regenerate_variation(self, variation_id):
             series_look=(request.generation_context or {}).get('series_look', '') if is_carousel else '',
             slide_label=f'Slide {variation.variation_number} of {total}' if is_carousel else '',
         )
-        image_bytes, mime_type = _draw_picture(image_provider, image_prompt, spec['aspect'])
+        image_bytes, mime_type = _picture_for(
+            request, image_provider, image_prompt, spec['aspect'],
+            may_use_as_base=not is_carousel or variation.variation_number == 1,
+        )
         variation.render_params = params
         ext = MIME_EXTENSIONS.get(mime_type, 'png')
         variation.background.save(f'background_{variation.variation_number}_{attempt}.{ext}', ContentFile(image_bytes), save=False)
@@ -480,6 +536,8 @@ def regenerate_variation(self, variation_id):
     variation.status = GenerationVariation.Status.READY
     variation.error_message = ''
     variation.save()
+    if not getattr(request, '_ai_pictures', 0):
+        return  # re-laid out on the person's own image: no AI picture, nothing to count
     usage = dict(request.usage or {})
     usage['images_generated'] = int(usage.get('images_generated', 0)) + 1
     request.usage = usage

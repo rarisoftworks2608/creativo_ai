@@ -257,8 +257,13 @@ class CreativeOptionsView(CompanyScopedMixin, APIView):
     required_page = ClientProfile.Page.CREATIVE_GENERATION
 
     def get(self, request, company_id):
+        from common.ai_config import get_provider_name
+
         self.get_company()
-        return Response(options_payload())
+        payload = options_payload()
+        # Only these image providers take a reference picture; the others can still design on the person's image.
+        payload['reference'] = {'inspire_supported': get_provider_name('image') in ('gemini', 'openai')}
+        return Response(payload)
 
 
 def _variation_for(view, pk, variation_id):

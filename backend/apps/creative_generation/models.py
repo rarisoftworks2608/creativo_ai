@@ -88,6 +88,20 @@ class GenerationRequest(TimeStampedModel):
         upload_to=request_asset_upload_path, blank=True, null=True,
         help_text='Testimonial only: an optional photo of the client, supplied by the person - never generated.',
     )
+
+    class ReferenceMode(models.TextChoices):
+        BASE = 'base', 'Design on this image'
+        INSPIRE = 'inspire', 'Use as inspiration'
+
+    reference_image = models.ImageField(
+        upload_to=request_asset_upload_path, blank=True, null=True,
+        help_text='An image the person chose (a brand asset or an upload) to build the creative on or from.',
+    )
+    reference_mode = models.CharField(
+        max_length=10, choices=ReferenceMode.choices, blank=True,
+        help_text="'base': the creative is designed on this exact image (no AI picture). "
+                  "'inspire': the AI draws a new picture guided by it (providers that accept reference images).",
+    )
     generation_context = models.JSONField(
         default=dict, blank=True,
         help_text="Shared art direction kept for re-rendering, e.g. a carousel's series look and typography seed.",

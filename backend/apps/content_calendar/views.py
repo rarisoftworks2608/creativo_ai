@@ -195,12 +195,19 @@ def _trigger_regeneration(item):
         )
         _enqueue_video(video_request)
     elif last_creative is not None:
+        # The revision keeps everything that defined the creative - its size, design style, the typed text, the
+        # slide count and the person's own images - so only the client's feedback changes, never its format.
         generation_request = GenerationRequest.objects.create(
             company=item.company, content_calendar_item=item, creative_type=last_creative.creative_type,
             platform=last_creative.platform, variation_count=last_creative.variation_count,
             include_text_overlay=last_creative.include_text_overlay,
             prompt_brief=f'{last_creative.prompt_brief}\n\n{feedback_note}'.strip(),
             product_info=last_creative.product_info,
+            aspect_ratio=last_creative.aspect_ratio, design_style=last_creative.design_style,
+            brief_fields=last_creative.brief_fields, slide_count=last_creative.slide_count,
+            customer_photo=last_creative.customer_photo.name or None,
+            reference_image=last_creative.reference_image.name or None,
+            reference_mode=last_creative.reference_mode,
         )
         _enqueue_creative(generation_request)
     else:

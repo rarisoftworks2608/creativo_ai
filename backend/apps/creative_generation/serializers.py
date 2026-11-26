@@ -7,6 +7,9 @@ from .creative_types import (
 )
 from .models import GenerationRequest, GenerationVariation
 
+MAX_REFERENCE_BYTES = 10 * 1024 * 1024
+REFERENCE_IMAGE_EXTENSIONS = ('.jpg', '.jpeg', '.png', '.webp')
+
 MAX_PHOTO_BYTES = 5 * 1024 * 1024
 
 
@@ -41,6 +44,7 @@ class GenerationRequestSerializer(serializers.ModelSerializer):
             'product_info', 'status', 'error_message', 'retry_count', 'model_used', 'usage', 'cost_usd',
             'created_by', 'created_at', 'updated_at', 'variations',
             'brief_fields', 'design_style', 'aspect_ratio', 'resolved_aspect_ratio', 'slide_count', 'customer_photo',
+            'reference_image', 'reference_mode',
         ]
         read_only_fields = fields
 
@@ -54,6 +58,11 @@ class GenerationRequestCreateSerializer(serializers.ModelSerializer):
 
     brief_fields = serializers.JSONField(required=False)
     customer_photo = serializers.ImageField(required=False, allow_null=True)
+    reference_image = serializers.ImageField(required=False, allow_null=True)
+    reference_asset = serializers.IntegerField(required=False, allow_null=True, write_only=True)
+    reference_mode = serializers.ChoiceField(
+        choices=GenerationRequest.ReferenceMode.choices, required=False, allow_blank=True,
+    )
 
     class Meta:
         model = GenerationRequest
@@ -61,6 +70,7 @@ class GenerationRequestCreateSerializer(serializers.ModelSerializer):
             'id', 'content_calendar_item', 'creative_type', 'platform', 'variation_count',
             'include_text_overlay', 'prompt_brief', 'product_info',
             'brief_fields', 'design_style', 'aspect_ratio', 'slide_count', 'customer_photo',
+            'reference_image', 'reference_asset', 'reference_mode',
         ]
         read_only_fields = ['id']
 
@@ -97,6 +107,24 @@ class GenerationRequestCreateSerializer(serializers.ModelSerializer):
         if photo and photo.size > MAX_PHOTO_BYTES:
             raise serializers.ValidationError('The photo must be 5 MB or smaller.')
         return photo
+
+    def validate_reference_image(self, image):
+        if image and image.size > MAX_REFERENCE_BYTES:
+            raise serializers.ValidationError('The reference image must be 10 MB or smaller.')
+        return image
+
+    def validate_reference_asset(self, asset_id):
+        """A brand asset of this company that is an image - it is copied onto the request at creation."""
+        if not asset_id:
+            return None
+        from apps.brand.models import BrandAsset
+
+        asset = BrandAsset.objects.filter(pk=asset_id, company=self.context['company']).first()
+        if asset is None:
+            raise serializers.ValidationError('That brand asset does not belong to this company.')
+        if not asset.file.name.lower().endswith(REFERENCE_IMAGE_EXTENSIONS):
+            raise serializers.ValidationError('Choose an image (JPG, PNG or WebP) from the brand assets.')
+        return asset
 
     def validate(self, attrs):
         creative_type = attrs.get('creative_type', '')
@@ -141,6 +169,14 @@ class GenerationRequestCreateSerializer(serializers.ModelSerializer):
         if errors:
             raise serializers.ValidationError(errors)
 
+        has_reference = bool(attrs.get('reference_image') or attrs.get('reference_asset'))
+        if attrs.get('reference_image') and attrs.get('reference_asset'):
+            errors['reference_image'] = ['Choose a brand asset or upload an image - not both.']
+        if attrs.get('reference_mode') and not has_reference:
+            errors['reference_mode'] = ['Choose or upload the reference image first.']
+        if errors:
+            raise serializers.ValidationError(errors)
+        attrs['reference_mode'] = (attrs.get('reference_mode') or GenerationRequest.ReferenceMode.BASE) if has_reference else ''
         attrs['brief_fields'] = fields
         attrs['slide_count'] = slide_count
         if spec.force_overlay and creative_type in SPECS:
@@ -148,6 +184,18 @@ class GenerationRequestCreateSerializer(serializers.ModelSerializer):
         if creative_type == GenerationRequest.CreativeType.CAROUSEL:
             attrs['variation_count'] = 1  # a carousel is one design; its images are its slides
         return attrs
+
+    def create(self, validated_data):
+        asset = validated_data.pop('reference_asset', None)
+        instance = super().create(validated_data)
+        if asset is not None:
+            import os
+
+            from django.core.files.base import ContentFile
+
+            with asset.file.open('rb') as source:
+                instance.reference_image.save(os.path.basename(asset.file.name), ContentFile(source.read()), save=True)
+        return instance
 
 
 class VariationEditSerializer(serializers.ModelSerializer):

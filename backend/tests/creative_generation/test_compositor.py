@@ -1153,3 +1153,66 @@ class LogoIntegrationTests(SimpleTestCase):
                     )
                     anchors.add(info['logo_anchor'].split(':')[0])
         self.assertGreaterEqual(len(anchors), 3)
+
+
+class LogoConsistencyTests(LogoIntegrationTests):
+    """A carousel keeps one logo place on every slide - including a closing slide drawn as a framed poster - and a
+    logo is never put where part of it fades into the picture."""
+
+    def test_a_framed_slide_keeps_the_pinned_top_centre_place(self):
+        image, info = self.compose(
+            self.picture(), logo_bytes=self.wordmark(color=(230, 190, 120)), headline='Secure your spot',
+            creative_type='carousel', eyebrow='03 / 03', highlights=['Site visit', 'Brochure', 'Consultation'],
+            website='arcrealty.in', brand_name='Arc Realty', logo_anchor='top_center:0',
+            logo_slots=['top_center', 'top_right'],
+        )
+        self.assertEqual(info['logo_anchor'].split(':')[0], 'top_center')
+
+    def test_a_carousel_cover_only_chooses_places_every_slide_can_use(self):
+        for seed in (1, 2, 3, 4, 5):
+            _image, info = self.compose(
+                self.picture((235, 228, 215)), logo_bytes=self.wordmark(), headline='East Pune awaits',
+                creative_type='carousel', variation_seed=seed, composition='top', logo_slots=['top_center', 'top_right'],
+            )
+            self.assertIn(info['logo_anchor'].split(':')[0], ('top_center', 'top_right'))
+
+    def test_a_pinned_place_still_picks_the_version_that_reads(self):
+        dark = self.wordmark(color=(40, 30, 20))
+        light = self.wordmark(color=(240, 230, 210))
+        _image, info = self.compose(
+            self.picture((20, 24, 40)), logo_bytes=dark, symbol_bytes=light, headline='Slide', logo_anchor='top_center:0',
+        )
+        self.assertEqual(info['logo_anchor'], 'top_center:1')  # same place, the light file on a dark picture
+
+    def test_a_logo_avoids_a_pale_patch_even_when_the_area_averages_dark(self):
+        from apps.creative_generation.compositor import _logo_visibility
+
+        striped = Image.new('RGB', (400, 200), (20, 20, 30))
+        for x in range(0, 400, 80):
+            striped.paste(Image.new('RGB', (40, 200), (235, 238, 240)), (x, 0))  # pale sky between dark frames
+        gold = '#C9A86A'
+        self.assertLess(_logo_visibility(striped, (0, 0, 400, 200), gold), 2.2)  # judged on the pale stripes
+        self.assertGreater(_logo_visibility(Image.new('RGB', (400, 200), (20, 20, 30)), (0, 0, 400, 200), gold), 4.5)
+
+
+class ExactSizeTests(SimpleTestCase):
+    """Every creative comes out at its exact platform size - a square AI picture made into a 4:5 post is
+    2048 x 2560, not 2048 x 2048 (kept as drawn) or 2048 x 2561 (a rounding pixel)."""
+
+    def test_a_square_picture_becomes_an_exact_4_by_5_post(self):
+        from apps.creative_generation.compositor import compose_creative
+
+        buffer = io.BytesIO()
+        Image.new('RGB', (1024, 1024), (40, 60, 90)).save(buffer, format='PNG')
+        data, _ = compose_creative(
+            buffer.getvalue(), 'image/png', headline='Exact size', aspect=1.25, exact_aspect=True, output_width=2048,
+        )
+        self.assertEqual(Image.open(io.BytesIO(data)).size, (2048, 2560))
+
+    def test_calendar_made_creatives_are_made_at_the_exact_size_too(self):
+        from types import SimpleNamespace
+
+        from apps.creative_generation.tasks import _new_style
+
+        calendar_made = SimpleNamespace(brief_fields={}, design_style='', aspect_ratio='')
+        self.assertTrue(_new_style(calendar_made))
