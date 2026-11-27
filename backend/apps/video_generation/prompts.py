@@ -68,6 +68,14 @@ def build_script_prompt(
         'two, written to be read aloud) and a visual_description of what should be shown on screen. Keep the '
         'sum of all scene durations close to the target duration.'
     )
+    # The visual_description becomes an image prompt: a description that asks for words ("a screen reading 'Talk to
+    # an expert'", "the company logo") makes the image model letter the picture, clashing with the real subtitles,
+    # logo and end card that the video adds itself.
+    lines.append(
+        'Each visual_description describes only a photographic scene - people, places, objects, light, mood. '
+        'Never ask for text, words, slogans, logos, signs, screens with writing or the company name in it: '
+        'the subtitles, the logo and the end card are added to the video separately.'
+    )
     language_line = content_language_instruction()
     if language_line:
         lines.append(language_line)
@@ -90,7 +98,11 @@ def build_scene_image_prompt(company, brand_profile, video_type, visual_descript
         f'Scene visual: {visual_description}',
         *_brand_lines(brand_profile),
         'This still frame will be slowly panned/zoomed in the final video - keep the subject '
-        'well-centered with room around the edges. Do not include any text overlay.',
+        'well-centered with room around the edges.',
+        # Image models readily letter a scene ("Zero Downtime" across the picture); the reel's real subtitles and
+        # end card carry the words, so the picture must have none of its own.
+        'NO TEXT AT ALL: no words, letters, numbers, captions, headlines, signs, labels, logos or writing on '
+        'screens anywhere in the picture - the subtitles are added later.',
         'Sharp focus, crisp fine detail, high resolution, clean professional photography.',
     ]
     if aspect_ratio in FRAME_GUIDANCE:

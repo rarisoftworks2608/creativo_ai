@@ -5,6 +5,7 @@ import { getBrandContext } from '../api/aiStrategy'
 import { listCalendarItems } from '../api/contentCalendar'
 import { listGenerationRequests } from '../api/creativeGeneration'
 import { getCompany, getMyCompany } from '../api/companies'
+import { DATA_CHANGED_EVENT } from '../api/client'
 import { visibleModules } from '../context/CompanyWorkspaceContext'
 import { WorkflowContext, computeWorkflow, visibleSteps } from '../context/workflow'
 
@@ -84,6 +85,22 @@ export default function WorkflowProvider({ companyId, isAdmin, permissions, chil
   useEffect(() => {
     refresh()
   }, [refresh, location.pathname])
+
+  // Saving something (a brand import, a generated strategy, an approval...) refreshes the progress right away -
+  // debounced, so a burst of saves is one refresh. Generation finishing in the background is picked up by the
+  // page's own polling, which saves nothing, so that case still updates on the next page change.
+  useEffect(() => {
+    let timer = null
+    const onChanged = () => {
+      clearTimeout(timer)
+      timer = setTimeout(refresh, 400)
+    }
+    window.addEventListener(DATA_CHANGED_EVENT, onChanged)
+    return () => {
+      clearTimeout(timer)
+      window.removeEventListener(DATA_CHANGED_EVENT, onChanged)
+    }
+  }, [refresh])
 
   useEffect(() => {
     if (!companyId) return undefined

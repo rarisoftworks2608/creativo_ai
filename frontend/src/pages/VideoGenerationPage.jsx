@@ -144,6 +144,7 @@ export default function VideoGenerationPage() {
         ...form,
         content_calendar_item: form.content_calendar_item || null,
         music_track: form.music_enabled && form.music_track ? Number(form.music_track) : null,
+        target_duration_seconds: Number(form.target_duration_seconds) || 30,
       }
       const created = await createVideoRequest(companyId, payload)
       setRequests((prev) => [created, ...prev])
@@ -264,7 +265,8 @@ export default function VideoGenerationPage() {
                   min={5}
                   max={180}
                   value={form.target_duration_seconds}
-                  onChange={(e) => updateForm('target_duration_seconds', Number(e.target.value))}
+                  // Kept as typed while editing (an emptied box stays empty instead of becoming "0" and then "015").
+                  onChange={(e) => updateForm('target_duration_seconds', e.target.value === '' ? '' : Number(e.target.value))}
                 />
               </label>
               <label className="field">

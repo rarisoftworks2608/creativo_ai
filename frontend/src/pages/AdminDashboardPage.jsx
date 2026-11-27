@@ -75,7 +75,9 @@ export default function AdminDashboardPage() {
   if (!stats) return null
 
   const today = new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })
-  const firstName = (user?.full_name || '').trim().split(/\s+/)[0]
+  // A person's first name only - an account without a name falls back to its email, which is not a greeting.
+  const firstWord = (user?.full_name || '').trim().split(/\s+/)[0]
+  const firstName = firstWord.includes('@') ? '' : firstWord
   const publishing = stats.publishing || {}
   const subscriptions = stats.subscriptions || {}
   const engagement = stats.engagement_30d || {}

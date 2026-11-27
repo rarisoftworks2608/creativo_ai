@@ -39,8 +39,16 @@ async function refreshAccessToken() {
   return nextTokens
 }
 
+// Anything saved (brand filled, strategy generated, content planned/approved...) can unlock a workflow step:
+// announce it so the workflow progress updates at once, not only on the next page change.
+export const DATA_CHANGED_EVENT = 'creativo:data-changed'
+
 apiClient.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    const method = (response.config?.method || 'get').toLowerCase()
+    if (method !== 'get' && typeof window !== 'undefined') window.dispatchEvent(new Event(DATA_CHANGED_EVENT))
+    return response
+  },
   async (error) => {
     const { config, response } = error
     const isAuthEndpoint = config?.url?.includes('/auth/login/') || config?.url?.includes('/auth/refresh/')

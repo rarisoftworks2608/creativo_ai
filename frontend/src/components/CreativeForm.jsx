@@ -116,7 +116,7 @@ function ReferencePicker({ companyId, reference, setReference, inspireSupported,
                 <small>
                   {inspireSupported
                     ? 'The AI draws a new picture guided by it (subject, setting, mood, colours).'
-                    : 'Needs the Gemini or OpenAI image provider (Platform settings). The current one cannot take a reference image.'}
+                    : 'Needs an image model that takes a reference picture: Cloudflare FLUX.2, Gemini or OpenAI. The current one is text-only.'}
                 </small>
               </span>
             </label>

@@ -257,12 +257,17 @@ class CreativeOptionsView(CompanyScopedMixin, APIView):
     required_page = ClientProfile.Page.CREATIVE_GENERATION
 
     def get(self, request, company_id):
-        from common.ai_config import get_provider_name
+        from common.ai_config import get_model_name, get_provider_name
 
         self.get_company()
         payload = options_payload()
-        # Only these image providers take a reference picture; the others can still design on the person's image.
-        payload['reference'] = {'inspire_supported': get_provider_name('image') in ('gemini', 'openai')}
+        # These image models take a reference picture (Cloudflare only with a FLUX.2 model); with the others the
+        # creative can still be designed on the person's own image.
+        provider = get_provider_name('image')
+        payload['reference'] = {
+            'inspire_supported': provider in ('gemini', 'openai')
+            or (provider == 'cloudflare' and 'flux-2' in (get_model_name('image') or '')),
+        }
         return Response(payload)
 
 

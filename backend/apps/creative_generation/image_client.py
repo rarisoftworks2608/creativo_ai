@@ -197,9 +197,11 @@ class CloudflareImageProvider(ImageAIProvider):
     - Read/Edit" permission, from dash.cloudflare.com/profile/api-tokens) - both free, no
     card required to create them, though Cloudflare may ask for one on the account itself.
 
-    Reference images aren't supported - FLUX.1 [schnell] is text-to-image only.
-    reference_images is accepted for interface compatibility but ignored, same as the
-    other providers above.
+    With FLUX.1 [schnell] (AI_IMAGE_MODEL=@cf/black-forest-labs/flux-1-schnell) reference images are ignored - it
+    is text-to-image only. A FLUX.2 model (e.g. @cf/black-forest-labs/flux-2-klein-4b, also on the free daily
+    allocation - about 104 neurons for a 1024 x 1024 image) takes multipart form data instead, draws at the
+    creative's own shape (width/height), and accepts up to four reference pictures (input_image_0..3) - which is
+    what the creative form's "Use as inspiration" needs.
     """
 
     BASE_URL = 'https://api.cloudflare.com/client/v4/accounts'
@@ -218,8 +220,58 @@ class CloudflareImageProvider(ImageAIProvider):
         'visual only, photorealistic, professional photography.'
     )
 
+    FLUX2_TIMEOUT_SECONDS = 120.0
+    REFERENCE_MAX_SIDE = 511  # Cloudflare: every input image must be smaller than 512 x 512
+
     def __init__(self, model=None):
         self.model = model or get_model_name('image')
+
+    @property
+    def is_flux2(self):
+        return 'flux-2' in (self.model or '')
+
+    @classmethod
+    def _reference_part(cls, data):
+        """A reference picture as a JPEG under 512 x 512 (Cloudflare's input limit), its shape kept."""
+        from io import BytesIO
+
+        from PIL import Image
+
+        image = Image.open(BytesIO(data)).convert('RGB')
+        image.thumbnail((cls.REFERENCE_MAX_SIDE, cls.REFERENCE_MAX_SIDE), Image.LANCZOS)
+        out = BytesIO()
+        image.save(out, format='JPEG', quality=92)
+        return out.getvalue()
+
+    @staticmethod
+    def _output_size(aspect):
+        """(width, height) for the creative's shape (aspect = height / width), multiples of 64, within 256-1920."""
+        if not aspect:
+            return 1024, 1024
+        if aspect >= 1:
+            height = 1280 if aspect <= 1.3 else 1536
+            width = int(round(height / aspect / 64) * 64)
+        else:
+            width = 1536 if aspect < 0.7 else 1280
+            height = int(round(width * aspect / 64) * 64)
+        return max(256, min(1920, width)), max(256, min(1920, height))
+
+    def _flux2_request(self, prompt, reference_images, aspect, account_id, headers):
+        """A FLUX.2 call: multipart form (even without a reference), sized to the creative."""
+        import httpx
+
+        width, height = self._output_size(aspect)
+        # Every field as its own multipart part (a (None, value) part has no filename), so the request is
+        # multipart/form-data even without a reference picture - FLUX.2 accepts nothing else.
+        parts = [('prompt', (None, prompt)), ('width', (None, str(width))), ('height', (None, str(height)))]
+        parts += [
+            (f'input_image_{index}', (f'reference_{index}.jpg', self._reference_part(image_bytes), 'image/jpeg'))
+            for index, (image_bytes, _mime) in enumerate((reference_images or [])[:4])
+        ]
+        return httpx.post(
+            f'{self.BASE_URL}/{account_id}/ai/run/{self.model}', headers=headers, files=parts,
+            timeout=self.FLUX2_TIMEOUT_SECONDS,
+        )
 
     def _fit_prompt(self, prompt):
         if len(prompt) <= self.MAX_PROMPT_CHARS:
@@ -241,16 +293,19 @@ class CloudflareImageProvider(ImageAIProvider):
         headers = {'Authorization': f'Bearer {api_token}'}
 
         try:
-            response = httpx.post(
-                f'{self.BASE_URL}/{account_id}/ai/run/{self.model}',
-                headers=headers,
-                # FLUX.1 [schnell] has no negative_prompt/guidance parameter at all (it's a
-                # guidance-distilled model), and Cloudflare now rejects width/height with a
-                # 400 ("Additional or unevaluated properties") - `steps` (max 8, default 4)
-                # is the only lever available on this endpoint.
-                json={'prompt': prompt, 'steps': 8},
-                timeout=self.DEFAULT_TIMEOUT_SECONDS,
-            )
+            if self.is_flux2:
+                response = self._flux2_request(prompt, reference_images, aspect, account_id, headers)
+            else:
+                response = httpx.post(
+                    f'{self.BASE_URL}/{account_id}/ai/run/{self.model}',
+                    headers=headers,
+                    # FLUX.1 [schnell] has no negative_prompt/guidance parameter at all (it's a
+                    # guidance-distilled model), and Cloudflare now rejects width/height with a
+                    # 400 ("Additional or unevaluated properties") - `steps` (max 8, default 4)
+                    # is the only lever available on this endpoint.
+                    json={'prompt': prompt, 'steps': 8},
+                    timeout=self.DEFAULT_TIMEOUT_SECONDS,
+                )
             response.raise_for_status()
         except httpx.HTTPStatusError as exc:
             if exc.response.status_code in (401, 403):
@@ -273,11 +328,12 @@ class CloudflareImageProvider(ImageAIProvider):
         except ValueError as exc:
             raise AIProviderError('The AI provider returned a non-JSON response.') from exc
 
-        if not payload.get('success'):
+        if payload.get('success') is False:
             messages = [e.get('message', str(e)) for e in (payload.get('errors') or [])]
             raise AIProviderError(f'Cloudflare image generation failed: {"; ".join(messages) or "unknown error"}')
 
-        image_b64 = (payload.get('result') or {}).get('image')
+        result = payload.get('result') if isinstance(payload.get('result'), dict) else payload
+        image_b64 = (result or {}).get('image')
         if not image_b64:
             raise AIProviderError('The AI provider returned no image content.')
         try:
